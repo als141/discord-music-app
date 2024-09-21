@@ -8,10 +8,10 @@ from music_player import MusicPlayer, Song
 import yt_dlp
 import uvicorn
 from fastapi.encoders import jsonable_encoder
-import dotenv
+from dotenv import load_dotenv
 import os
 
-dotenv.load_dotenv()
+load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
@@ -247,7 +247,7 @@ async def reorder_queue(guild_id: str, reorder_request: ReorderRequest):
     raise HTTPException(status_code=404, detail="No active music player found")
 
 async def start_discord_bot():
-    await bot.start('DISCORD_TOKEN')  # Discordボットのトークンを設定してください
+    await bot.start(DISCORD_TOKEN)  # Discordボットのトークンを設定してください
 
 async def start_web_server():
     config = uvicorn.Config(app, host="0.0.0.0", port=8000, loop="asyncio")

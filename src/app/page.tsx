@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { api, setupWebSocket } from '@/utils/api';
 import { NowPlaying } from '@/components/NowPlaying';
 import { Player } from '@/components/Player';
-import Queue from '@/components/Queue';
+import { Queue } from '@/components/Queue';
 import { SearchBar } from '@/components/SearchBar';
 import { ServerSelector } from '@/components/ServerSelector';
 import { VoiceChannelSelector } from '@/components/VoiceChannelSelector';
