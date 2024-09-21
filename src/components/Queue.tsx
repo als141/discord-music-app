@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { ChevronUp, ChevronDown } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 
 interface Track {
   url: string
@@ -40,7 +41,14 @@ const QueueItemComponent = ({
   onMoveDown: () => void
 }) => {
   return (
-    <div className="flex items-center gap-4 p-2 border-b last:border-b-0">
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.3 }}
+      className="flex items-center gap-4 p-2 border-b last:border-b-0"
+    >
       <img
         src={item.track.thumbnail}
         alt={item.track.title}
@@ -73,7 +81,7 @@ const QueueItemComponent = ({
           </Button>
         )}
       </div>
-    </div>
+    </motion.div>
   )
 }
 
@@ -92,17 +100,19 @@ export function Queue({ queue, onReorderQueue }: QueueProps) {
           <p className="text-center text-muted-foreground">キューに曲がありません。</p>
         ) : (
           <ScrollArea className="h-[300px]">
-            {queue.map((item, index) => (
-              <QueueItemComponent
-                key={item.track.url}
-                item={item}
-                index={index}
-                isFirst={index === 0}
-                isLast={index === queue.length - 1}
-                onMoveUp={() => moveItem(index, index - 1)}
-                onMoveDown={() => moveItem(index, index + 1)}
-              />
-            ))}
+            <AnimatePresence initial={false}>
+              {queue.map((item, index) => (
+                <QueueItemComponent
+                  key={item.track.url}
+                  item={item}
+                  index={index}
+                  isFirst={index === 0}
+                  isLast={index === queue.length - 1}
+                  onMoveUp={() => moveItem(index, index - 1)}
+                  onMoveDown={() => moveItem(index, index + 1)}
+                />
+              ))}
+            </AnimatePresence>
           </ScrollArea>
         )}
       </CardContent>

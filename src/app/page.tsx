@@ -262,10 +262,9 @@ export default function Home() {
 
   // handleReorderQueue関数の修正
   const handleReorderQueue = async (newQueue: QueueItem[]) => {
-    // startIndexとendIndexを計算
     let startIndex = -1;
     let endIndex = -1;
-
+  
     for (let i = 0; i < queue.length; i++) {
       if (queue[i].track.url !== newQueue[i].track.url) {
         const movedItem = queue[i];
@@ -274,14 +273,18 @@ export default function Home() {
         break;
       }
     }
-
+  
     if (startIndex !== -1 && endIndex !== -1) {
       setQueue(newQueue);
-
+  
+      // インデックスをバックエンド用に調整（+1）
+      const backendStartIndex = startIndex + 1;
+      const backendEndIndex = endIndex + 1;
+  
       if (activeServerId !== null) {
         try {
           setIsProcessing(true);
-          await api.reorderQueue(activeServerId, startIndex, endIndex);
+          await api.reorderQueue(activeServerId, backendStartIndex, backendEndIndex);
           toast({
             title: "成功",
             description: "キューの順序を変更しました。",
@@ -300,6 +303,7 @@ export default function Home() {
       console.error("キューの順序変更を検出できませんでした。");
     }
   };
+  
   
 
   return (
