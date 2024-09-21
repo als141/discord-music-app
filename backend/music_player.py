@@ -26,11 +26,12 @@ ytdl = yt_dlp.YoutubeDL(ytdl_format_options)
 guild_queues = defaultdict(asyncio.Queue)
 
 class Song:
-    def __init__(self, source, title, url, thumbnail):
+    def __init__(self, source, title, url, thumbnail, artist):
         self.source = source
         self.title = title
         self.url = url
         self.thumbnail = thumbnail
+        self.artist = artist
 
 class MusicPlayer:
     def __init__(self, bot, guild, guild_id, notify_clients):
@@ -39,6 +40,7 @@ class MusicPlayer:
         self.guild_id = guild_id
         self.notify_clients = notify_clients
         self.queue = deque()
+        self.history = deque()
         self.next = asyncio.Event()
         self.current = None
         self.voice_client = guild.voice_client
@@ -80,7 +82,8 @@ class MusicPlayer:
             await self.next.wait()
             # 再生終了後
             self.current = None
-            self.queue.popleft()  # 再生が終了した曲をキューから削除
+            finished_song = self.queue.popleft()  # 再生が終了した曲をキューから削除
+            self.history.append(finished_song)    # 履歴に追加
             await self.notify_clients(self.guild_id)
 
     def download_song(self, song):
@@ -103,8 +106,9 @@ class MusicPlayer:
         title = info.get('title', 'Unknown Title')
         webpage_url = info.get('webpage_url', url)
         thumbnail = info.get('thumbnail', '')
+        artist = info.get('uploader', 'Unknown Artist')
 
-        return Song(None, title, webpage_url, thumbnail)
+        return Song(None, title, webpage_url, thumbnail, artist)
 
     async def add_to_queue(self, url):
         loop = asyncio.get_event_loop()
@@ -126,12 +130,41 @@ class MusicPlayer:
 
     async def skip(self):
         if self.voice_client.is_playing():
+            # 現在の曲を履歴に追加
+            if self.current:
+                self.history.append(self.current)
             self.voice_client.stop()
         await self.notify_clients(self.guild_id)
 
     async def previous(self):
-        # 前の曲に戻る機能の実装（必要に応じて）
-        pass
+        if self.history:
+            # 現在の再生を停止
+            if self.voice_client.is_playing():
+                self.voice_client.stop()
+
+            # 現在の曲をキューの先頭に戻す
+            if self.current:
+                self.queue.appendleft(self.current)
+
+            # 履歴から前の曲を取得
+            previous_song = self.history.pop()
+
+            # 前の曲を現在の曲に設定
+            self.current = previous_song
+
+            # 曲がダウンロードされていない場合はダウンロード
+            if previous_song.source is None:
+                previous_song = await self.bot.loop.run_in_executor(self.executor, self.download_song, previous_song)
+                self.current = previous_song  # ダウンロード後に再度設定
+
+            # 前の曲を再生
+            self.voice_client.play(discord.FFmpegPCMAudio(previous_song.source),
+                                after=lambda _: self.bot.loop.call_soon_threadsafe(self.next.set))
+
+            # クライアントに通知
+            await self.notify_clients(self.guild_id)
+        else:
+            print("履歴に前の曲がありません。")
 
     async def reorder_queue(self, start_index: int, end_index: int):
         try:

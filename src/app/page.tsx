@@ -394,14 +394,7 @@ export default function Home() {
             </CardHeader>
             <CardContent>
               <NowPlaying track={currentTrack} isPlaying={isPlaying} />
-            </CardContent>
-          </Card>
-
-          <Card className="mb-4">
-            <CardHeader>
-              <CardTitle>プレイヤーコントロール</CardTitle>
-            </CardHeader>
-            <CardContent>
+              <div className="mt-4">
               <Player
                 track={currentTrack}
                 isPlaying={isPlaying}
@@ -411,6 +404,7 @@ export default function Home() {
                 onPrevious={handlePrevious}
                 loading={isProcessing}
               />
+              </div>
             </CardContent>
           </Card>
 

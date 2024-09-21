@@ -55,7 +55,11 @@ const QueueItemComponent = ({
         className="w-12 h-12 object-cover rounded"
       />
       <div className="flex-grow">
-        <h3 className="font-semibold">{item.track.title}</h3>
+        <h3 className="font-semibold">
+          <a href={item.track.url} target="_blank" rel="noopener noreferrer">
+            {item.track.title}
+          </a>
+        </h3>
         <p className="text-sm text-muted-foreground">{item.track.artist}</p>
       </div>
       {item.isCurrent && <span className="text-primary mr-2">再生中</span>}

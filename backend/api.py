@@ -125,7 +125,7 @@ async def get_current_track(guild_id: str):
     if player and player.current:
         return Track(
             title=player.current.title,
-            artist="Unknown",
+            artist=player.current.artist,
             thumbnail=player.current.thumbnail,
             url=player.current.url
         )
@@ -136,18 +136,17 @@ async def get_queue(guild_id: str):
     player = music_players.get(guild_id)
     if player:
         queue_items = []
-        # 現在再生中の曲を除いたキューを取得
-        for i, item in enumerate(list(player.queue)[1:]):  # インデックス1から始める
+        for i, item in enumerate(list(player.queue)[1:]):
             queue_items.append(
                 QueueItem(
                     track=Track(
                         title=item.title,
-                        artist="Unknown",
+                        artist=item.artist,
                         thumbnail=item.thumbnail,
                         url=item.url
                     ),
                     position=i,
-                    isCurrent=False  # キュー内の曲は再生中ではない
+                    isCurrent=False
                 )
             )
         return queue_items
@@ -194,7 +193,6 @@ async def previous(guild_id: str):
     player = music_players.get(guild_id)
     if player:
         await player.previous()
-        await notify_clients(guild_id)
         return {"message": "Moved to previous track"}
     raise HTTPException(status_code=404, detail="No active music player found")
 

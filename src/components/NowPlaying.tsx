@@ -23,7 +23,11 @@ export function NowPlaying({ track, isPlaying }: NowPlayingProps) {
           <AvatarFallback>{track.title[0]}</AvatarFallback>
         </Avatar>
         <div>
-          <h3 className="text-lg font-bold">{track.title}</h3>
+        <h3 className="text-lg font-bold">
+          <a href={track.url} target="_blank" rel="noopener noreferrer">
+            {track.title}
+          </a>
+        </h3>
           <p className="text-sm text-gray-500">{track.artist}</p>
           <p className="text-sm text-gray-500">{isPlaying ? '再生中' : '一時停止中'}</p>
         </div>

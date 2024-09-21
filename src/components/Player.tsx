@@ -20,7 +20,7 @@ export function Player({ track, isPlaying, onPlay, onPause, onSkip, onPrevious, 
     <Card>
       <CardContent className="flex items-center justify-center gap-4 p-4">
         <Button variant="outline" size="icon" onClick={onPrevious} disabled={loading}>
-          <SkipBackIcon className="h-4 w-4" />
+           <SkipBackIcon className="h-4 w-4" />
         </Button>
         {isPlaying ? (
           <Button variant="outline" size="icon" onClick={onPause} disabled={loading}>
