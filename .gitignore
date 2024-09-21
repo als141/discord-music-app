@@ -34,3 +34,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/music/*
+/music/
+
+/discordvenv/*
+/discordvenv/
+
+/backend/__pycache__/*
+/backend/__pycache__/
+
+/backend/.env
