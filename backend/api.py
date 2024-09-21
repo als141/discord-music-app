@@ -56,6 +56,29 @@ class ReorderRequest(BaseModel):
 
 active_connections: Dict[str, List[WebSocket]] = {}
 
+async def websocket_endpoint(websocket: WebSocket, guild_id: str):
+    await websocket.accept()
+    if guild_id not in active_connections:
+        active_connections[guild_id] = []
+    active_connections[guild_id].append(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+            # 現在の再生状態を取得
+            current_track = await get_current_track(guild_id)
+            queue = await get_queue(guild_id)
+            is_playing_status = await is_playing(guild_id)
+            # クライアントに状態を送信
+            await websocket.send_json({
+                "current_track": jsonable_encoder(current_track),
+                "queue": jsonable_encoder(queue),
+                "is_playing": is_playing_status
+            })
+    except WebSocketDisconnect:
+        active_connections[guild_id].remove(websocket)
+        if not active_connections[guild_id]:
+            del active_connections[guild_id]
+
 async def notify_clients(guild_id: str):
     connections = active_connections.get(guild_id, [])
     for connection in connections:
@@ -118,6 +141,13 @@ async def join_voice_channel(guild_id: str, channel_id: str):
         await notify_clients(guild_id)
         return {"message": "Joined voice channel"}
     raise HTTPException(status_code=404, detail="Guild or Channel not found")
+
+@app.get("/bot-voice-status/{guild_id}")
+async def get_bot_voice_status(guild_id: str):
+    guild = bot.get_guild(int(guild_id))
+    if guild and guild.voice_client:
+        return {"channel_id": str(guild.voice_client.channel.id)}
+    return {"channel_id": None}
 
 @app.get("/current-track/{guild_id}", response_model=Optional[Track])
 async def get_current_track(guild_id: str):

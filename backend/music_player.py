@@ -110,6 +110,20 @@ class MusicPlayer:
 
         return Song(None, title, webpage_url, thumbnail, artist)
 
+    async def join_voice_channel(self, channel_id: str):
+        channel = self.guild.get_channel(int(channel_id))
+        if channel and channel.type.name == "voice":
+            if self.voice_client and self.voice_client.channel.id == channel.id:
+                # 既に同じチャンネルにいる場合は何もしない
+                return
+            elif self.voice_client:
+                await self.voice_client.move_to(channel)
+            else:
+                self.voice_client = await channel.connect()
+            await self.notify_clients(self.guild_id)
+        else:
+            raise ValueError("Invalid voice channel")
+
     async def add_to_queue(self, url):
         loop = asyncio.get_event_loop()
         song = await loop.run_in_executor(self.executor, self.get_song_info, url)

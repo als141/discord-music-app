@@ -31,13 +31,13 @@ export const api = {
     return response.data;
   },
 
-  getVoiceChannels: async (guildId: string): Promise<VoiceChannel[]> => {
-    const response = await axios.get(`${API_URL}/voice-channels/${guildId}`);
+  getVoiceChannels: async (serverId: string): Promise<VoiceChannel[]> => {
+    const response = await axios.get(`${API_URL}/voice-channels/${serverId}`);
     return response.data;
   },
 
-  joinVoiceChannel: async (guildId: string, channelId: string): Promise<void> => {
-    await axios.post(`${API_URL}/join-voice-channel/${guildId}/${channelId}`);
+  joinVoiceChannel: async (serverId: string, channelId: string): Promise<void> => {
+    await axios.post(`${API_URL}/join-voice-channel/${serverId}/${channelId}`);
   },
 
   getCurrentTrack: async (guildId: string): Promise<Track | null> => {
@@ -90,6 +90,12 @@ export const api = {
       end_index: endIndex,
     });
   },
+
+  getBotVoiceStatus: async (serverId: string): Promise<string | null> => {
+    const response = await axios.get(`${API_URL}/bot-voice-status/${serverId}`);
+    return response.data.channel_id;
+  },
+
 };
 
 export const setupWebSocket = (guildId: string, onUpdate: (data: any) => void) => {
