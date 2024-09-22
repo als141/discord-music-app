@@ -2,6 +2,10 @@ import axios from 'axios';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
+if (!API_URL) {
+  throw new Error('API URL is not defined. Please set NEXT_PUBLIC_API_URL environment variable.');
+}
+
 export interface Track {
   title: string;
   artist: string;
