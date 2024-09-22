@@ -17,9 +17,15 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
 app = FastAPI()
 
+origins = [
+    "http://localhost:3000",
+    "https://discord-music-app.vercel.app"
+    "https://76a0-61-193-225-213.ngrok-free.app"
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # フロントエンドのURLを許可
+    allow_origins=origins,  # フロントエンドのURLを許可
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
