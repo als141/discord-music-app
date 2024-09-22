@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
+const API_URL = "https://76a0-61-193-225-213.ngrok-free.app";
 
 if (!API_URL) {
   throw new Error('API URL is not defined. Please set NEXT_PUBLIC_API_URL environment variable.');
