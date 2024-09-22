@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = "https://76a0-61-193-225-213.ngrok-free.app";
+const API_URL = "https://c438-61-193-225-213.ngrok-free.app";
 
 if (!API_URL) {
   throw new Error('API URL is not defined. Please set NEXT_PUBLIC_API_URL environment variable.');
@@ -108,7 +108,8 @@ export const api = {
 };
 
 export const setupWebSocket = (guildId: string, onUpdate: (data: QueueData) => void) => {
-  const ws = new WebSocket(`ws://localhost:8000/ws/${guildId}`);
+  const ws = new WebSocket(`ws://c438-61-193-225-213.ngrok-free.app/ws`);
+
 
   ws.onmessage = (event) => {
     const message = JSON.parse(event.data);

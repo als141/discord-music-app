@@ -20,7 +20,7 @@ app = FastAPI()
 origins = [
     "http://localhost:3000",
     "https://discord-music-app.vercel.app"
-    "https://76a0-61-193-225-213.ngrok-free.app"
+    "https://c438-61-193-225-213.ngrok-free.app"
 ]
 
 app.add_middleware(
