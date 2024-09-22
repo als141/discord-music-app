@@ -32,6 +32,7 @@ export const MainApp: React.FC = () => {
         const fetchedServers = await api.getServers();
         setServers(fetchedServers);
       } catch (error) {
+        console.error("Failed to fetch servers:", error);
         toast({
           title: "エラー",
           description: "サーバー一覧の取得に失敗しました。",
@@ -58,11 +59,11 @@ export const MainApp: React.FC = () => {
           const channels = await api.getVoiceChannels(activeServerId);
           setVoiceChannels(channels);
           
-          // ボットの現在のボイスチャンネル状態を取得
           const botStatus = await api.getBotVoiceStatus(activeServerId);
           setBotVoiceChannelId(botStatus);
           if (botStatus) setActiveChannelId(botStatus);
         } catch (error) {
+            console.error("Failed to fetch voice channels:", error);
           toast({
             title: "エラー",
             description: "ボイスチャンネルの取得に失敗しました。",
@@ -73,8 +74,10 @@ export const MainApp: React.FC = () => {
       fetchVoiceChannels();
 
       const ws = setupWebSocket(activeServerId, (data) => {
-        setCurrentTrack(data.current_track);
-        setQueue(data.queue);
+        const queueItems: QueueItem[] = data.queue;
+        const currentTrackItem = queueItems.find(item => item.isCurrent);
+        setCurrentTrack(currentTrackItem?.track || null);
+        setQueue(queueItems.filter(item => !item.isCurrent).map(item => item.track));
         setIsPlaying(data.is_playing);
       });
 
@@ -96,14 +99,14 @@ export const MainApp: React.FC = () => {
     const fetchInitialState = async () => {
       if (activeServerId) {
         try {
-          const [currentTrackResponse, queueResponse, isPlayingResponse] = await Promise.all([
-            api.getCurrentTrack(activeServerId),
+          const [queueResponse, isPlayingResponse] = await Promise.all([
             api.getQueue(activeServerId),
             api.isPlaying(activeServerId)
           ]);
-          setCurrentTrack(currentTrackResponse);
-          // QueueItem[] を Track[] に変換
-          setQueue(queueResponse.map(item => item.track));
+
+          const currentTrackItem = queueResponse.find(item => item.isCurrent);
+          setCurrentTrack(currentTrackItem?.track || null);
+          setQueue(queueResponse.filter(item => !item.isCurrent).map(item => item.track));
           setIsPlaying(isPlayingResponse);
         } catch (error) {
           console.error("Failed to fetch initial state:", error);
@@ -125,6 +128,7 @@ export const MainApp: React.FC = () => {
         await api.resumePlayback(activeServerId);
         setIsPlaying(true);
       } catch (error) {
+        console.error(error); // エラ
         toast({
           title: "エラー",
           description: "再生の開始に失敗しました。",
@@ -140,6 +144,7 @@ export const MainApp: React.FC = () => {
         await api.pausePlayback(activeServerId);
         setIsPlaying(false);
       } catch (error) {
+        console.error(error); // エラーログを出力
         toast({
           title: "エラー",
           description: "再生の一時停止に失敗しました。",
@@ -154,6 +159,7 @@ export const MainApp: React.FC = () => {
       try {
         await api.skipTrack(activeServerId);
       } catch (error) {
+        console.error(error); // エラーログを出力
         toast({
           title: "エラー",
           description: "スキップに失敗しました。",
@@ -168,6 +174,7 @@ export const MainApp: React.FC = () => {
       try {
         await api.previousTrack(activeServerId);
       } catch (error) {
+        console.error(error); // エラ
         toast({
           title: "エラー",
           description: "前の曲への移動に失敗しました。",
@@ -183,6 +190,7 @@ export const MainApp: React.FC = () => {
       setSearchResults(results);
       setIsSearchActive(true);
     } catch (error) {
+        console.error(error); // エラーロ
       toast({
         title: "エラー",
         description: "検索に失敗しました。",
@@ -200,6 +208,7 @@ export const MainApp: React.FC = () => {
           description: "URLが追加されました。",
         });
       } catch (error) {
+        console.error(error); // エラーログを出力
         toast({
           title: "エラー",
           description: "URLの追加に失敗しました。",
@@ -216,14 +225,15 @@ export const MainApp: React.FC = () => {
         const [reorderedItem] = newQueue.splice(startIndex, 1);
         newQueue.splice(endIndex, 0, reorderedItem);
         setQueue(newQueue);
-        await api.reorderQueue(activeServerId, startIndex, endIndex);
+        // インデックスをサーバー側に合わせるため+1
+        await api.reorderQueue(activeServerId, startIndex + 1, endIndex + 1);
       } catch (error) {
+        console.error(error); // エラーログを出力
         toast({
           title: "エラー",
           description: "キューの並び替えに失敗しました。",
           variant: "destructive",
         });
-        // エラーが発生した場合、元の状態に戻す
         const originalQueue = Array.from(queue);
         setQueue(originalQueue);
       }
@@ -232,7 +242,7 @@ export const MainApp: React.FC = () => {
 
   const handleSelectServer = (serverId: string) => {
     setActiveServerId(serverId);
-    setActiveChannelId(null); // サーバーが変更されたらチャンネルをリセット
+    setActiveChannelId(null);
   };
 
   const handleSelectChannel = async (channelId: string) => {
@@ -246,6 +256,7 @@ export const MainApp: React.FC = () => {
           description: "ボイスチャンネルに参加しました。",
         });
       } catch (error) {
+        console.error(error); // エラーログを出力
         toast({
           title: "エラー",
           description: "ボイスチャンネルへの参加に失敗しました。",
@@ -280,12 +291,13 @@ export const MainApp: React.FC = () => {
         {isSearchActive ? (
           <SearchResults
             results={searchResults}
-            onAddToQueue={async (track) => {
+            onAddToQueue={async (track: Track) => {
               if (activeServerId) {
                 try {
                   await api.playTrack(activeServerId, track);
                   setIsSearchActive(false);
                 } catch (error) {
+                    console.error(error); // エラーログを出力
                   toast({
                     title: "エラー",
                     description: "曲の追加に失敗しました。",

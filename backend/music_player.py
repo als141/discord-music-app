@@ -183,12 +183,14 @@ class MusicPlayer:
     async def reorder_queue(self, start_index: int, end_index: int):
         try:
             queue_list = list(self.queue)
+            # 再生中の曲（インデックス0）を移動させない
+            if start_index == 0 or end_index == 0:
+                return
             item = queue_list.pop(start_index)
             queue_list.insert(end_index, item)
             self.queue = deque(queue_list)
         except IndexError:
             pass  # インデックスが範囲外の場合は無視
-
 
     def destroy(self):
         return self.bot.loop.create_task(self.voice_client.disconnect())

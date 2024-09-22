@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Link, Menu, X, Clipboard } from 'lucide-react';
+import { Search, Link, Menu, Clipboard } from 'lucide-react';
 
 interface HeaderProps {
   onSearch: (query: string) => void;

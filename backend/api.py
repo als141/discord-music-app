@@ -56,29 +56,6 @@ class ReorderRequest(BaseModel):
 
 active_connections: Dict[str, List[WebSocket]] = {}
 
-async def websocket_endpoint(websocket: WebSocket, guild_id: str):
-    await websocket.accept()
-    if guild_id not in active_connections:
-        active_connections[guild_id] = []
-    active_connections[guild_id].append(websocket)
-    try:
-        while True:
-            await websocket.receive_text()
-            # 現在の再生状態を取得
-            current_track = await get_current_track(guild_id)
-            queue = await get_queue(guild_id)
-            is_playing_status = await is_playing(guild_id)
-            # クライアントに状態を送信
-            await websocket.send_json({
-                "current_track": jsonable_encoder(current_track),
-                "queue": jsonable_encoder(queue),
-                "is_playing": is_playing_status
-            })
-    except WebSocketDisconnect:
-        active_connections[guild_id].remove(websocket)
-        if not active_connections[guild_id]:
-            del active_connections[guild_id]
-
 async def notify_clients(guild_id: str):
     connections = active_connections.get(guild_id, [])
     for connection in connections:
@@ -110,6 +87,18 @@ async def websocket_endpoint(websocket: WebSocket, guild_id: str):
         active_connections[guild_id] = []
     active_connections[guild_id].append(websocket)
     try:
+        # 接続時に初期データを送信
+        current_track = await get_current_track(guild_id)
+        queue = await get_queue(guild_id)
+        is_playing_status = await is_playing(guild_id)
+        await websocket.send_json({
+            "type": "update",
+            "data": {
+                "current_track": jsonable_encoder(current_track),
+                "queue": jsonable_encoder(queue),
+                "is_playing": is_playing_status
+            }
+        })
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
@@ -166,7 +155,7 @@ async def get_queue(guild_id: str):
     player = music_players.get(guild_id)
     if player:
         queue_items = []
-        for i, item in enumerate(list(player.queue)[1:]):
+        for i, item in enumerate(list(player.queue)):
             queue_items.append(
                 QueueItem(
                     track=Track(
@@ -176,7 +165,7 @@ async def get_queue(guild_id: str):
                         url=item.url
                     ),
                     position=i,
-                    isCurrent=False
+                    isCurrent=(i == 0)
                 )
             )
         return queue_items
@@ -242,11 +231,9 @@ async def search(query: str):
     if 'entries' in result:
         for entry in result['entries']:
             if entry:
-                # 正しい動画ページのURLを取得
                 video_url = entry.get('url', '')
                 if not video_url.startswith('http'):
                     video_url = f"https://www.youtube.com/watch?v={entry.get('id')}"
-                # サムネイルURLを取得
                 thumbnail = entry.get('thumbnail', '')
                 if not thumbnail and 'thumbnails' in entry:
                     thumbnail = entry['thumbnails'][-1].get('url', '')
@@ -275,7 +262,7 @@ async def reorder_queue(guild_id: str, reorder_request: ReorderRequest):
     raise HTTPException(status_code=404, detail="No active music player found")
 
 async def start_discord_bot():
-    await bot.start(DISCORD_TOKEN)  # Discordボットのトークンを設定してください
+    await bot.start(DISCORD_TOKEN)
 
 async def start_web_server():
     config = uvicorn.Config(app, host="0.0.0.0", port=8000, loop="asyncio")

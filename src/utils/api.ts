@@ -25,6 +25,11 @@ export interface VoiceChannel {
   name: string;
 }
 
+interface QueueData {
+  queue: QueueItem[];
+  is_playing: boolean;
+}
+
 export const api = {
   getServers: async (): Promise<Server[]> => {
     const response = await axios.get(`${API_URL}/servers`);
@@ -98,7 +103,7 @@ export const api = {
 
 };
 
-export const setupWebSocket = (guildId: string, onUpdate: (data: any) => void) => {
+export const setupWebSocket = (guildId: string, onUpdate: (data: QueueData) => void) => {
   const ws = new WebSocket(`ws://localhost:8000/ws/${guildId}`);
 
   ws.onmessage = (event) => {
