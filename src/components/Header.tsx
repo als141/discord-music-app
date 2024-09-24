@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Link, Menu, Clipboard } from 'lucide-react';
 
@@ -13,16 +13,41 @@ export const Header: React.FC<HeaderProps> = ({ onSearch, onAddUrl, onOpenMenu }
   const [url, setUrl] = useState('');
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [isUrlActive, setIsUrlActive] = useState(false);
+  const [searchHistory, setSearchHistory] = useState<string[]>([]);
+
+  useEffect(() => {
+    // ローカルストレージから検索履歴を読み込む
+    const history = localStorage.getItem('searchHistory');
+    if (history) {
+      setSearchHistory(JSON.parse(history));
+    }
+  }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    onSearch(searchQuery);
+    if (searchQuery.trim() !== '') {
+      onSearch(searchQuery);
+
+      // 検索履歴を更新
+      const updatedHistory = [searchQuery, ...searchHistory.filter(q => q !== searchQuery)].slice(0, 10);
+      setSearchHistory(updatedHistory);
+      localStorage.setItem('searchHistory', JSON.stringify(updatedHistory));
+
+      // 入力をリセットし、バーを閉じる
+      setSearchQuery('');
+      setIsSearchActive(false);
+    }
   };
 
   const handleAddUrl = (e: React.FormEvent) => {
     e.preventDefault();
-    onAddUrl(url);
-    setUrl('');
+    if (url.trim() !== '') {
+      onAddUrl(url);
+
+      // 入力をリセットし、バーを閉じる
+      setUrl('');
+      setIsUrlActive(false);
+    }
   };
 
   const handlePaste = async () => {
@@ -30,8 +55,22 @@ export const Header: React.FC<HeaderProps> = ({ onSearch, onAddUrl, onOpenMenu }
       const text = await navigator.clipboard.readText();
       setUrl(text);
     } catch (err) {
-      console.error('Failed to read clipboard contents: ', err);
+      console.error('クリップボードからの読み取りに失敗しました: ', err);
     }
+  };
+
+  const handleSelectHistoryItem = (query: string) => {
+    setSearchQuery(query);
+    onSearch(query);
+
+    // 検索履歴を更新して選択した項目を先頭に移動
+    const updatedHistory = [query, ...searchHistory.filter(q => q !== query)];
+    setSearchHistory(updatedHistory);
+    localStorage.setItem('searchHistory', JSON.stringify(updatedHistory));
+
+    // 入力をリセットし、バーを閉じる
+    setSearchQuery('');
+    setIsSearchActive(false);
   };
 
   return (
@@ -44,7 +83,10 @@ export const Header: React.FC<HeaderProps> = ({ onSearch, onAddUrl, onOpenMenu }
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => setIsSearchActive(!isSearchActive)}
+            onClick={() => {
+              setIsSearchActive(!isSearchActive);
+              setIsUrlActive(false);
+            }}
             className="p-2 bg-gray-800 rounded-full"
           >
             <Search size={20} />
@@ -52,7 +94,10 @@ export const Header: React.FC<HeaderProps> = ({ onSearch, onAddUrl, onOpenMenu }
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => setIsUrlActive(!isUrlActive)}
+            onClick={() => {
+              setIsUrlActive(!isUrlActive);
+              setIsSearchActive(false);
+            }}
             className="p-2 bg-gray-800 rounded-full"
           >
             <Link size={20} />
@@ -74,7 +119,7 @@ export const Header: React.FC<HeaderProps> = ({ onSearch, onAddUrl, onOpenMenu }
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search..."
+                placeholder="検索..."
                 className="w-full bg-gray-800 text-white rounded-full py-2 px-4 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <button
@@ -84,6 +129,20 @@ export const Header: React.FC<HeaderProps> = ({ onSearch, onAddUrl, onOpenMenu }
                 <Search size={20} />
               </button>
             </div>
+            {/* 検索履歴を表示 */}
+            {searchHistory.length > 0 && (
+              <div className="mt-2 bg-gray-800 rounded-lg overflow-hidden">
+                {searchHistory.map((query, index) => (
+                  <button
+                    key={index}
+                    onClick={() => handleSelectHistoryItem(query)}
+                    className="w-full text-left px-4 py-2 hover:bg-gray-700"
+                  >
+                    {query}
+                  </button>
+                ))}
+              </div>
+            )}
           </motion.form>
         )}
         {isUrlActive && (
@@ -100,7 +159,7 @@ export const Header: React.FC<HeaderProps> = ({ onSearch, onAddUrl, onOpenMenu }
                 type="text"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="Enter URL..."
+                placeholder="URLを入力..."
                 className="w-full bg-gray-800 text-white rounded-full py-2 px-4 pr-20 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex">

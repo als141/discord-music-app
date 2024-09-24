@@ -1,23 +1,27 @@
-import type { Metadata } from "next"
+"use client";
+
 import { Inter } from 'next/font/google'
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
+import { useEffect } from 'react';
 
 const inter = Inter({ subsets: ['latin'] })
-
-export const metadata: Metadata = {
-  title: "Discord Music Player",
-  description: "A modern web interface for Discord music bot",
-}
 
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js');
+    }
+  }, []);
+
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="jp" suppressHydrationWarning>
       <body className={inter.className}>
         <ThemeProvider
           attribute="class"
