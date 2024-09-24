@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { api, setupWebSocket } from '@/utils/api';
 import { MainPlayer } from './MainPlayer';
@@ -25,6 +25,8 @@ export const MainApp: React.FC = () => {
   const [isSearchActive, setIsSearchActive] = useState(false);
   const { toast } = useToast();
   const [botVoiceChannelId, setBotVoiceChannelId] = useState<string | null>(null);
+
+  const wsRef = useRef<WebSocket | null>(null); // useRef をインポート
 
   useEffect(() => {
     const fetchServers = async () => {
@@ -60,10 +62,10 @@ export const MainApp: React.FC = () => {
           setVoiceChannels(channels);
           
           const botStatus = await api.getBotVoiceStatus(activeServerId);
-          setBotVoiceChannelId(botStatus);
+          setBotVoiceChannelId(botStatus); // 修正: botStatus を直接設定
           if (botStatus) setActiveChannelId(botStatus);
         } catch (error) {
-            console.error("Failed to fetch voice channels:", error);
+          console.error("Failed to fetch voice channels:", error);
           toast({
             title: "エラー",
             description: "ボイスチャンネルの取得に失敗しました。",
@@ -73,6 +75,7 @@ export const MainApp: React.FC = () => {
       };
       fetchVoiceChannels();
 
+      // WebSocket 接続の設定
       const ws = setupWebSocket(activeServerId, (data) => {
         const queueItems: QueueItem[] = data.queue;
         const currentTrackItem = queueItems.find(item => item.isCurrent);
@@ -81,9 +84,12 @@ export const MainApp: React.FC = () => {
         setIsPlaying(data.is_playing);
       });
 
+      wsRef.current = ws; // WebSocket インスタンスを ref に保存
+
       return () => {
-        if (ws) {
-          ws.close();
+        if (wsRef.current) {
+          wsRef.current.close();
+          wsRef.current = null;
         }
       };
     }
@@ -103,6 +109,10 @@ export const MainApp: React.FC = () => {
             api.getQueue(activeServerId),
             api.isPlaying(activeServerId)
           ]);
+
+          if (!Array.isArray(queueResponse)) {
+            throw new Error('Invalid queue response');
+          }
 
           const currentTrackItem = queueResponse.find(item => item.isCurrent);
           setCurrentTrack(currentTrackItem?.track || null);
@@ -190,7 +200,7 @@ export const MainApp: React.FC = () => {
       setSearchResults(results);
       setIsSearchActive(true);
     } catch (error) {
-        console.error(error); // エラーロ
+      console.error(error); // エラーロ
       toast({
         title: "エラー",
         description: "検索に失敗しました。",
@@ -297,7 +307,7 @@ export const MainApp: React.FC = () => {
                   await api.playTrack(activeServerId, track);
                   setIsSearchActive(false);
                 } catch (error) {
-                    console.error(error); // エラーログを出力
+                  console.error(error); // エラーログを出力
                   toast({
                     title: "エラー",
                     description: "曲の追加に失敗しました。",

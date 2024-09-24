@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_URL = "https://c438-61-193-225-213.ngrok-free.app";
+ // Start of Selection
+const API_URL = process.env.NEXT_PUBLIC_API_URL
 
 if (!API_URL) {
   throw new Error('API URL is not defined. Please set NEXT_PUBLIC_API_URL environment variable.');
@@ -104,12 +105,15 @@ export const api = {
     const response = await axios.get(`${API_URL}/bot-voice-status/${serverId}`);
     return response.data.channel_id;
   },
-
 };
 
 export const setupWebSocket = (guildId: string, onUpdate: (data: QueueData) => void) => {
-  const ws = new WebSocket(`ws://c438-61-193-225-213.ngrok-free.app/ws`);
+  // プロトコルを決定（httpsならwss、httpならws）
+  const protocol = API_URL.startsWith('https') ? 'wss' : 'ws';
+  const host = API_URL.replace(/^https?:\/\//, '');
+  const wsUrl = `${protocol}://${host}/ws/${guildId}`;
 
+  const ws = new WebSocket(wsUrl);
 
   ws.onmessage = (event) => {
     const message = JSON.parse(event.data);

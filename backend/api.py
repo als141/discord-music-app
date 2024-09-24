@@ -19,13 +19,12 @@ app = FastAPI()
 
 origins = [
     "http://localhost:3000",
-    "https://discord-music-app.vercel.app"
-    "https://c438-61-193-225-213.ngrok-free.app"
+    "https://your-frontend-url.com"
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,  # フロントエンドのURLを許可
+    allow_origins=["*"],  # フロントエンドのURLを許可
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -106,7 +105,7 @@ async def websocket_endpoint(websocket: WebSocket, guild_id: str):
             }
         })
         while True:
-            await websocket.receive_text()
+            await asyncio.sleep(60)  # 接続を維持するためにスリープ
     except WebSocketDisconnect:
         active_connections[guild_id].remove(websocket)
         if not active_connections[guild_id]:
@@ -271,7 +270,7 @@ async def start_discord_bot():
     await bot.start(DISCORD_TOKEN)
 
 async def start_web_server():
-    config = uvicorn.Config(app, host="0.0.0.0", port=8000, loop="asyncio")
+    config = uvicorn.Config(app, host="::", port=8000, loop="asyncio")
     server = uvicorn.Server(config)
     await server.serve()
 
