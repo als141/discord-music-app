@@ -108,8 +108,7 @@ export const api = {
 };
 
 export const setupWebSocket = (guildId: string, onUpdate: (data: QueueData) => void) => {
-  // プロトコルを決定（httpsならwss、httpならws）
-  const protocol = API_URL.startsWith('https') ? 'wss' : 'ws';
+  const protocol = 'ws';
   const host = API_URL.replace(/^https?:\/\//, '');
   const wsUrl = `${protocol}://${host}/ws/${guildId}`;
 
