@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import { api, setupWebSocket } from '@/utils/api';
 import { MainPlayer } from './MainPlayer';
 import { QueueList } from './QueueList';
@@ -370,23 +370,16 @@ export const MainApp: React.FC = () => {
       />
       <AnimatePresence>
         {isMenuOpen && (
-          <motion.div
-            initial={{ x: -300 }}
-            animate={{ x: 0 }}
-            exit={{ x: -300 }}
-            transition={{ type: "tween", duration: 0.3 }}
-          >
-            <SideMenu
-              isOpen={isMenuOpen}
-              onClose={() => setIsMenuOpen(false)}
-              servers={servers}
-              activeServerId={activeServerId}
-              onSelectServer={handleSelectServer}
-              voiceChannels={voiceChannels}
-              activeChannelId={activeChannelId}
-              onSelectChannel={handleSelectChannel}
-            />
-          </motion.div>
+          <SideMenu
+            isOpen={isMenuOpen}
+            onClose={() => setIsMenuOpen(false)}
+            servers={servers}
+            activeServerId={activeServerId}
+            onSelectServer={handleSelectServer}
+            voiceChannels={voiceChannels}
+            activeChannelId={activeChannelId}
+            onSelectChannel={handleSelectChannel}
+          />
         )}
       </AnimatePresence>
       <main className="flex-grow overflow-hidden pt-16">
