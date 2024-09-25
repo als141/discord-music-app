@@ -4,7 +4,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Track } from '@/utils/api';
 import { PlayIcon, PauseIcon, GripVerticalIcon, ChevronUpIcon, ChevronDownIcon } from 'lucide-react';
-import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import Image from 'next/image';
 
 interface QueueListProps {

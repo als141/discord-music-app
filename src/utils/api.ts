@@ -128,7 +128,8 @@ export const setupWebSocket = (guildId: string, onUpdate: (data: QueueData) => v
   ws.onclose = () => {
     console.log('WebSocket connection closed');
     // 再接続を試みる
-    setTimeout(() => setupWebSocket(guildId, onUpdate), 5000);
+    // setTimeout(() => setupWebSocket(guildId, onUpdate), 5000); // setTimeout を削除
+    setupWebSocket(guildId, onUpdate) // 即時再接続を試みる
   };
 
   return ws;

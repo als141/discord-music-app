@@ -19,12 +19,12 @@ app = FastAPI()
 
 origins = [
     "http://localhost:3000",
-    "https://your-frontend-url.com"
+    "https://discord-music-app.vercel.app"
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # フロントエンドのURLを許可
+    allow_origins=origins,  # フロントエンドのURLを許可
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -76,9 +76,16 @@ async def notify_clients(guild_id: str):
                     "is_playing": is_playing_status
                 }
             })
+        except WebSocketDisconnect:
+            print(f"Client disconnected: {connection}")
+            active_connections[guild_id].remove(connection)
+            if not active_connections[guild_id]:
+                del active_connections[guild_id]
         except Exception as e:
             print(f"Error notifying client: {str(e)}")
-
+            active_connections[guild_id].remove(connection) # エラーが発生した接続を削除
+            if not active_connections[guild_id]:
+                del active_connections[guild_id]
 async def add_and_play_track(guild_id: str, track: Track):
     player = music_players.get(guild_id)
     if player:

@@ -8,6 +8,10 @@ from collections import deque
 
 MUSIC_DIR = "music"
 
+# OAuth2認証情報
+OAUTH2_USERNAME = "oauth2"  # 必要に応じて変更
+OAUTH2_PASSWORD = "" # 初回認証後は不要
+
 # yt-dlpの設定
 ytdl_format_options = {
     'format': 'bestaudio/best',
@@ -19,7 +23,9 @@ ytdl_format_options = {
     'quiet': True,
     'no_warnings': True,
     'default_search': 'auto',
-    'source_address': '0.0.0.0'
+    'source_address': '0.0.0.0',
+    'username': OAUTH2_USERNAME,
+    'password': OAUTH2_PASSWORD,
 }
 
 ytdl = yt_dlp.YoutubeDL(ytdl_format_options)
@@ -87,28 +93,39 @@ class MusicPlayer:
             await self.notify_clients(self.guild_id)
 
     def download_song(self, song):
-        info = ytdl.extract_info(song.url, download=False)
-        if 'entries' in info:
-            info = info['entries'][0]
+        try:
+            info = ytdl.extract_info(song.url, download=False)
+            if 'entries' in info:
+                info = info['entries'][0]
 
-        filename = ytdl.prepare_filename(info)
-        if not os.path.exists(filename):
-            ytdl.download([song.url])
+            filename = ytdl.prepare_filename(info)
+            if not os.path.exists(filename):
+                ytdl.download([song.url])
 
-        song.source = filename
-        return song
+            song.source = filename
+            return song
+        except yt_dlp.utils.DownloadError as e:
+            print(f"ダウンロードエラー: {song.url}\n{e}")
+            return None # ダウンロードエラー時はNoneを返す
+        except Exception as e:
+            print(f"予期せぬエラー: {song.url}\n{e}")
+            return None # エラー時はNoneを返す
 
     def get_song_info(self, url):
         info = ytdl.extract_info(url, download=False)
-        if 'entries' in info:
-            info = info['entries'][0]
 
+        if 'entries' in info:
+            return [self._get_single_song_info(entry) for entry in info['entries']]
+        else:
+            return [self._get_single_song_info(info)]
+
+    def _get_single_song_info(self, info):
         title = info.get('title', 'Unknown Title')
-        webpage_url = info.get('webpage_url', url)
+        webpage_url = info.get('webpage_url', '')
         thumbnail = info.get('thumbnail', '')
         artist = info.get('uploader', 'Unknown Artist')
-
         return Song(None, title, webpage_url, thumbnail, artist)
+
 
     async def join_voice_channel(self, channel_id: str):
         channel = self.guild.get_channel(int(channel_id))
@@ -126,8 +143,9 @@ class MusicPlayer:
 
     async def add_to_queue(self, url):
         loop = asyncio.get_event_loop()
-        song = await loop.run_in_executor(self.executor, self.get_song_info, url)
-        self.queue.append(song)
+        songs = await loop.run_in_executor(self.executor, self.get_song_info, url)
+        for song in songs:
+            self.queue.append(song)
         await self.notify_clients(self.guild_id)
         if not self.voice_client.is_playing() and self.current is None:
             self.next.set()
