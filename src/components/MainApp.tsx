@@ -370,16 +370,23 @@ export const MainApp: React.FC = () => {
       />
       <AnimatePresence>
         {isMenuOpen && (
-          <SideMenu
-            isOpen={isMenuOpen}
-            onClose={() => setIsMenuOpen(false)}
-            servers={servers}
-            activeServerId={activeServerId}
-            onSelectServer={handleSelectServer}
-            voiceChannels={voiceChannels}
-            activeChannelId={activeChannelId}
-            onSelectChannel={handleSelectChannel}
-          />
+          <motion.div
+            initial={{ x: -300 }}
+            animate={{ x: 0 }}
+            exit={{ x: -300 }}
+            transition={{ type: "tween", duration: 0.3 }}
+          >
+            <SideMenu
+              isOpen={isMenuOpen}
+              onClose={() => setIsMenuOpen(false)}
+              servers={servers}
+              activeServerId={activeServerId}
+              onSelectServer={handleSelectServer}
+              voiceChannels={voiceChannels}
+              activeChannelId={activeChannelId}
+              onSelectChannel={handleSelectChannel}
+            />
+          </motion.div>
         )}
       </AnimatePresence>
       <main className="flex-grow overflow-hidden pt-16">
