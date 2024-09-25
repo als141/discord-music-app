@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { api, setupWebSocket } from '@/utils/api';
 import { MainPlayer } from './MainPlayer';
 import { QueueList } from './QueueList';
@@ -10,6 +10,7 @@ import { SideMenu } from './SideMenu';
 import { SearchResults } from './SearchResults';
 import { Server, Track, VoiceChannel, QueueItem } from '@/utils/api';
 import { useToast } from "@/hooks/use-toast";
+import { Loader2 } from 'lucide-react';
 
 export const MainApp: React.FC = () => {
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
@@ -25,8 +26,92 @@ export const MainApp: React.FC = () => {
   const [isSearchActive, setIsSearchActive] = useState(false);
   const { toast } = useToast();
   const [botVoiceChannelId, setBotVoiceChannelId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const wsRef = useRef<WebSocket | null>(null); // useRef をインポート
+
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      setIsLoading(true);
+      try {
+        const [fetchedServers, savedServerId, savedChannelId] = await Promise.all([
+          api.getServers(),
+          localStorage.getItem('activeServerId'),
+          localStorage.getItem('activeChannelId')
+        ]);
+
+        setServers(fetchedServers);
+        if (savedServerId) {
+          setActiveServerId(savedServerId);
+          if (savedChannelId) setActiveChannelId(savedChannelId);
+        }
+      } catch (error) {
+        console.error("Failed to fetch initial data:", error);
+        toast({
+          title: "エラー",
+          description: "初期データの取得に失敗しました。",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchInitialData();
+  }, [toast]);
+
+  useEffect(() => {
+    if (activeServerId) {
+      const fetchServerData = async () => {
+        setIsLoading(true);
+        try {
+          const [channels, botStatus, queueResponse, isPlayingResponse] = await Promise.all([
+            api.getVoiceChannels(activeServerId),
+            api.getBotVoiceStatus(activeServerId),
+            api.getQueue(activeServerId),
+            api.isPlaying(activeServerId)
+          ]);
+
+          setVoiceChannels(channels);
+          setBotVoiceChannelId(botStatus);
+          if (botStatus) setActiveChannelId(botStatus);
+
+          const currentTrackItem = queueResponse.find(item => item.isCurrent);
+          setCurrentTrack(currentTrackItem?.track || null);
+          setQueue(queueResponse.filter(item => !item.isCurrent).map(item => item.track));
+          setIsPlaying(isPlayingResponse);
+
+          const ws = setupWebSocket(activeServerId, (data) => {
+            const queueItems: QueueItem[] = data.queue;
+            const currentTrackItem = queueItems.find(item => item.isCurrent);
+            setCurrentTrack(currentTrackItem?.track || null);
+            setQueue(queueItems.filter(item => !item.isCurrent).map(item => item.track));
+            setIsPlaying(data.is_playing);
+          });
+
+          wsRef.current = ws;
+        } catch (error) {
+          console.error("Failed to fetch server data:", error);
+          toast({
+            title: "エラー",
+            description: "サーバーデータの取得に失敗しました。",
+            variant: "destructive",
+          });
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      fetchServerData();
+
+      return () => {
+        if (wsRef.current) {
+          wsRef.current.close();
+          wsRef.current = null;
+        }
+      };
+    }
+  }, [activeServerId, toast]);
 
   useEffect(() => {
     const fetchServers = async () => {
@@ -277,7 +362,7 @@ export const MainApp: React.FC = () => {
   };
 
   return (
-    <div className="h-screen bg-black text-white">
+    <div className="h-screen bg-black text-white flex flex-col">
       <Header
         onSearch={handleSearch}
         onAddUrl={handleAddUrl}
@@ -297,22 +382,33 @@ export const MainApp: React.FC = () => {
           />
         )}
       </AnimatePresence>
-      <main className="pt-16">
-        {isSearchActive ? (
+      <main className="flex-grow overflow-hidden pt-16">
+        {isLoading ? (
+          <div className="h-full flex items-center justify-center">
+            <Loader2 className="w-8 h-8 animate-spin" />
+          </div>
+        ) : isSearchActive ? (
           <SearchResults
             results={searchResults}
             onAddToQueue={async (track: Track) => {
               if (activeServerId) {
                 try {
+                  setIsLoading(true);
                   await api.playTrack(activeServerId, track);
                   setIsSearchActive(false);
+                  toast({
+                    title: "成功",
+                    description: "曲がキューに追加されました。",
+                  });
                 } catch (error) {
-                  console.error(error); // エラーログを出力
+                  console.error(error);
                   toast({
                     title: "エラー",
                     description: "曲の追加に失敗しました。",
                     variant: "destructive",
                   });
+                } finally {
+                  setIsLoading(false);
                 }
               }
             }}

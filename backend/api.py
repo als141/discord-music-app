@@ -10,6 +10,9 @@ import uvicorn
 from fastapi.encoders import jsonable_encoder
 from dotenv import load_dotenv
 import os
+from ytmusicapi import YTMusic
+
+ytmusic = YTMusic("oauth.json")
 
 load_dotenv()
 
@@ -227,36 +230,31 @@ async def previous(guild_id: str):
         return {"message": "Moved to previous track"}
     raise HTTPException(status_code=404, detail="No active music player found")
 
+def adjust_thumbnail_size(thumbnail_url, width=400, height=400):
+    """サムネイルURLのサイズを調整する（デフォルトでは800x800に拡大）"""
+    if thumbnail_url and "w60-h60" in thumbnail_url:
+        return thumbnail_url.replace("w60-h60", f"w{width}-h{height}")
+    return thumbnail_url
+
 @app.get("/search", response_model=SearchResult)
 async def search(query: str):
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'quiet': True,
-        'no_warnings': True,
-        'default_search': 'ytsearch10',
-        'extract_flat': True,
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        result = ydl.extract_info(f"ytsearch10:{query}", download=False)
+    results = ytmusic.search(query)
 
     tracks = []
-    if 'entries' in result:
-        for entry in result['entries']:
-            if entry:
-                video_url = entry.get('url', '')
-                if not video_url.startswith('http'):
-                    video_url = f"https://www.youtube.com/watch?v={entry.get('id')}"
-                thumbnail = entry.get('thumbnail', '')
-                if not thumbnail and 'thumbnails' in entry:
-                    thumbnail = entry['thumbnails'][-1].get('url', '')
-                tracks.append(
-                    Track(
-                        title=entry.get('title', 'Unknown'),
-                        artist=entry.get('uploader', 'Unknown'),
-                        thumbnail=thumbnail,
-                        url=video_url
-                    )
+    for result in results:
+        if result['resultType'] in ('song', 'video'):  # song と video の両方を処理
+            video_url = f"https://music.youtube.com/watch?v={result['videoId']}" if result['resultType'] == 'song' else f"https://www.youtube.com/watch?v={result['videoId']}"
+            thumbnail = result['thumbnails'][0]['url'] if 'thumbnails' in result and result['thumbnails'] else "" # サムネイルがない場合の処理を追加
+            artist_name = result['artists'][0]['name'] if 'artists' in result and result['artists'] else "Unknown Artist" # アーティストがない場合の処理を追加
+
+            tracks.append(
+                Track(
+                    title=result['title'],
+                    artist=artist_name,
+                    thumbnail=adjust_thumbnail_size(thumbnail),
+                    url=video_url
                 )
+            )
     return SearchResult(tracks=tracks)
 
 @app.post("/add-url/{guild_id}")

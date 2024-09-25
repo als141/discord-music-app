@@ -1,9 +1,9 @@
-'use client';
-
-import React from 'react';
-import { motion } from 'framer-motion';
-import { Server, Mic, X } from 'lucide-react';
+import React, { useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Server, Mic, X, ChevronRight } from 'lucide-react';
 import { Server as ServerType, VoiceChannel } from '@/utils/api';
+import { useMediaQuery } from 'usehooks-ts';
+import { cn } from "@/lib/utils";
 
 interface SideMenuProps {
   isOpen: boolean;
@@ -26,55 +26,141 @@ export const SideMenu: React.FC<SideMenuProps> = ({
   activeChannelId,
   onSelectChannel,
 }) => {
+  const isDesktop = useMediaQuery("(min-width: 768px)");
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen, onClose]);
+
+  const menuVariants = {
+    open: { 
+      x: 0,
+      transition: { 
+        type: 'spring', 
+        stiffness: 400, 
+        damping: 30,
+        duration: 0.2,
+        when: "beforeChildren",
+        staggerChildren: 0.02
+      }
+    },
+    closed: { 
+      x: '-100%',
+      transition: { 
+        type: 'spring', 
+        stiffness: 400, 
+        damping: 30,
+        duration: 0.2,
+        when: "afterChildren",
+        staggerChildren: 0.01,
+        staggerDirection: -1
+      }
+    },
+  };
+
+  const itemVariants = {
+    open: { x: 0, opacity: 1, transition: { duration: 0.1 } },
+    closed: { x: -10, opacity: 0, transition: { duration: 0.1 } },
+  };
+
+  const overlayVariants = {
+    open: { opacity: 1, transition: { duration: 0.2 } },
+    closed: { opacity: 0, transition: { duration: 0.2 } },
+  };
+
   return (
-    <motion.div
-      className="fixed inset-y-0 left-0 w-64 bg-gray-900 text-white z-50 overflow-y-auto"
-      initial={{ x: '-100%' }}
-      animate={{ x: isOpen ? 0 : '-100%' }}
-      transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-    >
-      <div className="flex justify-between items-center p-4 border-b border-gray-700">
-        <h2 className="text-xl font-bold">設定</h2>
-        <button onClick={onClose} className="p-1">
-          <X size={24} />
-        </button>
-      </div>
-      <div className="p-4">
-        <h3 className="text-lg font-semibold mb-2 flex items-center">
-          <Server size={20} className="mr-2" /> サーバー
-        </h3>
-        <ul className="space-y-2 mb-6">
-          {servers.map((server) => (
-            <li key={server.id}>
-              <button
-                onClick={() => onSelectServer(server.id)}
-                className={`w-full text-left p-2 rounded ${
-                  activeServerId === server.id ? 'bg-blue-500' : 'hover:bg-gray-800'
-                }`}
-              >
-                {server.name}
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          <motion.div
+            className="fixed inset-0 bg-black/50 z-40"
+            initial="closed"
+            animate="open"
+            exit="closed"
+            variants={overlayVariants}
+            onClick={onClose}
+          />
+          <motion.div
+            ref={menuRef}
+            className={cn(
+              "fixed inset-y-0 left-0 w-full sm:w-80 bg-gray-900 text-white z-50 overflow-hidden flex flex-col",
+              isDesktop ? "max-w-xs" : ""
+            )}
+            initial="closed"
+            animate="open"
+            exit="closed"
+            variants={menuVariants}
+          >
+            <motion.div variants={itemVariants} className="flex justify-between items-center p-4 border-b border-gray-700">
+              <h2 className="text-xl font-bold">設定</h2>
+              <button onClick={onClose} className="p-2 hover:bg-gray-800 rounded-full transition-colors">
+                <X size={24} />
               </button>
-            </li>
-          ))}
-        </ul>
-        <h3 className="text-lg font-semibold mb-2 flex items-center">
-          <Mic size={20} className="mr-2" /> ボイスチャンネル
-        </h3>
-        <ul className="space-y-2">
-          {voiceChannels.map((channel) => (
-            <li key={channel.id}>
-              <button
-                onClick={() => onSelectChannel(channel.id)}
-                className={`w-full text-left p-2 rounded ${
-                  activeChannelId === channel.id ? 'bg-green-500' : 'hover:bg-gray-800'
-                }`}
-              >
-                {channel.name}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </motion.div>
+            </motion.div>
+            <motion.div className="flex-grow overflow-y-auto p-4 space-y-6">
+              <motion.div variants={itemVariants}>
+                <h3 className="text-lg font-semibold mb-3 flex items-center">
+                  <Server size={20} className="mr-2" /> サーバー
+                </h3>
+                <ul className="space-y-2">
+                  {servers.map((server) => (
+                    <motion.li key={server.id} variants={itemVariants}>
+                      <button
+                        onClick={() => onSelectServer(server.id)}
+                        className={cn(
+                          "w-full text-left p-3 rounded-lg flex items-center justify-between",
+                          activeServerId === server.id
+                            ? "bg-blue-600 text-white"
+                            : "hover:bg-gray-800 transition-colors"
+                        )}
+                      >
+                        <span>{server.name}</span>
+                        {activeServerId === server.id && <ChevronRight size={20} />}
+                      </button>
+                    </motion.li>
+                  ))}
+                </ul>
+              </motion.div>
+              <motion.div variants={itemVariants}>
+                <h3 className="text-lg font-semibold mb-3 flex items-center">
+                  <Mic size={20} className="mr-2" /> ボイスチャンネル
+                </h3>
+                <ul className="space-y-2">
+                  {voiceChannels.map((channel) => (
+                    <motion.li key={channel.id} variants={itemVariants}>
+                      <button
+                        onClick={() => onSelectChannel(channel.id)}
+                        className={cn(
+                          "w-full text-left p-3 rounded-lg flex items-center justify-between",
+                          activeChannelId === channel.id
+                            ? "bg-green-600 text-white"
+                            : "hover:bg-gray-800 transition-colors"
+                        )}
+                      >
+                        <span>{channel.name}</span>
+                        {activeChannelId === channel.id && <ChevronRight size={20} />}
+                      </button>
+                    </motion.li>
+                  ))}
+                </ul>
+              </motion.div>
+            </motion.div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
   );
 };
