@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { PlayIcon, PauseIcon, SkipForwardIcon, SkipBackIcon, ChevronUpIcon, ChevronDownIcon, VolumeIcon, Volume2Icon } from 'lucide-react'
+import { PlayIcon, PauseIcon, SkipForwardIcon, SkipBackIcon, ChevronUpIcon, ChevronDownIcon } from 'lucide-react'
 import { Track, api } from '@/utils/api'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
@@ -12,7 +12,6 @@ import { QueueList } from './QueueList'
 import { useToast } from '@/hooks/use-toast'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem } from '@/components/ui/context-menu'
 import { useSwipeable } from 'react-swipeable'
-import { Slider } from '@/components/ui/slider'
 
 interface MainPlayerProps {
   currentTrack: Track | null
@@ -49,7 +48,6 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
   const [relatedTracks, setRelatedTracks] = useState<Track[]>([])
   const [activeTab, setActiveTab] = useState('queue')
   const { toast } = useToast()
-  const [volume, setVolume] = useState(50)
 
   useEffect(() => {
     if (imageRef.current && imageRef.current.complete) {
@@ -172,15 +170,15 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
     >
       <Button
         onClick={onClose}
-        className="absolute top-4 left-4 z-0"
+        className="absolute top-4 left-4 z-10 bg-black bg-opacity-50 hover:bg-opacity-70 transition-all duration-200"
         variant="ghost"
         size="icon"
       >
         <ChevronDownIcon size={35}/>
       </Button>
-      <div className="flex-grow flex flex-col items-center justify-center w-full max-w-md">
+      <div className="flex-grow flex flex-col items-center justify-center w-full max-w-md pt-16 sm:pt-8">
         <motion.div
-          className="w-full aspect-square rounded-lg overflow-hidden shadow-lg mb-8 relative"
+          className="w-full max-w-[80vw] sm:max-w-[50vw] aspect-square rounded-lg overflow-hidden shadow-lg mb-4 sm:mb-8 relative"
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ duration: 0.5 }}
@@ -192,6 +190,7 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
             layout="fill"
             objectFit="cover"
             onLoad={() => setImageLoaded(true)}
+            className="z-0"
           />
           <AnimatePresence>
             {!imageLoaded && (
@@ -204,32 +203,20 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
               </motion.div>
             )}
           </AnimatePresence>
-        </motion.div>
+          </motion.div>
 
-        <motion.div
-          className="w-full text-center mb-8"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          <h2 className="text-2xl font-bold truncate">{currentTrack?.title}</h2>
-          <p className="text-lg text-gray-300 mt-2">{currentTrack?.artist}</p>
-        </motion.div>
-      </div>
-
-      <div className="w-full max-w-md">
-        <div className="flex items-center justify-between mb-4">
-          <VolumeIcon size={20} />
-          <Slider
-            value={[volume]}
-            onValueChange={(value) => setVolume(value[0])}
-            max={100}
-            step={1}
-            className="w-full mx-4"
-          />
-          <Volume2Icon size={20} />
-        </div>
-        <div className="flex justify-center items-center space-x-8 mb-8">
+          <motion.div
+            className="w-full text-center mb-4 sm:mb-8"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
+            <h2 className="text-xl sm:text-2xl font-bold truncate">{currentTrack?.title}</h2>
+            <p className="text-base sm:text-lg text-gray-300 mt-1 sm:mt-2">{currentTrack?.artist}</p>
+          </motion.div>
+          </div>
+          <div className="w-full max-w-md">
+          <div className="flex justify-center items-center space-x-4 sm:space-x-8 mb-4 sm:mb-8">
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
@@ -254,23 +241,24 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
           >
             <SkipForwardIcon size={24} />
           </motion.button>
-        </div>
+          </div>
         <motion.div
-          className="mt-6 flex flex-col items-center cursor-pointer"
+          className="mt-2 sm:mt-6 flex flex-col items-center cursor-pointer"
           onClick={() => setIsDrawerOpen(true)}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
         >
           <motion.div
-            className="flex items-center justify-center bg-white bg-opacity-10 rounded-full p-2 mb-2"
+            className="flex items-center justify-center bg-white bg-opacity-10 rounded-full p-1 sm:p-2 mb-1 sm:mb-2"
             animate={{ y: [0, -5, 0] }}
             transition={{ repeat: Infinity, duration: 1.5 }}
           >
-            <ChevronUpIcon size={24} />
+            <ChevronUpIcon size={20} />
           </motion.div>
-          <span className="text-sm text-white text-opacity-70">コンテンツを表示</span>
+          <span className="text-xs sm:text-sm text-white text-opacity-70">コンテンツを表示</span>
         </motion.div>
       </div>
+
 
       <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
         <DrawerContent {...drawerSwipeHandlers}>

@@ -85,7 +85,7 @@ export const Header: React.FC<HeaderProps> = ({ onSearch, onAddUrl, onOpenMenu }
   return (
     <TooltipProvider>
       <header className="bg-card text-card-foreground p-4 fixed top-0 left-0 right-0 z-10 shadow-md">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between h-8">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={onOpenMenu} variant="ghost" size="icon" aria-label="メニューを開く">

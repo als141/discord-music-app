@@ -82,7 +82,7 @@ export const SideMenu: React.FC<SideMenuProps> = ({
               variants={menuVariants}
               {...swipeHandlers}
             >
-              <div className="flex items-center justify-between p-4 border-b">
+              <div className="flex items-center justify-between p-4 border-b h-16">
                 <h2 className="text-xl font-bold">設定</h2>
                 <Tooltip>
                   <TooltipTrigger asChild>
