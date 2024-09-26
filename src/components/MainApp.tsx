@@ -36,11 +36,6 @@ export const MainApp: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isMainPlayerVisible, setIsMainPlayerVisible] = useState(false); // 追加
 
-  const handleCloseMenu = useCallback(() => {
-    setIsMenuOpen(false);
-  }, []);
-  
-
   const wsRef = useRef<WebSocket | null>(null);
   // 曲をキューに追加する関数を追加
 
