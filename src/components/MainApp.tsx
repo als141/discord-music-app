@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { api, setupWebSocket } from '@/utils/api';
 import { MainPlayer } from './MainPlayer';
 import { QueueList } from './QueueList';
@@ -43,6 +43,12 @@ export const MainApp: React.FC = () => {
     onSwipedRight: () => setIsMenuOpen(true),
     trackMouse: true,
     delta: 50,
+  });
+
+  const miniPlayerSwipeHandlers = useSwipeable({
+    onSwipedUp: () => setIsMainPlayerVisible(true),
+    delta: 50,
+    trackMouse: false
   });
 
   const handleAddTrackToQueue = async (track: Track) => {
@@ -370,40 +376,53 @@ export const MainApp: React.FC = () => {
             onClose={() => setIsSearchActive(false)}
             onSearch={handleSearch}
           />
-        ) : isMainPlayerVisible ? (
-          <MainPlayer
-            currentTrack={currentTrack}
-            isPlaying={isPlaying}
-            onPlay={handlePlay}
-            onPause={handlePause}
-            onSkip={handleSkip}
-            onPrevious={handlePrevious}
-            queue={queue}
-            onReorder={handleReorderQueue}
-            onDelete={handleDeleteFromQueue}
-            guildId={activeServerId}
-            onClose={() => setIsMainPlayerVisible(false)}
-          />
         ) : (
-          <HomeScreen
-            onSelectTrack={(track: Track) => {
-              handleAddTrackToQueue(track);
-              setIsMainPlayerVisible(true);
-            }}
-          />
+          <>
+            <AnimatePresence>
+              {isMainPlayerVisible && (
+                <MainPlayer
+                  currentTrack={currentTrack}
+                  isPlaying={isPlaying}
+                  onPlay={handlePlay}
+                  onPause={handlePause}
+                  onSkip={handleSkip}
+                  onPrevious={handlePrevious}
+                  queue={queue}
+                  onReorder={handleReorderQueue}
+                  onDelete={handleDeleteFromQueue}
+                  guildId={activeServerId}
+                  onClose={() => setIsMainPlayerVisible(false)}
+                  isVisible={isMainPlayerVisible}
+                />
+              )}
+            </AnimatePresence>
+            {!isMainPlayerVisible && (
+              <HomeScreen
+                onSelectTrack={(track: Track) => {
+                  handleAddTrackToQueue(track);
+                  setIsMainPlayerVisible(true);
+                }}
+              />
+            )}
+          </>
         )}
       </main>
       {currentTrack && !isMainPlayerVisible && (
-        <div
+        <motion.div
           className="fixed bottom-0 left-0 right-0 bg-card p-4 flex items-center cursor-pointer"
           onClick={() => setIsMainPlayerVisible(true)}
+          initial={{ y: "100%" }}
+          animate={{ y: 0 }}
+          exit={{ y: "100%" }}
+          transition={{ duration: 0.3 }}
+          {...miniPlayerSwipeHandlers}
         >
           <img src={currentTrack.thumbnail} alt={currentTrack.title} className="w-12 h-12 object-cover rounded-md" />
           <div className="ml-4 flex-grow">
             <h4 className="font-semibold truncate">{currentTrack.title}</h4>
             <p className="text-muted-foreground truncate">{currentTrack.artist}</p>
           </div>
-          <Button 
+          <Button
             variant="ghost" 
             onClick={(e) => { 
               e.stopPropagation(); 
@@ -416,22 +435,9 @@ export const MainApp: React.FC = () => {
           >
             {isPlaying ? <PauseIcon /> : <PlayIcon />}
           </Button>
-        </div>
+        </motion.div>
       )}
       <AnimatePresence>
-        {isQueueOpen && (
-          <QueueList
-            queue={queue}
-            currentTrack={currentTrack}
-            isPlaying={isPlaying}
-            onPlayPause={isPlaying ? handlePause : handlePlay}
-            onReorder={handleReorderQueue}
-            onClose={() => setIsQueueOpen(false)}
-            onDelete={handleDeleteFromQueue}
-          />
-        )}
-      </AnimatePresence>
-        <AnimatePresence>
         {isQueueOpen && (
           <QueueList
             queue={queue}

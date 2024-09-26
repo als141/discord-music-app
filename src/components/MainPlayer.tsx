@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { PlayIcon, PauseIcon, SkipForwardIcon, SkipBackIcon, ChevronUpIcon, HomeIcon, VolumeIcon, Volume2Icon } from 'lucide-react'
+import { PlayIcon, PauseIcon, SkipForwardIcon, SkipBackIcon, ChevronUpIcon, ChevronDownIcon, VolumeIcon, Volume2Icon } from 'lucide-react'
 import { Track, api } from '@/utils/api'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
@@ -26,6 +26,7 @@ interface MainPlayerProps {
   onDelete: (index: number) => void
   guildId: string | null
   onClose: () => void
+  isVisible: boolean
 }
 
 export const MainPlayer: React.FC<MainPlayerProps> = ({
@@ -40,6 +41,7 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
   onDelete,
   guildId,
   onClose,
+  isVisible
 }) => {
   const [imageLoaded, setImageLoaded] = useState(false)
   const imageRef = useRef<HTMLImageElement>(null)
@@ -163,18 +165,18 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
     <motion.div
       {...swipeHandlers}
       className="flex flex-col items-center justify-between h-full bg-gradient-to-b from-gray-900 to-black text-white p-4 overflow-hidden relative"
-      initial={{ opacity: 0, y: 50 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 50 }}
+      initial={{ opacity: 0, y: "100%" }}
+      animate={{ opacity: isVisible ? 1 : 0, y: isVisible ? 0 : "100%" }}
+      exit={{ opacity: 0, y: "100%" }}
       transition={{ duration: 0.3 }}
     >
       <Button
         onClick={onClose}
-        className="absolute top-4 left-4 z-10"
+        className="absolute top-4 left-4 z-0"
         variant="ghost"
         size="icon"
       >
-        <HomeIcon />
+        <ChevronDownIcon size={35}/>
       </Button>
       <div className="flex-grow flex flex-col items-center justify-center w-full max-w-md">
         <motion.div
@@ -253,13 +255,21 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
             <SkipForwardIcon size={24} />
           </motion.button>
         </div>
-        <Button
+        <motion.div
+          className="mt-6 flex flex-col items-center cursor-pointer"
           onClick={() => setIsDrawerOpen(true)}
-          className="w-full flex items-center justify-center py-3 bg-white bg-opacity-10 rounded-full hover:bg-opacity-20 transition-all duration-200"
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
         >
-          <span className="mr-2">次のコンテンツ</span>
-          <ChevronUpIcon size={20} />
-        </Button>
+          <motion.div
+            className="flex items-center justify-center bg-white bg-opacity-10 rounded-full p-2 mb-2"
+            animate={{ y: [0, -5, 0] }}
+            transition={{ repeat: Infinity, duration: 1.5 }}
+          >
+            <ChevronUpIcon size={24} />
+          </motion.div>
+          <span className="text-sm text-white text-opacity-70">コンテンツを表示</span>
+        </motion.div>
       </div>
 
       <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>

@@ -13,6 +13,15 @@ interface HomeScreenProps {
   onSelectTrack: (track: Track) => void
 }
 
+interface StoredData {
+  recommendations: Track[]
+  charts: Track[]
+  timestamp: number
+}
+
+const STORAGE_KEY = 'homeScreenData'
+const DATA_EXPIRY_TIME = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
+
 export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack }) => {
   const [recommendations, setRecommendations] = useState<Track[]>([])
   const [charts, setCharts] = useState<Track[]>([])
@@ -25,12 +34,30 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack }) => {
     const fetchData = async () => {
       try {
         setLoading(true)
-        const [recs, ch] = await Promise.all([
-          api.getRecommendations(),
-          api.getCharts(),
-        ])
-        setRecommendations(recs)
-        setCharts(ch)
+        const storedData = localStorage.getItem(STORAGE_KEY)
+        const parsedData: StoredData | null = storedData ? JSON.parse(storedData) : null
+
+        if (parsedData && Date.now() - parsedData.timestamp < DATA_EXPIRY_TIME) {
+          // Use stored data if it's not expired
+          setRecommendations(parsedData.recommendations)
+          setCharts(parsedData.charts)
+        } else {
+          // Fetch new data if stored data is expired or doesn't exist
+          const [recs, ch] = await Promise.all([
+            api.getRecommendations(),
+            api.getCharts(),
+          ])
+          setRecommendations(recs)
+          setCharts(ch)
+
+          // Store the new data
+          const newData: StoredData = {
+            recommendations: recs,
+            charts: ch,
+            timestamp: Date.now()
+          }
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(newData))
+        }
       } catch (error) {
         console.error('データの取得に失敗しました:', error)
         toast({
@@ -42,6 +69,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack }) => {
         setLoading(false)
       }
     }
+
     fetchData()
   }, [toast])
 
