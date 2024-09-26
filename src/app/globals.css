@@ -115,3 +115,7 @@
 body {
   overscroll-behavior: contain;
 }
+
+html, body {
+  touch-action: none;
+}
