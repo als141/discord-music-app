@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Server, Mic, ChevronRight, X } from 'lucide-react';
 import { Server as ServerType, VoiceChannel } from '@/utils/api';
 import { useSwipeable } from 'react-swipeable';
