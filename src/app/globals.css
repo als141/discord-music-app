@@ -107,3 +107,7 @@
 .animate-slide-out-bottom {
   @apply animate-out slide-out-to-bottom duration-300;
 }
+
+#dify-chatbot-bubble-button {
+  background-color: #1C64F2 !important;
+}
