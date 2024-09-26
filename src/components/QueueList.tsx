@@ -135,7 +135,7 @@ export const QueueList: React.FC<QueueListProps> = ({
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => onDelete(index)}
+                    onClick={() => onDelete(index + 1)}
                     className="text-destructive hover:text-destructive"
                   >
                     <TrashIcon size={20} />
