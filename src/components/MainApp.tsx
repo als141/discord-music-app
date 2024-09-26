@@ -39,6 +39,10 @@ export const MainApp: React.FC = () => {
     setIsMenuOpen(false);
   }, []);
 
+  const handleRefresh = useCallback(() => {
+    window.location.reload();
+  }, []);
+
   const swipeHandlers = useSwipeable({
     onSwipedRight: () => setIsMenuOpen(true),
     trackMouse: true,
@@ -341,6 +345,7 @@ export const MainApp: React.FC = () => {
           voiceChannels={voiceChannels}
           activeChannelId={activeChannelId}
           onSelectChannel={handleSelectChannel}
+          onRefresh={handleRefresh}
         />
       </AnimatePresence>
       <main className="flex-grow overflow-hidden pt-16">

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Server, Mic, ChevronRight, X } from 'lucide-react';
+import { Server, Mic, ChevronRight, X, RefreshCw } from 'lucide-react';
 import { Server as ServerType, VoiceChannel } from '@/utils/api';
 import { useSwipeable } from 'react-swipeable';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ interface SideMenuProps {
   voiceChannels: VoiceChannel[];
   activeChannelId: string | null;
   onSelectChannel: (channelId: string) => void;
+  onRefresh: () => void;
 }
 
 export const SideMenu: React.FC<SideMenuProps> = ({
@@ -27,6 +28,7 @@ export const SideMenu: React.FC<SideMenuProps> = ({
   voiceChannels,
   activeChannelId,
   onSelectChannel,
+  onRefresh,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -84,16 +86,28 @@ export const SideMenu: React.FC<SideMenuProps> = ({
             >
               <div className="flex items-center justify-between p-4 border-b h-16">
                 <h2 className="text-xl font-bold">設定</h2>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" onClick={onClose} aria-label="メニューを閉じる">
-                      <X size={24} />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>閉じる</p>
-                  </TooltipContent>
-                </Tooltip>
+                <div className="flex items-center">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="ghost" size="icon" onClick={onRefresh} aria-label="ページをリロード">
+                        <RefreshCw size={24} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>リロード</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="ghost" size="icon" onClick={onClose} aria-label="メニューを閉じる">
+                        <X size={24} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>閉じる</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
               </div>
               <ScrollArea className="h-[calc(100vh-5rem)] p-4">
                 <div className="space-y-6">
