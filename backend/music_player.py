@@ -149,6 +149,16 @@ class MusicPlayer:
         await self.notify_clients(self.guild_id)
         if not self.voice_client.is_playing() and self.current is None:
             self.next.set()
+            
+    async def remove_from_queue(self, position: int):
+        try:
+            queue_list = list(self.queue)
+            if position < len(queue_list):
+                del queue_list[position]
+                self.queue = deque(queue_list)
+        except IndexError:
+            pass  # インデックスが範囲外の場合は無視
+
 
     async def pause(self):
         if self.voice_client.is_playing():

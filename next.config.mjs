@@ -10,7 +10,7 @@ const withPWA = nextPWA({
 const nextConfig = {
   reactStrictMode: true,
   images: {
-    domains: ['i.ytimg.com'], // 画像のドメイン許可
+    domains: ['i.ytimg.com', 'lh3.googleusercontent.com'], // ここに追加
   },
 };
 

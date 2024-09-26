@@ -1,3 +1,5 @@
+// src/components/MainApp.tsx
+
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -11,6 +13,9 @@ import { SearchResults } from './SearchResults';
 import { Server, Track, VoiceChannel, QueueItem } from '@/utils/api';
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from 'lucide-react';
+import { HomeScreen } from './HomeScreen';
+import { PlayIcon, PauseIcon} from 'lucide-react';
+import { Button } from './ui/button';
 
 export const MainApp: React.FC = () => {
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
@@ -27,8 +32,35 @@ export const MainApp: React.FC = () => {
   const { toast } = useToast();
   const [botVoiceChannelId, setBotVoiceChannelId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isMainPlayerVisible, setIsMainPlayerVisible] = useState(false); // 追加
+  
 
-  const wsRef = useRef<WebSocket | null>(null); // useRef をインポート
+  const wsRef = useRef<WebSocket | null>(null);
+  // 曲をキューに追加する関数を追加
+  const handleAddTrackToQueue = async (track: Track) => {
+    if (activeServerId) {
+      try {
+        await api.addUrl(activeServerId, track.url);
+        toast({
+          title: "成功",
+          description: "曲がキューに追加されました。",
+        });
+      } catch (error) {
+        console.error(error);
+        toast({
+          title: "エラー",
+          description: "曲の追加に失敗しました。",
+          variant: "destructive",
+        });
+      }
+    } else {
+      toast({
+        title: "エラー",
+        description: "サーバーが選択されていません。",
+        variant: "destructive",
+      });
+    }
+  };
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -147,7 +179,7 @@ export const MainApp: React.FC = () => {
           setVoiceChannels(channels);
           
           const botStatus = await api.getBotVoiceStatus(activeServerId);
-          setBotVoiceChannelId(botStatus); // 修正: botStatus を直接設定
+          setBotVoiceChannelId(botStatus);
           if (botStatus) setActiveChannelId(botStatus);
         } catch (error) {
           console.error("Failed to fetch voice channels:", error);
@@ -169,7 +201,7 @@ export const MainApp: React.FC = () => {
         setIsPlaying(data.is_playing);
       });
 
-      wsRef.current = ws; // WebSocket インスタンスを ref に保存
+      wsRef.current = ws;
 
       return () => {
         if (wsRef.current) {
@@ -223,7 +255,7 @@ export const MainApp: React.FC = () => {
         await api.resumePlayback(activeServerId);
         setIsPlaying(true);
       } catch (error) {
-        console.error(error); // エラ
+        console.error(error);
         toast({
           title: "エラー",
           description: "再生の開始に失敗しました。",
@@ -239,7 +271,7 @@ export const MainApp: React.FC = () => {
         await api.pausePlayback(activeServerId);
         setIsPlaying(false);
       } catch (error) {
-        console.error(error); // エラーログを出力
+        console.error(error);
         toast({
           title: "エラー",
           description: "再生の一時停止に失敗しました。",
@@ -254,7 +286,7 @@ export const MainApp: React.FC = () => {
       try {
         await api.skipTrack(activeServerId);
       } catch (error) {
-        console.error(error); // エラーログを出力
+        console.error(error);
         toast({
           title: "エラー",
           description: "スキップに失敗しました。",
@@ -269,7 +301,7 @@ export const MainApp: React.FC = () => {
       try {
         await api.previousTrack(activeServerId);
       } catch (error) {
-        console.error(error); // エラ
+        console.error(error);
         toast({
           title: "エラー",
           description: "前の曲への移動に失敗しました。",
@@ -285,7 +317,7 @@ export const MainApp: React.FC = () => {
       setSearchResults(results);
       setIsSearchActive(true);
     } catch (error) {
-      console.error(error); // エラーロ
+      console.error(error);
       toast({
         title: "エラー",
         description: "検索に失敗しました。",
@@ -303,7 +335,7 @@ export const MainApp: React.FC = () => {
           description: "URLが追加されました。",
         });
       } catch (error) {
-        console.error(error); // エラーログを出力
+        console.error(error);
         toast({
           title: "エラー",
           description: "URLの追加に失敗しました。",
@@ -320,10 +352,9 @@ export const MainApp: React.FC = () => {
         const [reorderedItem] = newQueue.splice(startIndex, 1);
         newQueue.splice(endIndex, 0, reorderedItem);
         setQueue(newQueue);
-        // インデックスをサーバー側に合わせるため+1
         await api.reorderQueue(activeServerId, startIndex + 1, endIndex + 1);
       } catch (error) {
-        console.error(error); // エラーログを出力
+        console.error(error);
         toast({
           title: "エラー",
           description: "キューの並び替えに失敗しました。",
@@ -351,7 +382,7 @@ export const MainApp: React.FC = () => {
           description: "ボイスチャンネルに参加しました。",
         });
       } catch (error) {
-        console.error(error); // エラーログを出力
+        console.error(error);
         toast({
           title: "エラー",
           description: "ボイスチャンネルへの参加に失敗しました。",
@@ -360,6 +391,28 @@ export const MainApp: React.FC = () => {
       }
     }
   };
+
+  const handleDeleteFromQueue = async (index: number) => {
+    if (activeServerId) {
+      console.log("Deleting from queue, index:", index);
+      console.log("Current queue:", queue);
+      try {
+        await api.removeFromQueue(activeServerId, index);
+        const updatedQueue = [...queue];
+        updatedQueue.splice(index, 1);
+        setQueue(updatedQueue);
+      } catch (error) {
+        console.error('キューからの削除中にエラーが発生しました:', error);
+        toast({
+          title: 'エラー',
+          description: 'キューからの削除に失敗しました。',
+          variant: 'destructive',
+        });
+      }
+    }
+  };
+
+  
 
   return (
     <div className="h-screen bg-black text-white flex flex-col">
@@ -414,7 +467,7 @@ export const MainApp: React.FC = () => {
             }}
             onClose={() => setIsSearchActive(false)}
           />
-        ) : (
+        ) : isMainPlayerVisible ? (
           <MainPlayer
             currentTrack={currentTrack}
             isPlaying={isPlaying}
@@ -422,10 +475,49 @@ export const MainApp: React.FC = () => {
             onPause={handlePause}
             onSkip={handleSkip}
             onPrevious={handlePrevious}
-            onQueueOpen={() => setIsQueueOpen(true)}
+            queue={queue}
+            onReorder={handleReorderQueue}
+            onDelete={handleDeleteFromQueue}
+            guildId={activeServerId}
+            onClose={() => setIsMainPlayerVisible(false)} // 追加
+          />
+        ) : (
+          <HomeScreen
+            onSelectTrack={(track: Track) => {
+              // トラックが選択されたときの処理
+              handleAddTrackToQueue(track); // 曲をキューに追加
+              setIsMainPlayerVisible(true); // 画面遷移
+            }}
           />
         )}
       </main>
+      {currentTrack && !isMainPlayerVisible && (
+        <div
+          className="fixed bottom-0 left-0 right-0 bg-gray-800 p-4 flex items-center cursor-pointer"
+          onClick={() => setIsMainPlayerVisible(true)}
+        >
+          <img src={currentTrack.thumbnail} alt={currentTrack.title} className="w-12 h-12 object-cover rounded-md" />
+          <div className="ml-4">
+            <h4 className="font-semibold">{currentTrack.title}</h4>
+            <p className="text-gray-400">{currentTrack.artist}</p>
+          </div>
+          <div className="ml-auto">
+            <Button 
+              variant="ghost" 
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                if (isPlaying) {
+                  handlePause();
+                } else {
+                  handlePlay();
+                }
+              }}
+            >
+              {isPlaying ? <PauseIcon /> : <PlayIcon />}
+            </Button>
+          </div>
+        </div>
+      )}
       <AnimatePresence>
         {isQueueOpen && (
           <QueueList
@@ -435,6 +527,7 @@ export const MainApp: React.FC = () => {
             onPlayPause={isPlaying ? handlePause : handlePlay}
             onReorder={handleReorderQueue}
             onClose={() => setIsQueueOpen(false)}
+            onDelete={handleDeleteFromQueue}
           />
         )}
       </AnimatePresence>

@@ -4,6 +4,8 @@ import { Server, Mic, X, ChevronRight } from 'lucide-react';
 import { Server as ServerType, VoiceChannel } from '@/utils/api';
 import { useMediaQuery } from 'usehooks-ts';
 import { cn } from "@/lib/utils";
+import { useSwipeable } from 'react-swipeable';
+import { Button } from '@/components/ui/button';
 
 interface SideMenuProps {
   isOpen: boolean;
@@ -28,6 +30,11 @@ export const SideMenu: React.FC<SideMenuProps> = ({
 }) => {
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const swipeHandlers = useSwipeable({
+    onSwipedLeft: () => onClose(),
+    trackMouse: true
+  });
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -94,9 +101,9 @@ export const SideMenu: React.FC<SideMenuProps> = ({
             onClick={onClose}
           />
           <motion.div
-            ref={menuRef}
+            {...swipeHandlers}
             className={cn(
-              "fixed inset-y-0 left-0 w-full sm:w-80 bg-gray-900 text-white z-50 overflow-hidden flex flex-col",
+              "fixed inset-y-0 left-0 w-full sm:w-80 bg-card text-card-foreground z-50 overflow-hidden flex flex-col",
               isDesktop ? "max-w-xs" : ""
             )}
             initial="closed"
@@ -104,63 +111,57 @@ export const SideMenu: React.FC<SideMenuProps> = ({
             exit="closed"
             variants={menuVariants}
           >
-            <motion.div variants={itemVariants} className="flex justify-between items-center p-4 border-b border-gray-700">
-              <h2 className="text-xl font-bold">設定</h2>
-              <button onClick={onClose} className="p-2 hover:bg-gray-800 rounded-full transition-colors">
-                <X size={24} />
-              </button>
-            </motion.div>
-            <motion.div className="flex-grow overflow-y-auto p-4 space-y-6">
-              <motion.div variants={itemVariants}>
-                <h3 className="text-lg font-semibold mb-3 flex items-center">
-                  <Server size={20} className="mr-2" /> サーバー
-                </h3>
-                <ul className="space-y-2">
-                  {servers.map((server) => (
-                    <motion.li key={server.id} variants={itemVariants}>
-                      <button
-                        onClick={() => onSelectServer(server.id)}
-                        className={cn(
-                          "w-full text-left p-3 rounded-lg flex items-center justify-between",
-                          activeServerId === server.id
-                            ? "bg-blue-600 text-white"
-                            : "hover:bg-gray-800 transition-colors"
-                        )}
-                      >
-                        <span>{server.name}</span>
-                        {activeServerId === server.id && <ChevronRight size={20} />}
-                      </button>
-                    </motion.li>
-                  ))}
-                </ul>
+            <div ref={menuRef} className="flex flex-col h-full">
+              <motion.div variants={itemVariants} className="flex justify-between items-center p-4 border-b border-border">
+                <h2 className="text-xl font-bold">設定</h2>
+                <Button variant="ghost" size="icon" onClick={onClose}>
+                  <X size={24} />
+                </Button>
               </motion.div>
-              <motion.div variants={itemVariants}>
-                <h3 className="text-lg font-semibold mb-3 flex items-center">
-                  <Mic size={20} className="mr-2" /> ボイスチャンネル
-                </h3>
-                <ul className="space-y-2">
-                  {voiceChannels.map((channel) => (
-                    <motion.li key={channel.id} variants={itemVariants}>
-                      <button
-                        onClick={() => onSelectChannel(channel.id)}
-                        className={cn(
-                          "w-full text-left p-3 rounded-lg flex items-center justify-between",
-                          activeChannelId === channel.id
-                            ? "bg-green-600 text-white"
-                            : "hover:bg-gray-800 transition-colors"
-                        )}
-                      >
-                        <span>{channel.name}</span>
-                        {activeChannelId === channel.id && <ChevronRight size={20} />}
-                      </button>
-                    </motion.li>
-                  ))}
-                </ul>
+              <motion.div className="flex-grow overflow-y-auto p-4 space-y-6">
+                <motion.div variants={itemVariants}>
+                  <h3 className="text-lg font-semibold mb-3 flex items-center">
+                    <Server size={20} className="mr-2" /> サーバー
+                  </h3>
+                  <ul className="space-y-2">
+                    {servers.map((server) => (
+                      <motion.li key={server.id} variants={itemVariants}>
+                        <Button
+                          onClick={() => onSelectServer(server.id)}
+                          variant={activeServerId === server.id ? "secondary" : "ghost"}
+                          className="w-full justify-start"
+                        >
+                          <span>{server.name}</span>
+                          {activeServerId === server.id && <ChevronRight size={20} className="ml-auto" />}
+                        </Button>
+                      </motion.li>
+                    ))}
+                  </ul>
+                </motion.div>
+                <motion.div variants={itemVariants}>
+                  <h3 className="text-lg font-semibold mb-3 flex items-center">
+                    <Mic size={20} className="mr-2" /> ボイスチャンネル
+                  </h3>
+                  <ul className="space-y-2">
+                    {voiceChannels.map((channel) => (
+                      <motion.li key={channel.id} variants={itemVariants}>
+                        <Button
+                          onClick={() => onSelectChannel(channel.id)}
+                          variant={activeChannelId === channel.id ? "secondary" : "ghost"}
+                          className="w-full justify-start"
+                        >
+                          <span>{channel.name}</span>
+                          {activeChannelId === channel.id && <ChevronRight size={20} className="ml-auto" />}
+                        </Button>
+                      </motion.li>
+                    ))}
+                  </ul>
+                </motion.div>
               </motion.div>
-            </motion.div>
+            </div>
           </motion.div>
         </>
       )}
     </AnimatePresence>
-  );
-};
+  )
+}

@@ -1,7 +1,6 @@
 import axios from 'axios';
 
- // Start of Selection
-const API_URL = process.env.NEXT_PUBLIC_API_URL
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 if (!API_URL) {
   throw new Error('API URL is not defined. Please set NEXT_PUBLIC_API_URL environment variable.');
@@ -101,9 +100,35 @@ export const api = {
     });
   },
 
+  setVolume: async (guildId: string, volume: number): Promise<void> => {
+    await axios.post(`${API_URL}/set-volume/${guildId}`, { volume });
+  },
+
+  seek: async (guildId: string, position: number): Promise<void> => {
+    await axios.post(`${API_URL}/seek/${guildId}`, { position });
+  },
+
   getBotVoiceStatus: async (serverId: string): Promise<string | null> => {
     const response = await axios.get(`${API_URL}/bot-voice-status/${serverId}`);
     return response.data.channel_id;
+  },
+  getRecommendations: async (): Promise<Track[]> => {
+    const response = await axios.get(`${API_URL}/recommendations`);
+    return response.data.tracks;
+  },
+
+  getCharts: async (): Promise<Track[]> => {
+    const response = await axios.get(`${API_URL}/charts`);
+    return response.data.tracks;
+  },
+
+  getRelatedSongs: async (videoId: string): Promise<Track[]> => {
+    const response = await axios.get(`${API_URL}/related/${videoId}`);
+    return response.data.tracks;
+  },
+
+  removeFromQueue: async (guildId: string, position: number): Promise<void> => {
+    await axios.post(`${API_URL}/remove-from-queue/${guildId}?position=${position}`);
   },
 };
 
