@@ -10,7 +10,20 @@ const withPWA = nextPWA({
 const nextConfig = {
   reactStrictMode: true,
   images: {
-    domains: ['i.ytimg.com', 'lh3.googleusercontent.com'], // ここに追加
+    domains: ['i.ytimg.com', 'lh3.googleusercontent.com'],
+  },
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value: "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://udify.app;",
+          },
+        ],
+      },
+    ];
   },
 };
 

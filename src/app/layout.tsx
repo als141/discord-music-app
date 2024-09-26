@@ -1,28 +1,27 @@
-// src/pages/layout.tsx
-"use client";
+'use client'
 
-import { Inter } from 'next/font/google';
-import "./globals.css";
-import { ThemeProvider } from "@/components/theme-provider";
-import { Toaster } from "@/components/ui/toaster";
-import { useEffect } from 'react';
+import { Inter } from 'next/font/google'
+import "./globals.css"
+import { ThemeProvider } from "@/components/theme-provider"
+import { Toaster } from "@/components/ui/toaster"
+import { useEffect } from 'react'
+import DifyChatButton from '@/components/DifyChatButton'
 
-const inter = Inter({ subsets: ['latin'] });
+const inter = Inter({ subsets: ['latin'] })
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: React.ReactNode
 }) {
-
   useEffect(() => {
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js');
+      navigator.serviceWorker.register('./sw.js')
     }
-  }, []);
+  }, [])
 
   return (
-    <html lang="jp" suppressHydrationWarning>
+    <html lang="ja" suppressHydrationWarning>
       <body className={inter.className}>
         <ThemeProvider
           attribute="class"
@@ -32,8 +31,9 @@ export default function RootLayout({
         >
           {children}
           <Toaster />
+          <DifyChatButton />
         </ThemeProvider>
       </body>
     </html>
-  );
+  )
 }

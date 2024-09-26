@@ -1,4 +1,5 @@
 // src/contexts/MainPlayerContext.tsx
+'use client';
 
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { Track } from '@/utils/api';

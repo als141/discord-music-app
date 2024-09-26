@@ -1,13 +1,12 @@
-// src/pages/page.tsx
-'use client';
+'use client'
 
-import { MainApp } from '@/components/MainApp';
-import { MainPlayerProvider } from '@/contexts/MainPlayerContext';
+import { MainApp } from '@/components/MainApp'
+import { MainPlayerProvider } from '@/contexts/MainPlayerContext'
 
 export default function Home() {
   return (
     <MainPlayerProvider>
       <MainApp />
     </MainPlayerProvider>
-  );
+  )
 }
