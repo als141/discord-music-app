@@ -2,7 +2,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { api, setupWebSocket } from '@/utils/api';
 import { MainPlayer } from './MainPlayer';
@@ -16,6 +16,8 @@ import { Loader2 } from 'lucide-react';
 import { HomeScreen } from './HomeScreen';
 import { PlayIcon, PauseIcon} from 'lucide-react';
 import { Button } from './ui/button';
+import { useSwipeable } from 'react-swipeable';
+
 
 export const MainApp: React.FC = () => {
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
@@ -33,10 +35,21 @@ export const MainApp: React.FC = () => {
   const [botVoiceChannelId, setBotVoiceChannelId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isMainPlayerVisible, setIsMainPlayerVisible] = useState(false); // 追加
+
+  const handleCloseMenu = useCallback(() => {
+    setIsMenuOpen(false);
+  }, []);
   
 
   const wsRef = useRef<WebSocket | null>(null);
   // 曲をキューに追加する関数を追加
+
+  const swipeHandlers = useSwipeable({
+    onSwipedRight: () => setIsMenuOpen(true),
+    trackMouse: true,
+    delta: 50,
+  });
+
   const handleAddTrackToQueue = async (track: Track) => {
     if (activeServerId) {
       try {
@@ -415,25 +428,24 @@ export const MainApp: React.FC = () => {
   
 
   return (
-    <div className="h-screen bg-black text-white flex flex-col">
+    <div className="h-screen bg-black text-white flex flex-col" {...swipeHandlers}>
       <Header
         onSearch={handleSearch}
         onAddUrl={handleAddUrl}
         onOpenMenu={() => setIsMenuOpen(true)}
       />
       <AnimatePresence>
-        {isMenuOpen && (
-          <SideMenu
-            isOpen={isMenuOpen}
-            onClose={() => setIsMenuOpen(false)}
-            servers={servers}
-            activeServerId={activeServerId}
-            onSelectServer={handleSelectServer}
-            voiceChannels={voiceChannels}
-            activeChannelId={activeChannelId}
-            onSelectChannel={handleSelectChannel}
-          />
-        )}
+        <SideMenu
+          key="side-menu"
+          isOpen={isMenuOpen}
+          onClose={() => setIsMenuOpen(false)}
+          servers={servers}
+          activeServerId={activeServerId}
+          onSelectServer={handleSelectServer}
+          voiceChannels={voiceChannels}
+          activeChannelId={activeChannelId}
+          onSelectChannel={handleSelectChannel}
+        />
       </AnimatePresence>
       <main className="flex-grow overflow-hidden pt-16">
         {isLoading ? (

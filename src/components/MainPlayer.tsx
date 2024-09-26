@@ -145,10 +145,16 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
     </ContextMenu>
   )
 
-
-
   const swipeHandlers = useSwipeable({
     onSwipedDown: () => onClose(),
+    onSwipedUp: () => setIsDrawerOpen(true),
+    trackTouch: true,
+    trackMouse: false,
+  })
+
+  const drawerSwipeHandlers = useSwipeable({
+    onSwipedLeft: () => setActiveTab('related'),
+    onSwipedRight: () => setActiveTab('queue'),
     trackTouch: true,
     trackMouse: false,
   })
@@ -164,7 +170,7 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
     >
       <Button
         onClick={onClose}
-        className="absolute top-4 left-4 z-0"
+        className="absolute top-4 left-4 z-10"
         variant="ghost"
         size="icon"
       >
@@ -247,7 +253,6 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
             <SkipForwardIcon size={24} />
           </motion.button>
         </div>
-
         <Button
           onClick={() => setIsDrawerOpen(true)}
           className="w-full flex items-center justify-center py-3 bg-white bg-opacity-10 rounded-full hover:bg-opacity-20 transition-all duration-200"
@@ -258,48 +263,46 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
       </div>
 
       <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
-          <DrawerContent className="drawer animate-slide-in-bottom">
-            <div className="drawer-content">
-              <DrawerHeader className="drawer-header">
-                <DrawerTitle className="drawer-title">コンテンツ</DrawerTitle>
-                <DrawerDescription className="drawer-description">キューと関連動画</DrawerDescription>
-              </DrawerHeader>
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="tabs">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="queue" className="tab-trigger">キュー</TabsTrigger>
-                  <TabsTrigger value="related" className="tab-trigger">関連動画</TabsTrigger>
-                </TabsList>
-                <TabsContent value="queue" className="tab-content overflow-y-auto max-h-[calc(100vh-200px)]">
-                  <QueueList
-                    queue={queue}
-                    currentTrack={currentTrack}
-                    isPlaying={isPlaying}
-                    onPlayPause={isPlaying ? onPause : onPlay}
-                    onReorder={onReorder}
-                    onClose={() => setIsDrawerOpen(false)}
-                    onDelete={onDelete}
-                    isEmbedded
-                  />
-                </TabsContent>
-                <TabsContent value="related" className="tab-content overflow-y-auto max-h-[calc(100vh-200px)]">
-                  <motion.div
-                    className="space-y-2"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ staggerChildren: 0.05 }}
-                  >
-                    {relatedTracks.map(renderRelatedTrackItem)}
-                  </motion.div>
-                </TabsContent>
-              </Tabs>
-              <DrawerFooter>
-                <DrawerClose asChild>
-                  <Button variant="outline" className="w-full">閉じる</Button>
-                </DrawerClose>
-              </DrawerFooter>
-            </div>
-          </DrawerContent>
-        </Drawer>
+        <DrawerContent {...drawerSwipeHandlers}>
+          <DrawerHeader>
+            <DrawerTitle>コンテンツ</DrawerTitle>
+            <DrawerDescription>キューと関連動画</DrawerDescription>
+          </DrawerHeader>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="queue">キュー</TabsTrigger>
+              <TabsTrigger value="related">関連動画</TabsTrigger>
+            </TabsList>
+            <TabsContent value="queue" className="mt-4 overflow-y-auto" style={{ height: 'calc(100vh - 300px)' }}>
+              <QueueList
+                queue={queue}
+                currentTrack={currentTrack}
+                isPlaying={isPlaying}
+                onPlayPause={isPlaying ? onPause : onPlay}
+                onReorder={onReorder}
+                onClose={() => setIsDrawerOpen(false)}
+                onDelete={onDelete}
+                isEmbedded
+              />
+            </TabsContent>
+            <TabsContent value="related" className="mt-4 overflow-y-auto" style={{ height: 'calc(100vh - 300px)' }}>
+              <motion.div
+                className="space-y-2"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ staggerChildren: 0.05 }}
+              >
+                {relatedTracks.map(renderRelatedTrackItem)}
+              </motion.div>
+            </TabsContent>
+          </Tabs>
+          <DrawerFooter>
+            <DrawerClose asChild>
+              <Button variant="outline" className="w-full">閉じる</Button>
+            </DrawerClose>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
     </motion.div>
   )
 }
