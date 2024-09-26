@@ -1,8 +1,6 @@
-// src/components/MainApp.tsx
-
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { api, setupWebSocket } from '@/utils/api';
 import { MainPlayer } from './MainPlayer';
@@ -17,7 +15,6 @@ import { HomeScreen } from './HomeScreen';
 import { PlayIcon, PauseIcon} from 'lucide-react';
 import { Button } from './ui/button';
 import { useSwipeable } from 'react-swipeable';
-
 
 export const MainApp: React.FC = () => {
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
@@ -34,10 +31,13 @@ export const MainApp: React.FC = () => {
   const { toast } = useToast();
   const [botVoiceChannelId, setBotVoiceChannelId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isMainPlayerVisible, setIsMainPlayerVisible] = useState(false); // 追加
+  const [isMainPlayerVisible, setIsMainPlayerVisible] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
-  // 曲をキューに追加する関数を追加
+
+  const handleCloseMenu = useCallback(() => {
+    setIsMenuOpen(false);
+  }, []);
 
   const swipeHandlers = useSwipeable({
     onSwipedRight: () => setIsMenuOpen(true),
@@ -151,110 +151,6 @@ export const MainApp: React.FC = () => {
         }
       };
     }
-  }, [activeServerId, toast]);
-
-  useEffect(() => {
-    const fetchServers = async () => {
-      try {
-        const fetchedServers = await api.getServers();
-        setServers(fetchedServers);
-      } catch (error) {
-        console.error("Failed to fetch servers:", error);
-        toast({
-          title: "エラー",
-          description: "サーバー一覧の取得に失敗しました。",
-          variant: "destructive",
-        });
-      }
-    };
-    fetchServers();
-
-    const savedServerId = localStorage.getItem('activeServerId');
-    const savedChannelId = localStorage.getItem('activeChannelId');
-    if (savedServerId) {
-      setActiveServerId(savedServerId);
-      if (savedChannelId) setActiveChannelId(savedChannelId);
-    }
-  }, [toast]);
-
-  useEffect(() => {
-    if (activeServerId) {
-      localStorage.setItem('activeServerId', activeServerId);
-      
-      const fetchVoiceChannels = async () => {
-        try {
-          const channels = await api.getVoiceChannels(activeServerId);
-          setVoiceChannels(channels);
-          
-          const botStatus = await api.getBotVoiceStatus(activeServerId);
-          setBotVoiceChannelId(botStatus);
-          if (botStatus) setActiveChannelId(botStatus);
-        } catch (error) {
-          console.error("Failed to fetch voice channels:", error);
-          toast({
-            title: "エラー",
-            description: "ボイスチャンネルの取得に失敗しました。",
-            variant: "destructive",
-          });
-        }
-      };
-      fetchVoiceChannels();
-
-      // WebSocket 接続の設定
-      const ws = setupWebSocket(activeServerId, (data) => {
-        const queueItems: QueueItem[] = data.queue;
-        const currentTrackItem = queueItems.find(item => item.isCurrent);
-        setCurrentTrack(currentTrackItem?.track || null);
-        setQueue(queueItems.filter(item => !item.isCurrent).map(item => item.track));
-        setIsPlaying(data.is_playing);
-      });
-
-      wsRef.current = ws;
-
-      return () => {
-        if (wsRef.current) {
-          wsRef.current.close();
-          wsRef.current = null;
-        }
-      };
-    }
-  }, [activeServerId, toast]);
-
-  useEffect(() => {
-    if (activeChannelId) {
-      localStorage.setItem('activeChannelId', activeChannelId);
-    }
-  }, [activeChannelId]);
-
-  useEffect(() => {
-    const fetchInitialState = async () => {
-      if (activeServerId) {
-        try {
-          const [queueResponse, isPlayingResponse] = await Promise.all([
-            api.getQueue(activeServerId),
-            api.isPlaying(activeServerId)
-          ]);
-
-          if (!Array.isArray(queueResponse)) {
-            throw new Error('Invalid queue response');
-          }
-
-          const currentTrackItem = queueResponse.find(item => item.isCurrent);
-          setCurrentTrack(currentTrackItem?.track || null);
-          setQueue(queueResponse.filter(item => !item.isCurrent).map(item => item.track));
-          setIsPlaying(isPlayingResponse);
-        } catch (error) {
-          console.error("Failed to fetch initial state:", error);
-          toast({
-            title: "エラー",
-            description: "初期状態の取得に失敗しました。",
-            variant: "destructive",
-          });
-        }
-      }
-    };
-  
-    fetchInitialState();
   }, [activeServerId, toast]);
 
   const handlePlay = async () => {
@@ -402,13 +298,15 @@ export const MainApp: React.FC = () => {
 
   const handleDeleteFromQueue = async (index: number) => {
     if (activeServerId) {
-      console.log("Deleting from queue, index:", index);
-      console.log("Current queue:", queue);
       try {
         await api.removeFromQueue(activeServerId, index);
         const updatedQueue = [...queue];
         updatedQueue.splice(index, 1);
         setQueue(updatedQueue);
+        toast({
+          title: "成功",
+          description: "キューから曲を削除しました。",
+        });
       } catch (error) {
         console.error('キューからの削除中にエラーが発生しました:', error);
         toast({
@@ -420,10 +318,8 @@ export const MainApp: React.FC = () => {
     }
   };
 
-  
-
   return (
-    <div className="h-screen bg-black text-white flex flex-col" {...swipeHandlers}>
+    <div className="h-screen bg-background text-foreground flex flex-col" {...swipeHandlers}>
       <Header
         onSearch={handleSearch}
         onAddUrl={handleAddUrl}
@@ -431,9 +327,8 @@ export const MainApp: React.FC = () => {
       />
       <AnimatePresence>
         <SideMenu
-          key="side-menu"
           isOpen={isMenuOpen}
-          onClose={() => setIsMenuOpen(false)}
+          onClose={handleCloseMenu}
           servers={servers}
           activeServerId={activeServerId}
           onSelectServer={handleSelectServer}
@@ -473,6 +368,7 @@ export const MainApp: React.FC = () => {
               }
             }}
             onClose={() => setIsSearchActive(false)}
+            onSearch={handleSearch}
           />
         ) : isMainPlayerVisible ? (
           <MainPlayer
@@ -486,46 +382,56 @@ export const MainApp: React.FC = () => {
             onReorder={handleReorderQueue}
             onDelete={handleDeleteFromQueue}
             guildId={activeServerId}
-            onClose={() => setIsMainPlayerVisible(false)} // 追加
+            onClose={() => setIsMainPlayerVisible(false)}
           />
         ) : (
           <HomeScreen
             onSelectTrack={(track: Track) => {
-              // トラックが選択されたときの処理
-              handleAddTrackToQueue(track); // 曲をキューに追加
-              setIsMainPlayerVisible(true); // 画面遷移
+              handleAddTrackToQueue(track);
+              setIsMainPlayerVisible(true);
             }}
           />
         )}
       </main>
       {currentTrack && !isMainPlayerVisible && (
         <div
-          className="fixed bottom-0 left-0 right-0 bg-gray-800 p-4 flex items-center cursor-pointer"
+          className="fixed bottom-0 left-0 right-0 bg-card p-4 flex items-center cursor-pointer"
           onClick={() => setIsMainPlayerVisible(true)}
         >
           <img src={currentTrack.thumbnail} alt={currentTrack.title} className="w-12 h-12 object-cover rounded-md" />
-          <div className="ml-4">
-            <h4 className="font-semibold">{currentTrack.title}</h4>
-            <p className="text-gray-400">{currentTrack.artist}</p>
+          <div className="ml-4 flex-grow">
+            <h4 className="font-semibold truncate">{currentTrack.title}</h4>
+            <p className="text-muted-foreground truncate">{currentTrack.artist}</p>
           </div>
-          <div className="ml-auto">
-            <Button 
-              variant="ghost" 
-              onClick={(e) => { 
-                e.stopPropagation(); 
-                if (isPlaying) {
-                  handlePause();
-                } else {
-                  handlePlay();
-                }
-              }}
-            >
-              {isPlaying ? <PauseIcon /> : <PlayIcon />}
-            </Button>
-          </div>
+          <Button 
+            variant="ghost" 
+            onClick={(e) => { 
+              e.stopPropagation(); 
+              if (isPlaying) {
+                handlePause();
+              } else {
+                handlePlay();
+              }
+            }}
+          >
+            {isPlaying ? <PauseIcon /> : <PlayIcon />}
+          </Button>
         </div>
       )}
       <AnimatePresence>
+        {isQueueOpen && (
+          <QueueList
+            queue={queue}
+            currentTrack={currentTrack}
+            isPlaying={isPlaying}
+            onPlayPause={isPlaying ? handlePause : handlePlay}
+            onReorder={handleReorderQueue}
+            onClose={() => setIsQueueOpen(false)}
+            onDelete={handleDeleteFromQueue}
+          />
+        )}
+      </AnimatePresence>
+        <AnimatePresence>
         {isQueueOpen && (
           <QueueList
             queue={queue}

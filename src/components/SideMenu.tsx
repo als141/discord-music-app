@@ -1,9 +1,10 @@
 import React, { useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Server, Mic, ChevronRight, X } from 'lucide-react';
 import { Server as ServerType, VoiceChannel } from '@/utils/api';
 import { useSwipeable } from 'react-swipeable';
 import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface SideMenuProps {
@@ -16,11 +17,6 @@ interface SideMenuProps {
   activeChannelId: string | null;
   onSelectChannel: (channelId: string) => void;
 }
-
-const truncateString = (str: string, maxLength: number) => {
-  if (str.length <= maxLength) return str;
-  return str.slice(0, maxLength - 3) + '...';
-};
 
 export const SideMenu: React.FC<SideMenuProps> = ({
   isOpen,
@@ -36,7 +32,7 @@ export const SideMenu: React.FC<SideMenuProps> = ({
 
   const swipeHandlers = useSwipeable({
     onSwipedLeft: onClose,
-    trackMouse: true
+    trackMouse: true,
   });
 
   useEffect(() => {
@@ -66,89 +62,97 @@ export const SideMenu: React.FC<SideMenuProps> = ({
   };
 
   return (
-    <>
-      <motion.div
-        initial="closed"
-        animate={isOpen ? "open" : "closed"}
-        exit="closed"
-        variants={overlayVariants}
-        className="fixed inset-0 bg-black bg-opacity-50 z-40"
-        onClick={onClose}
-        style={{ display: isOpen ? "block" : "none" }}
-      />
-      <motion.div
-        className="fixed inset-y-0 left-0 w-64 bg-background text-foreground z-50 overflow-y-auto"
-        initial="closed"
-        animate={isOpen ? "open" : "closed"}
-        exit="closed"
-        variants={menuVariants}
-        {...swipeHandlers}
-      >
-        <div className="p-4 flex justify-between items-center">
-          <h2 className="text-xl font-bold">設定</h2>
-          <Button variant="ghost" size="icon" onClick={onClose}>
-            <X size={24} />
-          </Button>
-        </div>
-        <div className="p-4 space-y-6">
-          <div>
-            <h3 className="text-lg font-semibold mb-3 flex items-center">
-              <Server size={20} className="mr-2" /> サーバー
-            </h3>
-            <ul className="space-y-2">
-              {servers.map((server) => (
-                <motion.li key={server.id} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          onClick={() => onSelectServer(server.id)}
-                          variant={activeServerId === server.id ? "secondary" : "ghost"}
-                          className="w-full justify-start"
+    <TooltipProvider>
+      <AnimatePresence>
+        {isOpen && (
+          <>
+            <motion.div
+              initial="closed"
+              animate="open"
+              exit="closed"
+              variants={overlayVariants}
+              className="fixed inset-0 bg-black/50 z-40"
+              onClick={onClose}
+            />
+            <motion.div
+              className="fixed inset-y-0 left-0 w-64 bg-background text-foreground z-50 shadow-lg"
+              initial="closed"
+              animate="open"
+              exit="closed"
+              variants={menuVariants}
+              {...swipeHandlers}
+            >
+              <div className="flex items-center justify-between p-4 border-b">
+                <h2 className="text-xl font-bold">設定</h2>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" onClick={onClose} aria-label="メニューを閉じる">
+                      <X size={24} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>閉じる</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <ScrollArea className="h-[calc(100vh-5rem)] p-4">
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-lg font-semibold mb-3 flex items-center">
+                      <Server size={20} className="mr-2" /> サーバー
+                    </h3>
+                    <ul className="space-y-2">
+                      {servers.map((server) => (
+                        <motion.li
+                          key={server.id}
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
                         >
-                          <span className="truncate">{truncateString(server.name, 20)}</span>
-                          {activeServerId === server.id && <ChevronRight size={20} className="ml-auto flex-shrink-0" />}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{server.name}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </motion.li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <h3 className="text-lg font-semibold mb-3 flex items-center">
-              <Mic size={20} className="mr-2" /> ボイスチャンネル
-            </h3>
-            <ul className="space-y-2">
-              {voiceChannels.map((channel) => (
-                <motion.li key={channel.id} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          onClick={() => onSelectChannel(channel.id)}
-                          variant={activeChannelId === channel.id ? "secondary" : "ghost"}
-                          className="w-full justify-start"
+                          <Button
+                            onClick={() => onSelectServer(server.id)}
+                            variant={activeServerId === server.id ? "secondary" : "ghost"}
+                            className="w-full justify-start"
+                          >
+                            <span className="truncate">{server.name}</span>
+                            {activeServerId === server.id && (
+                              <ChevronRight size={20} className="ml-auto flex-shrink-0" />
+                            )}
+                          </Button>
+                        </motion.li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold mb-3 flex items-center">
+                      <Mic size={20} className="mr-2" /> ボイスチャンネル
+                    </h3>
+                    <ul className="space-y-2">
+                      {voiceChannels.map((channel) => (
+                        <motion.li
+                          key={channel.id}
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
                         >
-                          <span className="truncate">{truncateString(channel.name, 20)}</span>
-                          {activeChannelId === channel.id && <ChevronRight size={20} className="ml-auto flex-shrink-0" />}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{channel.name}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </motion.li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </motion.div>
-    </>
+                          <Button
+                            onClick={() => onSelectChannel(channel.id)}
+                            variant={activeChannelId === channel.id ? "secondary" : "ghost"}
+                            className="w-full justify-start"
+                          >
+                            <span className="truncate">{channel.name}</span>
+                            {activeChannelId === channel.id && (
+                              <ChevronRight size={20} className="ml-auto flex-shrink-0" />
+                            )}
+                          </Button>
+                        </motion.li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </ScrollArea>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </TooltipProvider>
   );
 };
