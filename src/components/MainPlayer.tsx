@@ -170,7 +170,7 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
     >
       <Button
         onClick={onClose}
-        className="absolute top-4 left-4 z-10 bg-black bg-opacity-50 hover:bg-opacity-70 transition-all duration-200"
+        className="absolute top-4 left-4 z-0 bg-black bg-opacity-50 hover:bg-opacity-70 transition-all duration-200"
         variant="ghost"
         size="icon"
       >
