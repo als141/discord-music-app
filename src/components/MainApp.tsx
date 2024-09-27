@@ -15,12 +15,23 @@ import { HomeScreen } from './HomeScreen';
 import { PlayIcon, PauseIcon} from 'lucide-react';
 import { Button } from './ui/button';
 import { useSwipeable } from 'react-swipeable';
+import { useSession, signIn } from 'next-auth/react'; // 追加
+
+declare global {
+  interface BigInt {
+    toJSON: () => string;
+  }
+}
+
+BigInt.prototype.toJSON = function() {
+  return this.toString();
+};
 
 export const MainApp: React.FC = () => {
+  const { data: session, status } = useSession(); 
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [queue, setQueue] = useState<Track[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [servers, setServers] = useState<Server[]>([]);
   const [activeServerId, setActiveServerId] = useState<string | null>(null);
   const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
   const [voiceChannels, setVoiceChannels] = useState<VoiceChannel[]>([]);
@@ -32,29 +43,102 @@ export const MainApp: React.FC = () => {
   const [botVoiceChannelId, setBotVoiceChannelId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isMainPlayerVisible, setIsMainPlayerVisible] = useState(false);
-
   const wsRef = useRef<WebSocket | null>(null);
+  const [availableServers, setAvailableServers] = useState<Server[]>([]);
+  const [invitableServers, setInvitableServers] = useState<Server[]>([]);
+
+  useEffect(() => {
+    const fetchGuilds = async () => {
+      if (session) {
+        try {
+          const [userGuilds, botGuilds] = await Promise.all([
+            api.getUserGuilds(),
+            api.getBotGuilds(),
+          ]);
+  
+          const availableServers = userGuilds.filter(userGuild => 
+            botGuilds.some(botGuild => botGuild.id === userGuild.id)
+          );
+  
+          const invitableServers = userGuilds.filter(userGuild => 
+            !botGuilds.some(botGuild => botGuild.id === userGuild.id) && 
+            userGuild.permissions !== undefined &&
+            (BigInt(userGuild.permissions) & 0x20n) === 0x20n
+          );
+  
+          setAvailableServers(availableServers);
+          setInvitableServers(invitableServers);
+  
+          // savedServerId を取得
+          const savedServerId = localStorage.getItem('activeServerId');
+          const savedChannelId = localStorage.getItem('activeChannelId');
+  
+          // savedServerId が availableServers の中にあるか確認
+          if (savedServerId && availableServers.some(server => server.id === savedServerId)) {
+            setActiveServerId(savedServerId);
+            if (savedChannelId) setActiveChannelId(savedChannelId);
+          } else if (availableServers.length > 0) {
+            // ない場合は、デフォルトで最初のサーバーを選択
+            setActiveServerId(availableServers[0].id);
+          }
+        } catch (error) {
+          console.error('Failed to fetch guilds:', error);
+        }
+      }
+    };
+  
+    fetchGuilds();
+  }, [session]);
+
+  // activeServerId の変更時に保存
+useEffect(() => {
+  if (activeServerId) {
+    localStorage.setItem('activeServerId', activeServerId);
+  } else {
+    localStorage.removeItem('activeServerId');
+  }
+}, [activeServerId]);
+
+// activeChannelId の変更時に保存
+useEffect(() => {
+  if (activeChannelId) {
+    localStorage.setItem('activeChannelId', activeChannelId);
+  } else {
+    localStorage.removeItem('activeChannelId');
+  }
+}, [activeChannelId]);
+  
+  
+  const handleInviteBot = (serverId: string) => {
+    const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID;
+    const permissions = '8'; // 必要に応じて調整
+    const scopes = 'bot';
+    
+    const inviteUrl = `https://discord.com/oauth2/authorize?client_id=${clientId}&scope=${scopes}&permissions=${permissions}&guild_id=${serverId}`;
+    
+    window.open(inviteUrl, '_blank');
+  };
 
   const handleCloseMenu = useCallback(() => {
     setIsMenuOpen(false);
   }, []);
-
+  
   const handleRefresh = useCallback(() => {
     window.location.reload();
   }, []);
-
+  
   const swipeHandlers = useSwipeable({
     onSwipedRight: () => setIsMenuOpen(true),
     trackMouse: true,
     delta: 50,
   });
-
+  
   const miniPlayerSwipeHandlers = useSwipeable({
     onSwipedUp: () => setIsMainPlayerVisible(true),
     delta: 50,
     trackMouse: false
   });
-
+  
   const handleAddTrackToQueue = async (track: Track) => {
     if (activeServerId) {
       try {
@@ -79,22 +163,13 @@ export const MainApp: React.FC = () => {
       });
     }
   };
-
+  
   useEffect(() => {
     const fetchInitialData = async () => {
       setIsLoading(true);
       try {
-        const [fetchedServers, savedServerId, savedChannelId] = await Promise.all([
-          api.getServers(),
-          localStorage.getItem('activeServerId'),
-          localStorage.getItem('activeChannelId')
-        ]);
-
-        setServers(fetchedServers);
-        if (savedServerId) {
-          setActiveServerId(savedServerId);
-          if (savedChannelId) setActiveChannelId(savedChannelId);
-        }
+        // `fetchedServers` と `api.getServers()` を削除
+        // `savedServerId` と `savedChannelId` の取得も `fetchGuilds` 内に移動
       } catch (error) {
         console.error("Failed to fetch initial data:", error);
         toast({
@@ -106,10 +181,11 @@ export const MainApp: React.FC = () => {
         setIsLoading(false);
       }
     };
-
+  
     fetchInitialData();
   }, [toast]);
-
+  
+  
   useEffect(() => {
     if (activeServerId) {
       const fetchServerData = async () => {
@@ -121,16 +197,16 @@ export const MainApp: React.FC = () => {
             api.getQueue(activeServerId),
             api.isPlaying(activeServerId)
           ]);
-
+          
           setVoiceChannels(channels);
           setBotVoiceChannelId(botStatus);
           if (botStatus) setActiveChannelId(botStatus);
-
+          
           const currentTrackItem = queueResponse.find(item => item.isCurrent);
           setCurrentTrack(currentTrackItem?.track || null);
           setQueue(queueResponse.filter(item => !item.isCurrent).map(item => item.track));
           setIsPlaying(isPlayingResponse);
-
+          
           const ws = setupWebSocket(activeServerId, (data) => {
             const queueItems: QueueItem[] = data.queue;
             const currentTrackItem = queueItems.find(item => item.isCurrent);
@@ -138,7 +214,7 @@ export const MainApp: React.FC = () => {
             setQueue(queueItems.filter(item => !item.isCurrent).map(item => item.track));
             setIsPlaying(data.is_playing);
           });
-
+          
           wsRef.current = ws;
         } catch (error) {
           console.error("Failed to fetch server data:", error);
@@ -151,9 +227,9 @@ export const MainApp: React.FC = () => {
           setIsLoading(false);
         }
       };
-
+      
       fetchServerData();
-
+      
       return () => {
         if (wsRef.current) {
           wsRef.current.close();
@@ -162,7 +238,7 @@ export const MainApp: React.FC = () => {
       };
     }
   }, [activeServerId, toast]);
-
+  
   const handlePlay = async () => {
     if (activeServerId) {
       try {
@@ -178,7 +254,7 @@ export const MainApp: React.FC = () => {
       }
     }
   };
-
+  
   const handlePause = async () => {
     if (activeServerId) {
       try {
@@ -194,7 +270,7 @@ export const MainApp: React.FC = () => {
       }
     }
   };
-
+  
   const handleSkip = async () => {
     if (activeServerId) {
       try {
@@ -209,9 +285,10 @@ export const MainApp: React.FC = () => {
       }
     }
   };
-
+  
   const handlePrevious = async () => {
     if (activeServerId) {
+
       try {
         await api.previousTrack(activeServerId);
       } catch (error) {
@@ -328,6 +405,24 @@ export const MainApp: React.FC = () => {
     }
   };
 
+  // status が 'loading' の場合は、ローディングUIを表示
+  if (status === 'loading') {
+    return (
+      <div className="h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin" />
+      </div>
+    );
+  }
+
+  // status が 'unauthenticated' の場合は、ログインUIを表示
+  if (status === 'unauthenticated' || !session) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center">
+        <Button onClick={() => signIn('discord')}>Discordでログイン</Button>
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen bg-background text-foreground flex flex-col" {...swipeHandlers}>
       <Header
@@ -339,13 +434,15 @@ export const MainApp: React.FC = () => {
         <SideMenu
           isOpen={isMenuOpen}
           onClose={handleCloseMenu}
-          servers={servers}
           activeServerId={activeServerId}
           onSelectServer={handleSelectServer}
           voiceChannels={voiceChannels}
           activeChannelId={activeChannelId}
           onSelectChannel={handleSelectChannel}
           onRefresh={handleRefresh}
+          availableServers={availableServers}
+          invitableServers={invitableServers}
+          onInviteBot={handleInviteBot}
         />
       </AnimatePresence>
       <main className="flex-grow overflow-hidden pt-16">

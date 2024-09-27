@@ -22,6 +22,9 @@ export interface QueueItem {
 export interface Server {
   id: string;
   name: string;
+  icon?: string;
+  owner?: boolean;
+  permissions?: string;
 }
 
 export interface VoiceChannel {
@@ -37,6 +40,15 @@ interface QueueData {
 export const api = {
   getServers: async (): Promise<Server[]> => {
     const response = await axios.get(`${API_URL}/servers`);
+    return response.data;
+  },
+
+  getUserGuilds: async (): Promise<Server[]> => {
+    const response = await axios.get('/api/discord/guilds');
+    return response.data;
+  },
+  getBotGuilds: async (): Promise<Server[]> => {
+    const response = await axios.get(`${API_URL}/bot-guilds`);
     return response.data;
   },
 

@@ -7,6 +7,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useToast } from '@/hooks/use-toast'
+import { useSession, signIn, signOut } from 'next-auth/react'; // 追加
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'; // 既にインポート済み
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu'; // 既にインポート済み
 
 interface HeaderProps {
   onSearch: (query: string) => void
@@ -21,6 +29,7 @@ export const Header: React.FC<HeaderProps> = ({ onSearch, onAddUrl, onOpenMenu }
   const [isUrlActive, setIsUrlActive] = useState(false)
   const [searchHistory, setSearchHistory] = useState<string[]>([])
   const { toast } = useToast()
+  const { data: session } = useSession();
 
   useEffect(() => {
     const history = localStorage.getItem('searchHistory')
@@ -86,17 +95,19 @@ export const Header: React.FC<HeaderProps> = ({ onSearch, onAddUrl, onOpenMenu }
     <TooltipProvider>
       <header className="bg-card text-card-foreground p-4 fixed top-0 left-0 right-0 z-10 shadow-md">
         <div className="flex items-center justify-between h-8">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={onOpenMenu} variant="ghost" size="icon" aria-label="メニューを開く">
-                <Menu size={24} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>メニューを開く</p>
-            </TooltipContent>
-          </Tooltip>
-          <div className="flex space-x-2">
+          <div className="flex items-center">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button onClick={onOpenMenu} variant="ghost" size="icon" aria-label="メニューを開く">
+                  <Menu size={24} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>メニューを開く</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+          <div className="flex items-center space-x-2">
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -133,6 +144,23 @@ export const Header: React.FC<HeaderProps> = ({ onSearch, onAddUrl, onOpenMenu }
                 <p>URLを追加</p>
               </TooltipContent>
             </Tooltip>
+            {session ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" aria-label="ユーザーメニュー">
+                    <Avatar className="w-8 h-8">
+                      <AvatarImage src={session.user.image} alt={session.user.name || ''} />
+                      <AvatarFallback>{session.user.name?.charAt(0) || 'U'}</AvatarFallback>
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => signOut()}>ログアウト</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Button onClick={() => signIn('discord')}>ログイン</Button>
+            )}
           </div>
         </div>
         <AnimatePresence>

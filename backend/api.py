@@ -11,6 +11,7 @@ from fastapi.encoders import jsonable_encoder
 from dotenv import load_dotenv
 import os
 from ytmusicapi import YTMusic
+from discord import utils
 
 ytmusic = YTMusic("oauth.json", language='ja', location='JP')
 
@@ -94,6 +95,16 @@ async def add_and_play_track(guild_id: str, track: Track):
     if player:
         await player.add_to_queue(track.url)
         # 再生はplayer内で制御するため、ここでは呼び出さない
+
+@app.get("/bot-guilds")
+async def get_bot_guilds():
+    bot_guilds = []
+    for guild in bot.guilds:
+        bot_guilds.append({
+            'id': str(guild.id),
+            'name': guild.name
+        })
+    return bot_guilds
 
 @app.websocket("/ws/{guild_id}")
 async def websocket_endpoint(websocket: WebSocket, guild_id: str):

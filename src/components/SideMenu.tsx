@@ -1,36 +1,50 @@
 import React, { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Server, Mic, ChevronRight, X, RefreshCw } from 'lucide-react';
-import { Server as ServerType, VoiceChannel } from '@/utils/api';
+import { Server as ServerIcon, Mic, ChevronRight, X, RefreshCw } from 'lucide-react';
+import { Server as VoiceChannel } from '@/utils/api';
+import { Server } from '@/utils/api';
 import { useSwipeable } from 'react-swipeable';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useSession, signOut } from 'next-auth/react';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu'
 
 interface SideMenuProps {
   isOpen: boolean;
   onClose: () => void;
-  servers: ServerType[];
+  availableServers: Server[]; // 追加
+  invitableServers: Server[]; // 追加
   activeServerId: string | null;
   onSelectServer: (serverId: string) => void;
   voiceChannels: VoiceChannel[];
   activeChannelId: string | null;
   onSelectChannel: (channelId: string) => void;
   onRefresh: () => void;
+  onInviteBot: (serverId: string) => void;
 }
 
 export const SideMenu: React.FC<SideMenuProps> = ({
   isOpen,
   onClose,
-  servers,
   activeServerId,
   onSelectServer,
   voiceChannels,
   activeChannelId,
   onSelectChannel,
   onRefresh,
+  onInviteBot,
+  invitableServers,
+  availableServers,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
+  const { data: session } = useSession();
 
   const swipeHandlers = useSwipeable({
     onSwipedLeft: onClose,
@@ -85,8 +99,23 @@ export const SideMenu: React.FC<SideMenuProps> = ({
               {...swipeHandlers}
             >
               <div className="flex items-center justify-between p-4 border-b h-16">
-                <h2 className="text-xl font-bold">設定</h2>
+              <h2 className="text-xl font-bold">設定</h2>
                 <div className="flex items-center">
+                  {session && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" aria-label="ユーザーメニュー">
+                          <Avatar className="w-8 h-8">
+                            <AvatarImage src={`https://cdn.discordapp.com/avatars/${session.user.id}/${session.user.image}.png`} alt={session.user.name || ''} />
+                            <AvatarFallback>{session.user.name?.charAt(0) || 'U'}</AvatarFallback>
+                          </Avatar>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => signOut()}>ログアウト</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button variant="ghost" size="icon" onClick={onRefresh} aria-label="ページをリロード">
@@ -110,32 +139,55 @@ export const SideMenu: React.FC<SideMenuProps> = ({
                 </div>
               </div>
               <ScrollArea className="h-[calc(100vh-5rem)] p-4">
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="text-lg font-semibold mb-3 flex items-center">
-                      <Server size={20} className="mr-2" /> サーバー
-                    </h3>
-                    <ul className="space-y-2">
-                      {servers.map((server) => (
-                        <motion.li
-                          key={server.id}
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                        >
-                          <Button
-                            onClick={() => onSelectServer(server.id)}
-                            variant={activeServerId === server.id ? "secondary" : "ghost"}
-                            className="w-full justify-start"
-                          >
-                            <span className="truncate">{server.name}</span>
-                            {activeServerId === server.id && (
-                              <ChevronRight size={20} className="ml-auto flex-shrink-0" />
-                            )}
-                          </Button>
-                        </motion.li>
-                      ))}
-                    </ul>
-                  </div>
+      <div className="space-y-6">
+        <div>
+          <h3 className="text-lg font-semibold mb-3 flex items-center">
+            <ServerIcon size={20} className="mr-2" /> 利用可能なサーバー
+          </h3>
+          <ul className="space-y-2">
+            {availableServers.map((server: Server) => (
+              <motion.li
+                key={server.id}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <Button
+                  onClick={() => onSelectServer(server.id)}
+                  variant={activeServerId === server.id ? "secondary" : "ghost"}
+                  className="w-full justify-start"
+                >
+                  <span className="truncate">{server.name}</span>
+                  {activeServerId === server.id && (
+                    <ChevronRight size={20} className="ml-auto flex-shrink-0" />
+                  )}
+                </Button>
+              </motion.li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <h3 className="text-lg font-semibold mb-3 flex items-center">
+            <ServerIcon size={20} className="mr-2" /> ボットを招待できるサーバー
+          </h3>
+          <ul className="space-y-2">
+            {invitableServers.map((server: Server) => (
+              <motion.li
+                key={server.id}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <Button
+                  onClick={() => onInviteBot(server.id)}
+                  variant="ghost"
+                  className="w-full justify-start"
+                >
+                  <span className="truncate">{server.name}</span>
+                  <span className="ml-auto flex-shrink-0 text-blue-500">招待</span>
+                </Button>
+              </motion.li>
+            ))}
+          </ul>
+        </div>
                   <div>
                     <h3 className="text-lg font-semibold mb-3 flex items-center">
                       <Mic size={20} className="mr-2" /> ボイスチャンネル

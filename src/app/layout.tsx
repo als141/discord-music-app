@@ -1,11 +1,12 @@
+// layout.tsx
 'use client'
 
 import { Inter } from 'next/font/google'
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
-import { useEffect } from 'react'
 import DifyChatButton from '@/components/DifyChatButton'
+import { SessionProvider } from 'next-auth/react' // 追加
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -14,12 +15,6 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
-  useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js')
-    }
-  }, [])
-
   return (
     <html lang="ja" suppressHydrationWarning>
       <body className={inter.className}>
@@ -29,9 +24,11 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {children}
-          <Toaster />
-          <DifyChatButton />
+          <SessionProvider> {/* 追加 */}
+            {children}
+            <Toaster />
+            <DifyChatButton />
+          </SessionProvider>
         </ThemeProvider>
       </body>
     </html>
