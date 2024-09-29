@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
 import DifyChatButton from '@/components/DifyChatButton'
 import { SessionProvider } from 'next-auth/react' // 追加
+import { GuildProvider } from '@/contexts/GuildContext';
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -25,9 +26,11 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <SessionProvider> {/* 追加 */}
+            <GuildProvider> {/* 追加 */}
             {children}
             <Toaster />
             <DifyChatButton />
+            </GuildProvider>
           </SessionProvider>
         </ThemeProvider>
       </body>

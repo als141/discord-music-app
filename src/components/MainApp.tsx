@@ -1,3 +1,4 @@
+// MainApp.tsx
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -8,14 +9,15 @@ import { QueueList } from './QueueList';
 import { Header } from './Header';
 import { SideMenu } from './SideMenu';
 import { SearchResults } from './SearchResults';
-import { Server, Track, VoiceChannel, QueueItem } from '@/utils/api';
+import { Track, VoiceChannel, QueueItem } from '@/utils/api';
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from 'lucide-react';
 import { HomeScreen } from './HomeScreen';
-import { PlayIcon, PauseIcon} from 'lucide-react';
+import { PlayIcon, PauseIcon } from 'lucide-react';
 import { Button } from './ui/button';
 import { useSwipeable } from 'react-swipeable';
-import { useSession, signIn } from 'next-auth/react'; // 追加
+import { useSession, signIn } from 'next-auth/react';
+import { useGuilds } from '@/contexts/GuildContext';
 
 declare global {
   interface BigInt {
@@ -29,11 +31,15 @@ BigInt.prototype.toJSON = function() {
 
 export const MainApp: React.FC = () => {
   const { data: session, status } = useSession(); 
+  const { botServers } = useGuilds();
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [queue, setQueue] = useState<Track[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
+
+  // activeServerId と activeChannelId の状態を管理
   const [activeServerId, setActiveServerId] = useState<string | null>(null);
   const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
+
   const [voiceChannels, setVoiceChannels] = useState<VoiceChannel[]>([]);
   const [isQueueOpen, setIsQueueOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -44,71 +50,106 @@ export const MainApp: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isMainPlayerVisible, setIsMainPlayerVisible] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
-  const [availableServers, setAvailableServers] = useState<Server[]>([]);
-  const [invitableServers, setInvitableServers] = useState<Server[]>([]);
 
   useEffect(() => {
-    const fetchGuilds = async () => {
-      if (session) {
-        try {
-          const [userGuilds, botGuilds] = await Promise.all([
-            api.getUserGuilds(),
-            api.getBotGuilds(),
-          ]);
-  
-          const availableServers = userGuilds.filter(userGuild => 
-            botGuilds.some(botGuild => botGuild.id === userGuild.id)
-          );
-  
-          const invitableServers = userGuilds.filter(userGuild => 
-            !botGuilds.some(botGuild => botGuild.id === userGuild.id) && 
-            userGuild.permissions !== undefined &&
-            (BigInt(userGuild.permissions) & 0x20n) === 0x20n
-          );
-  
-          setAvailableServers(availableServers);
-          setInvitableServers(invitableServers);
-  
-          // savedServerId を取得
-          const savedServerId = localStorage.getItem('activeServerId');
-          const savedChannelId = localStorage.getItem('activeChannelId');
-  
-          // savedServerId が availableServers の中にあるか確認
-          if (savedServerId && availableServers.some(server => server.id === savedServerId)) {
-            setActiveServerId(savedServerId);
-            if (savedChannelId) setActiveChannelId(savedChannelId);
-          } else if (availableServers.length > 0) {
-            // ない場合は、デフォルトで最初のサーバーを選択
-            setActiveServerId(availableServers[0].id);
-          }
-        } catch (error) {
-          console.error('Failed to fetch guilds:', error);
+    const initializeApp = () => {
+      if (typeof window !== 'undefined') {
+        // ブラウザで実行されている場合のみlocalStorageにアクセス
+        const savedServerId = localStorage.getItem('activeServerId');
+        const savedChannelId = localStorage.getItem('activeChannelId');
+
+        if (savedServerId) {
+          setActiveServerId(savedServerId);
+        }
+        if (savedChannelId) {
+          setActiveChannelId(savedChannelId);
         }
       }
     };
-  
-    fetchGuilds();
-  }, [session]);
 
-  // activeServerId の変更時に保存
-useEffect(() => {
-  if (activeServerId) {
-    localStorage.setItem('activeServerId', activeServerId);
-  } else {
-    localStorage.removeItem('activeServerId');
-  }
-}, [activeServerId]);
+    initializeApp();
+  }, []);
 
-// activeChannelId の変更時に保存
-useEffect(() => {
-  if (activeChannelId) {
-    localStorage.setItem('activeChannelId', activeChannelId);
-  } else {
-    localStorage.removeItem('activeChannelId');
-  }
-}, [activeChannelId]);
+  // activeServerId の変更時に localStorage に保存
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (activeServerId) {
+        localStorage.setItem('activeServerId', activeServerId);
+      } else {
+        localStorage.removeItem('activeServerId');
+      }
+    }
+  }, [activeServerId]);
+
+  // activeChannelId の変更時に localStorage に保存
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (activeChannelId) {
+        localStorage.setItem('activeChannelId', activeChannelId);
+      } else {
+        localStorage.removeItem('activeChannelId');
+      }
+    }
+  }, [activeChannelId]);
   
-  
+
+
+  useEffect(() => {
+    const fetchServerData = async () => {
+      if (activeServerId) {
+        setIsLoading(true);
+        try {
+          const [channels, botStatus, queueResponse, isPlayingResponse] = await Promise.all([
+            api.getVoiceChannels(activeServerId),
+            api.getBotVoiceStatus(activeServerId),
+            api.getQueue(activeServerId),
+            api.isPlaying(activeServerId)
+          ]);
+
+          setVoiceChannels(channels);
+          setBotVoiceChannelId(botStatus);
+          if (botStatus) setActiveChannelId(botStatus);
+
+          const currentTrackItem = queueResponse.find(item => item.isCurrent);
+          setCurrentTrack(currentTrackItem?.track || null);
+          setQueue(queueResponse.filter(item => !item.isCurrent).map(item => item.track));
+          setIsPlaying(isPlayingResponse);
+
+          // WebSocketの設定
+          if (wsRef.current) {
+            wsRef.current.close();
+          }
+          const ws = setupWebSocket(activeServerId, (data) => {
+            const queueItems: QueueItem[] = data.queue;
+            const currentTrackItem = queueItems.find(item => item.isCurrent);
+            setCurrentTrack(currentTrackItem?.track || null);
+            setQueue(queueItems.filter(item => !item.isCurrent).map(item => item.track));
+            setIsPlaying(data.is_playing);
+          });
+          wsRef.current = ws;
+        } catch (error) {
+          console.error("Failed to fetch server data:", error);
+          toast({
+            title: "エラー",
+            description: "サーバーデータの取得に失敗しました。",
+            variant: "destructive",
+          });
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchServerData();
+
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, [activeServerId, toast]);
+
   const handleInviteBot = (serverId: string) => {
     const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID;
     const permissions = '8'; // 必要に応じて調整
@@ -163,81 +204,6 @@ useEffect(() => {
       });
     }
   };
-  
-  useEffect(() => {
-    const fetchInitialData = async () => {
-      setIsLoading(true);
-      try {
-        // `fetchedServers` と `api.getServers()` を削除
-        // `savedServerId` と `savedChannelId` の取得も `fetchGuilds` 内に移動
-      } catch (error) {
-        console.error("Failed to fetch initial data:", error);
-        toast({
-          title: "エラー",
-          description: "初期データの取得に失敗しました。",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-  
-    fetchInitialData();
-  }, [toast]);
-  
-  
-  useEffect(() => {
-    if (activeServerId) {
-      const fetchServerData = async () => {
-        setIsLoading(true);
-        try {
-          const [channels, botStatus, queueResponse, isPlayingResponse] = await Promise.all([
-            api.getVoiceChannels(activeServerId),
-            api.getBotVoiceStatus(activeServerId),
-            api.getQueue(activeServerId),
-            api.isPlaying(activeServerId)
-          ]);
-          
-          setVoiceChannels(channels);
-          setBotVoiceChannelId(botStatus);
-          if (botStatus) setActiveChannelId(botStatus);
-          
-          const currentTrackItem = queueResponse.find(item => item.isCurrent);
-          setCurrentTrack(currentTrackItem?.track || null);
-          setQueue(queueResponse.filter(item => !item.isCurrent).map(item => item.track));
-          setIsPlaying(isPlayingResponse);
-          
-          const ws = setupWebSocket(activeServerId, (data) => {
-            const queueItems: QueueItem[] = data.queue;
-            const currentTrackItem = queueItems.find(item => item.isCurrent);
-            setCurrentTrack(currentTrackItem?.track || null);
-            setQueue(queueItems.filter(item => !item.isCurrent).map(item => item.track));
-            setIsPlaying(data.is_playing);
-          });
-          
-          wsRef.current = ws;
-        } catch (error) {
-          console.error("Failed to fetch server data:", error);
-          toast({
-            title: "エラー",
-            description: "サーバーデータの取得に失敗しました。",
-            variant: "destructive",
-          });
-        } finally {
-          setIsLoading(false);
-        }
-      };
-      
-      fetchServerData();
-      
-      return () => {
-        if (wsRef.current) {
-          wsRef.current.close();
-          wsRef.current = null;
-        }
-      };
-    }
-  }, [activeServerId, toast]);
   
   const handlePlay = async () => {
     if (activeServerId) {
@@ -358,9 +324,19 @@ useEffect(() => {
   };
 
   const handleSelectServer = (serverId: string) => {
-    setActiveServerId(serverId);
-    setActiveChannelId(null);
+    const serverExists = botServers.some((server) => server.id === serverId);
+    if (serverExists) {
+      setActiveServerId(serverId);
+      setActiveChannelId(null);
+    } else {
+      toast({
+        title: "エラー",
+        description: "選択したサーバーは利用できません。",
+        variant: "destructive",
+      });
+    }
   };
+  
 
   const handleSelectChannel = async (channelId: string) => {
     if (activeServerId && channelId !== botVoiceChannelId) {
@@ -405,7 +381,7 @@ useEffect(() => {
     }
   };
 
-  // status が 'loading' の場合は、ローディングUIを表示
+  // 認証状態のチェックとUIの表示
   if (status === 'loading') {
     return (
       <div className="h-screen flex items-center justify-center">
@@ -414,7 +390,6 @@ useEffect(() => {
     );
   }
 
-  // status が 'unauthenticated' の場合は、ログインUIを表示
   if (status === 'unauthenticated' || !session) {
     return (
       <div className="h-screen flex flex-col items-center justify-center">
@@ -440,9 +415,8 @@ useEffect(() => {
           activeChannelId={activeChannelId}
           onSelectChannel={handleSelectChannel}
           onRefresh={handleRefresh}
-          availableServers={availableServers}
-          invitableServers={invitableServers}
           onInviteBot={handleInviteBot}
+          botServers={botServers}
         />
       </AnimatePresence>
       <main className="flex-grow overflow-hidden pt-16">
