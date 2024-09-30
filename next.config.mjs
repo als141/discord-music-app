@@ -11,6 +11,7 @@ const nextConfig = {
   reactStrictMode: true,
   images: {
     domains: ['i.ytimg.com', 'lh3.googleusercontent.com'],
+    unoptimized: true, // 追加: 画像最適化を無効化
   },
   async headers() {
     return [
