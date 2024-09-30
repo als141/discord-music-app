@@ -18,6 +18,7 @@ import { Button } from './ui/button';
 import { useSwipeable } from 'react-swipeable';
 import { useSession, signIn } from 'next-auth/react';
 import { useGuilds } from '@/contexts/GuildContext';
+import Image from 'next/image';
 
 declare global {
   interface BigInt {
@@ -484,34 +485,41 @@ export const MainApp: React.FC = () => {
         )}
       </main>
       {currentTrack && !isMainPlayerVisible && (
-        <motion.div
-          className="fixed bottom-0 left-0 right-0 bg-card p-4 flex items-center cursor-pointer"
-          onClick={() => setIsMainPlayerVisible(true)}
-          initial={{ y: "100%" }}
-          animate={{ y: 0 }}
-          exit={{ y: "100%" }}
-          transition={{ duration: 0.3 }}
-          {...miniPlayerSwipeHandlers}
+      <motion.div
+        className="fixed bottom-0 left-0 right-0 bg-card p-4 flex items-center cursor-pointer"
+        onClick={() => setIsMainPlayerVisible(true)}
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
+        transition={{ duration: 0.3 }}
+        {...miniPlayerSwipeHandlers}
+      >
+        <Image 
+          src={currentTrack.thumbnail} 
+          alt={currentTrack.title} 
+          width={48} 
+          height={48} 
+          className="object-cover rounded-md"
+          unoptimized
+        />
+        <div className="ml-4 flex-grow">
+          <h4 className="font-semibold truncate">{currentTrack.title}</h4>
+          <p className="text-muted-foreground truncate">{currentTrack.artist}</p>
+        </div>
+        <Button
+          variant="ghost" 
+          onClick={(e) => { 
+            e.stopPropagation(); 
+            if (isPlaying) {
+              handlePause();
+            } else {
+              handlePlay();
+            }
+          }}
         >
-          <img src={currentTrack.thumbnail} alt={currentTrack.title} className="w-12 h-12 object-cover rounded-md" />
-          <div className="ml-4 flex-grow">
-            <h4 className="font-semibold truncate">{currentTrack.title}</h4>
-            <p className="text-muted-foreground truncate">{currentTrack.artist}</p>
-          </div>
-          <Button
-            variant="ghost" 
-            onClick={(e) => { 
-              e.stopPropagation(); 
-              if (isPlaying) {
-                handlePause();
-              } else {
-                handlePlay();
-              }
-            }}
-          >
-            {isPlaying ? <PauseIcon /> : <PlayIcon />}
-          </Button>
-        </motion.div>
+          {isPlaying ? <PauseIcon /> : <PlayIcon />}
+        </Button>
+      </motion.div>
       )}
       <AnimatePresence>
         {isQueueOpen && (

@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { ChevronDown, ChevronUp } from 'lucide-react'
+import Image from 'next/image'
 
 interface HomeScreenProps {
   onSelectTrack: (track: Track) => void
@@ -82,7 +83,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack }) => {
     >
       <Card className="overflow-hidden cursor-pointer">
         <CardContent className="p-0">
-          <img src={track.thumbnail} alt={track.title} className="w-full h-48 object-cover" />
+          <div className="relative w-full h-48">
+            <Image 
+              src={track.thumbnail} 
+              alt={track.title} 
+              layout="fill"
+              objectFit="cover"
+              unoptimized
+            />
+          </div>
           <div className="p-4">
             <h3 className="font-bold text-lg mb-2 truncate">{track.title}</h3>
             <p className="text-sm text-muted-foreground truncate">{track.artist}</p>

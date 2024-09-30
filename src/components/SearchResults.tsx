@@ -14,6 +14,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import Image from 'next/image'
 
 // ExtendedTrackインターフェースを定義
 interface ExtendedTrack extends Track {
@@ -104,26 +105,34 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
             <AnimatePresence>
               {filteredResults.map((track) => (
                 <motion.div
-                  key={track.url}
-                  layout
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  transition={{ duration: 0.3 }}
-                  className="bg-card rounded-lg overflow-hidden shadow-lg"
-                >
-                  <img src={track.thumbnail} alt={track.title} className="w-full h-48 object-cover" />
-                  <div className="p-4">
-                    <h3 className="font-bold text-lg mb-2 truncate">{track.title}</h3>
-                    <p className="text-muted-foreground mb-4 truncate">{track.artist}</p>
-                    <Button
-                      onClick={() => handleAddToQueue(track)}
-                      className="w-full"
-                    >
-                      キューに追加
-                    </Button>
-                  </div>
-                </motion.div>
+                key={track.url}
+                layout
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                transition={{ duration: 0.3 }}
+                className="bg-card rounded-lg overflow-hidden shadow-lg"
+              >
+                <div className="relative w-full h-48">
+                  <Image 
+                    src={track.thumbnail} 
+                    alt={track.title} 
+                    layout="fill"
+                    objectFit="cover"
+                    unoptimized
+                  />
+                </div>
+                <div className="p-4">
+                  <h3 className="font-bold text-lg mb-2 truncate">{track.title}</h3>
+                  <p className="text-muted-foreground mb-4 truncate">{track.artist}</p>
+                  <Button
+                    onClick={() => handleAddToQueue(track)}
+                    className="w-full"
+                  >
+                    キューに追加
+                  </Button>
+                </div>
+              </motion.div>
               ))}
             </AnimatePresence>
           </div>
