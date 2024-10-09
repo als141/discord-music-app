@@ -19,20 +19,20 @@ export default function RootLayout({
   return (
     <html lang="ja" suppressHydrationWarning>
       <body className={inter.className}>
+        <SessionProvider> {/* 追加 */}
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
           enableSystem
           disableTransitionOnChange
         >
-          <SessionProvider> {/* 追加 */}
             <GuildProvider> {/* 追加 */}
             {children}
             <Toaster />
             <DifyChatButton />
             </GuildProvider>
-          </SessionProvider>
         </ThemeProvider>
+          </SessionProvider>
       </body>
     </html>
   )

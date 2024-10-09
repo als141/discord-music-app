@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { ChatScreen } from './ChatScreen'
 import { PlayableItem, SearchItem, api, QueueItem } from '@/utils/api'
 import { useToast } from '@/hooks/use-toast'
 import { Card, CardContent } from '@/components/ui/card'
@@ -11,6 +13,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 interface HomeScreenProps {
   onSelectTrack: (item: PlayableItem) => void;
   guildId: string | null;
+  activeTab: string;                        // 追加
+  onTabChange: (tab: string) => void;       // 追加
 }
 
 interface StoredData {
@@ -22,7 +26,7 @@ interface StoredData {
 const STORAGE_KEY = 'homeScreenData'
 const DATA_EXPIRY_TIME = 24 * 60 * 60 * 1000 // 24時間（ミリ秒単位）
 
-export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack, guildId }) => {
+export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack, guildId, activeTab, onTabChange }) => {
   const [recommendations, setRecommendations] = useState<SearchItem[]>([])
   const [charts, setCharts] = useState<SearchItem[]>([])
   const [history, setHistory] = useState<QueueItem[]>([])
@@ -247,36 +251,49 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack, guildId }
   };
 
   return (
-    <div className="flex flex-col items-center justify-start h-full bg-gradient-to-b from-background to-background/80 text-foreground p-4 overflow-auto">
-      {loading ? (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
-          {Array.from({ length: 16 }).map((_, index) => renderSkeletonItem(index))}
-        </div>
-      ) : (
-        <>
-          {history.length > 0 && guildId && (
-            <ScrollableSectionForQueueItems 
-              title="再生履歴" 
-              icon={<History className="w-6 h-6 text-primary" />}
-              items={history} 
-              renderItem={renderHistoryItem} 
-              reverse={true} 
-            />
-          )}
-          <ScrollableSectionForSearchItems 
-            title="おすすめの曲" 
-            icon={<Sparkles className="w-6 h-6 text-primary" />}
-            items={recommendations} 
-            renderItem={renderItem} 
-          />
-          <ScrollableSectionForSearchItems 
-            title="チャート" 
-            icon={<BarChart3 className="w-6 h-6 text-primary" />}
-            items={charts} 
-            renderItem={renderItem} 
-          />
-        </>
-      )}
+    <div className="flex flex-col h-full">
+      <Tabs value={activeTab} onValueChange={onTabChange} className="w-full h-full flex flex-col">
+        <TabsList className="flex">
+          <TabsTrigger value="home">ホーム</TabsTrigger>
+          <TabsTrigger value="chat">チャット</TabsTrigger>
+        </TabsList>
+        <TabsContent value="home" className="flex-grow overflow-auto">
+          <ScrollArea className="h-full">
+            {loading ? (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full p-4">
+                {Array.from({ length: 16 }).map((_, index) => renderSkeletonItem(index))}
+              </div>
+            ) : (
+              <div className="p-4">
+                {history.length > 0 && guildId && (
+                  <ScrollableSectionForQueueItems 
+                    title="再生履歴" 
+                    icon={<History className="w-6 h-6 text-primary" />}
+                    items={history} 
+                    renderItem={renderHistoryItem} 
+                    reverse={true} 
+                  />
+                )}
+                <ScrollableSectionForSearchItems 
+                  title="おすすめの曲" 
+                  icon={<Sparkles className="w-6 h-6 text-primary" />}
+                  items={recommendations} 
+                  renderItem={renderItem} 
+                />
+                <ScrollableSectionForSearchItems 
+                  title="チャート" 
+                  icon={<BarChart3 className="w-6 h-6 text-primary" />}
+                  items={charts} 
+                  renderItem={renderItem} 
+                />
+              </div>
+            )}
+          </ScrollArea>
+        </TabsContent>
+        <TabsContent value="chat" className="flex-grow overflow-hidden">
+          <ChatScreen />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

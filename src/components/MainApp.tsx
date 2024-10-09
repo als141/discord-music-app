@@ -51,6 +51,7 @@ export const MainApp: React.FC = () => {
   const [botVoiceChannelId, setBotVoiceChannelId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isMainPlayerVisible, setIsMainPlayerVisible] = useState(false);
+  const [homeActiveTab, setHomeActiveTab] = useState<string>('home');
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -524,13 +525,15 @@ export const MainApp: React.FC = () => {
                   setIsMainPlayerVisible(true);
                 }}
                 guildId={activeServerId}
+                activeTab={homeActiveTab}                 // 追加
+                onTabChange={(tab) => setHomeActiveTab(tab)} // 追加
               />
             )}
           </>
         )}
       </main>
-      {currentTrack && !isMainPlayerVisible && (
-      <motion.div
+      {currentTrack && !isMainPlayerVisible && homeActiveTab !== 'chat' && (
+        <motion.div
         className="fixed bottom-0 left-0 right-0 bg-card p-4 flex items-center cursor-pointer"
         onClick={() => setIsMainPlayerVisible(true)}
         initial={{ y: "100%" }}

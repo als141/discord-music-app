@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 import os
 from ytmusicapi import YTMusic
 from discord import utils
+import chat
 
 ytmusic = YTMusic("oauth.json", language='ja', location='JP')
 
@@ -33,6 +34,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ルーターを追加
+app.include_router(chat.router)
 
 class User(BaseModel):
     id: str
