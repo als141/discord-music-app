@@ -7,7 +7,6 @@ import { X, Search, Music, Disc, PlaySquare, ListMusic, Plus, Loader2 } from 'lu
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { useInView } from 'react-intersection-observer';
 import {
   Tooltip,
   TooltipContent,
@@ -33,12 +32,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
   const [filteredResults, setFilteredResults] = useState<SearchItem[]>(results);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-  const { ref, inView } = useInView({
-    threshold: 0,
-  });
-
   const [playlistTracks, setPlaylistTracks] = useState<{[key: string]: Track[]}>({});
-  const [expandedItems, setExpandedItems] = useState<string[]>([]);
 
   useEffect(() => {
     setFilteredResults(results);
@@ -85,12 +79,6 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
         variant: "destructive",
       });
     }
-  };
-
-  const toggleExpand = (browseId: string) => {
-    setExpandedItems(prev => 
-      prev.includes(browseId) ? prev.filter(id => id !== browseId) : [...prev, browseId]
-    );
   };
 
   const fetchPlaylistTracks = async (item: SearchItem) => {
@@ -223,7 +211,6 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
                           <AccordionItem value={item.browseId!}>
                             <AccordionTrigger 
                               onClick={() => {
-                                toggleExpand(item.browseId!);
                                 fetchPlaylistTracks(item);
                               }}
                               className="hover:no-underline"
@@ -274,7 +261,6 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
               <Loader2 className="h-12 w-12 animate-spin text-primary" />
             </div>
           )}
-          <div ref={ref} style={{ height: '20px' }} />
         </ScrollArea>
       </motion.div>
     </TooltipProvider>

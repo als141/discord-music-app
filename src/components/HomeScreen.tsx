@@ -188,11 +188,40 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack, guildId }
     </Card>
   )
 
-  const ScrollableSection: React.FC<{ 
+  const ScrollableSectionForSearchItems: React.FC<{ 
     title: string; 
     icon: React.ReactNode;
-    items: any[]; 
-    renderItem: (item: any, index: number) => React.ReactNode; 
+    items: SearchItem[]; 
+    renderItem: (item: SearchItem, index: number) => React.ReactNode; 
+    reverse?: boolean 
+  }> = ({ title, icon, items, renderItem, reverse = false }) => {
+    return (
+      <div className="mb-8 w-full">
+        <div className="flex items-center mb-4">
+          <div className="mr-2 p-2 bg-primary/10 rounded-full">
+            {icon}
+          </div>
+          <h2 className="text-2xl font-bold">{title}</h2>
+        </div>
+        <ScrollArea className="w-full whitespace-nowrap rounded-md border">
+          <div className="flex space-x-4 p-4">
+            {(reverse ? [...items].reverse() : items).map((item, index) => (
+              <div key={index} className="w-[200px] h-[280px]">
+                {renderItem(item, index)}
+              </div>
+            ))}
+          </div>
+          <ScrollBar orientation="horizontal" />
+        </ScrollArea>
+      </div>
+    );
+  };
+  
+  const ScrollableSectionForQueueItems: React.FC<{ 
+    title: string; 
+    icon: React.ReactNode;
+    items: QueueItem[]; 
+    renderItem: (item: QueueItem, index: number) => React.ReactNode; 
     reverse?: boolean 
   }> = ({ title, icon, items, renderItem, reverse = false }) => {
     return (
@@ -226,7 +255,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack, guildId }
       ) : (
         <>
           {history.length > 0 && guildId && (
-            <ScrollableSection 
+            <ScrollableSectionForQueueItems 
               title="再生履歴" 
               icon={<History className="w-6 h-6 text-primary" />}
               items={history} 
@@ -234,13 +263,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack, guildId }
               reverse={true} 
             />
           )}
-          <ScrollableSection 
+          <ScrollableSectionForSearchItems 
             title="おすすめの曲" 
             icon={<Sparkles className="w-6 h-6 text-primary" />}
             items={recommendations} 
             renderItem={renderItem} 
           />
-          <ScrollableSection 
+          <ScrollableSectionForSearchItems 
             title="チャート" 
             icon={<BarChart3 className="w-6 h-6 text-primary" />}
             items={charts} 
