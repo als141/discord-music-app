@@ -1,22 +1,24 @@
 "use client"
 
 import React, { useEffect, useState } from 'react'
-import { Track, api } from '@/utils/api'
+import { SearchItem, api } from '@/utils/api'
 import { useToast } from '@/hooks/use-toast'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown, ChevronUp, Music, Headphones } from 'lucide-react'
 import Image from 'next/image'
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { Badge } from "@/components/ui/badge"
 
 interface HomeScreenProps {
-  onSelectTrack: (track: Track) => void
+  onSelectTrack: (item: SearchItem) => void
 }
 
 interface StoredData {
-  recommendations: Track[]
-  charts: Track[]
+  recommendations: SearchItem[]
+  charts: SearchItem[]
   timestamp: number
 }
 
@@ -24,8 +26,8 @@ const STORAGE_KEY = 'homeScreenData'
 const DATA_EXPIRY_TIME = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack }) => {
-  const [recommendations, setRecommendations] = useState<Track[]>([])
-  const [charts, setCharts] = useState<Track[]>([])
+  const [recommendations, setRecommendations] = useState<SearchItem[]>([])
+  const [charts, setCharts] = useState<SearchItem[]>([])
   const [loading, setLoading] = useState(true)
   const [showAllRecommendations, setShowAllRecommendations] = useState(false)
   const [showAllCharts, setShowAllCharts] = useState(false)
@@ -39,11 +41,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack }) => {
         const parsedData: StoredData | null = storedData ? JSON.parse(storedData) : null
 
         if (parsedData && Date.now() - parsedData.timestamp < DATA_EXPIRY_TIME) {
-          // Use stored data if it's not expired
           setRecommendations(parsedData.recommendations)
           setCharts(parsedData.charts)
         } else {
-          // Fetch new data if stored data is expired or doesn't exist
           const [recs, ch] = await Promise.all([
             api.getRecommendations(),
             api.getCharts(),
@@ -51,7 +51,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack }) => {
           setRecommendations(recs)
           setCharts(ch)
 
-          // Store the new data
           const newData: StoredData = {
             recommendations: recs,
             charts: ch,
@@ -74,27 +73,34 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack }) => {
     fetchData()
   }, [toast])
 
-  const renderTrackItem = (track: Track, key: string) => (
+  const renderItem = (item: SearchItem, key: string) => (
     <motion.div
       key={key}
       whileHover={{ scale: 1.05 }}
       whileTap={{ scale: 0.95 }}
-      onClick={() => onSelectTrack(track)}
+      onClick={() => onSelectTrack(item)}
     >
-      <Card className="overflow-hidden cursor-pointer">
+      <Card className="overflow-hidden cursor-pointer group">
         <CardContent className="p-0">
           <div className="relative w-full h-48">
             <Image 
-              src={track.thumbnail} 
-              alt={track.title} 
-              layout="fill"
-              objectFit="cover"
+              src={item.thumbnail} 
+              alt={item.title} 
+              fill
+              style={{ objectFit: 'cover' }}
+              className="transition-transform duration-300 group-hover:scale-110"
               unoptimized
             />
+            <div className="absolute inset-0 bg-black bg-opacity-30 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+              <Badge variant="secondary" className="text-xs font-semibold px-2 py-1 flex items-center gap-1">
+                <Music className="w-3 h-3" />
+                {item.type.toUpperCase()}
+              </Badge>
+            </div>
           </div>
-          <div className="p-4">
-            <h3 className="font-bold text-lg mb-2 truncate">{track.title}</h3>
-            <p className="text-sm text-muted-foreground truncate">{track.artist}</p>
+          <div className="p-4 bg-card transition-colors duration-300 group-hover:bg-accent">
+            <h3 className="font-bold text-lg mb-2 truncate">{item.title}</h3>
+            <p className="text-sm text-muted-foreground truncate">{item.artist}</p>
           </div>
         </CardContent>
       </Card>
@@ -113,15 +119,22 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack }) => {
     </Card>
   )
 
-  const renderSection = (title: string, items: Track[], showAll: boolean, setShowAll: (show: boolean) => void) => (
+  const renderSection = (title: string, items: SearchItem[], showAll: boolean, setShowAll: (show: boolean) => void) => (
     <div className="mb-8 w-full">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-2xl font-bold">{title}</h2>
+        <h2 className="text-2xl font-bold flex items-center">
+          {title === 'おすすめの曲' ? (
+            <Headphones className="mr-2 h-6 w-6 text-primary" />
+          ) : (
+            <Music className="mr-2 h-6 w-6 text-primary" />
+          )}
+          {title}
+        </h2>
         <Button
           variant="outline"
           size="sm"
           onClick={() => setShowAll(!showAll)}
-          className="flex items-center"
+          className="flex items-center transition-colors duration-200 hover:bg-primary hover:text-primary-foreground"
         >
           {showAll ? (
             <>
@@ -136,21 +149,25 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack }) => {
           )}
         </Button>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        <AnimatePresence>
-          {items.slice(0, showAll ? undefined : 4).map((item, index) => (
-            <motion.div
-              key={`${title}-${index}`}
-              initial={index >= 4 ? { opacity: 0, scale: 0.8 } : false}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              transition={{ duration: 0.3 }}
-            >
-              {renderTrackItem(item, `${title}-${index}`)}
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
+      <ScrollArea className="w-full whitespace-nowrap rounded-md border">
+        <div className="flex space-x-4 p-4">
+          <AnimatePresence>
+            {items.slice(0, showAll ? undefined : 4).map((item, index) => (
+              <motion.div
+                key={`${title}-${index}`}
+                initial={index >= 4 ? { opacity: 0, scale: 0.8 } : false}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                transition={{ duration: 0.3 }}
+                className="w-[250px] flex-shrink-0"
+              >
+                {renderItem(item, `${title}-${index}`)}
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+        <ScrollBar orientation="horizontal" />
+      </ScrollArea>
     </div>
   )
 

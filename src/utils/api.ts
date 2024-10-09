@@ -20,6 +20,16 @@ export interface Track {
   added_by?: User; // フィールド名を 'added_by' に修正
 }
 
+export interface SearchItem {
+  type: string;  // 'song', 'video', 'album', 'playlist'
+  title: string;
+  artist: string;
+  thumbnail: string;
+  url: string;
+  browseId?: string;
+  items?: Track[];
+}
+
 export interface QueueItem {
   track: Track;
   position: number;
@@ -103,9 +113,19 @@ export const api = {
     await axios.post(`${API_URL}/previous/${guildId}`);
   },
 
-  search: async (query: string): Promise<Track[]> => {
+  search: async (query: string): Promise<SearchItem[]> => {
     const response = await axios.get(`${API_URL}/search`, { params: { query } });
-    return response.data.tracks;
+    return response.data.results;
+  },
+
+  getPlaylistItems: async (browseId: string): Promise<Track[]> => {
+    const response = await axios.get(`${API_URL}/playlist/${browseId}`);
+    return response.data;
+  },
+
+  getAlbumItems: async (browseId: string): Promise<Track[]> => {
+    const response = await axios.get(`${API_URL}/album/${browseId}`);
+    return response.data;
   },
 
   addUrl: async (guildId: string, url: string, user: User): Promise<void> => {
@@ -131,19 +151,20 @@ export const api = {
     const response = await axios.get(`${API_URL}/bot-voice-status/${serverId}`);
     return response.data.channel_id;
   },
-  getRecommendations: async (): Promise<Track[]> => {
+  
+  getRecommendations: async (): Promise<SearchItem[]> => {
     const response = await axios.get(`${API_URL}/recommendations`);
-    return response.data.tracks;
+    return response.data.results;
   },
 
-  getCharts: async (): Promise<Track[]> => {
+  getCharts: async (): Promise<SearchItem[]> => {
     const response = await axios.get(`${API_URL}/charts`);
-    return response.data.tracks;
+    return response.data.results;
   },
 
-  getRelatedSongs: async (videoId: string): Promise<Track[]> => {
+  getRelatedSongs: async (videoId: string): Promise<SearchItem[]> => {
     const response = await axios.get(`${API_URL}/related/${videoId}`);
-    return response.data.tracks;
+    return response.data.results;
   },
 
   removeFromQueue: async (guildId: string, position: number): Promise<void> => {

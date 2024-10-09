@@ -9,7 +9,7 @@ import { QueueList } from './QueueList';
 import { Header } from './Header';
 import { SideMenu } from './SideMenu';
 import { SearchResults } from './SearchResults';
-import { Track, VoiceChannel, QueueItem } from '@/utils/api';
+import { Track, VoiceChannel, QueueItem, SearchItem } from '@/utils/api';
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from 'lucide-react';
 import { HomeScreen } from './HomeScreen';
@@ -45,7 +45,7 @@ export const MainApp: React.FC = () => {
   const [voiceChannels, setVoiceChannels] = useState<VoiceChannel[]>([]);
   const [isQueueOpen, setIsQueueOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [searchResults, setSearchResults] = useState<Track[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchItem[]>([]); // 型を修正
   const [isSearchActive, setIsSearchActive] = useState(false);
   const { toast } = useToast();
   const [botVoiceChannelId, setBotVoiceChannelId] = useState<string | null>(null);
@@ -193,6 +193,57 @@ export const MainApp: React.FC = () => {
     delta: 50,
     trackMouse: false
   });
+
+  const handleAddToQueue = async (item: SearchItem) => {
+    if (activeServerId) {
+      const user = getUserInfo();
+      if (!user) {
+        toast({
+          title: "エラー",
+          description: "ユーザー情報を取得できませんでした。",
+          variant: "destructive",
+        });
+        return;
+      }
+      try {
+        setIsLoading(true);
+        if (item.type === 'song' || item.type === 'video') {
+          await api.addUrl(activeServerId, item.url, user);
+        } else if (item.type === 'album' || item.type === 'single' || item.type === 'ep' || item.type === 'playlist') {
+          // Fetch the tracks
+          let tracks: Track[] = [];
+          if (item.type === 'playlist') {
+            tracks = await api.getPlaylistItems(item.browseId!);
+          } else {
+            tracks = await api.getAlbumItems(item.browseId!);
+          }
+          // Add each track to the queue
+          for (const track of tracks) {
+            await api.addUrl(activeServerId, track.url, user);
+          }
+        }
+        toast({
+          title: "成功",
+          description: "曲がキューに追加されました。",
+        });
+      } catch (error) {
+        console.error(error);
+        toast({
+          title: "エラー",
+          description: "キューへの追加に失敗しました。",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      toast({
+        title: "エラー",
+        description: "サーバーが選択されていません。",
+        variant: "destructive",
+      });
+    }
+  };
   
   const handleAddTrackToQueue = async (track: Track) => {
     if (activeServerId) {
@@ -212,11 +263,14 @@ export const MainApp: React.FC = () => {
           description: "曲がキューに追加されました。",
         });
       } catch (error) {
-        // エラーハンドリング
         console.error(error);
+        toast({
+          title: "エラー",
+          description: "キューへの追加に失敗しました。",
+          variant: "destructive",
+        });
       }
     } else {
-      // サーバーが選択されていない場合のエラーハンドリング
       toast({
         title: "エラー",
         description: "サーバーが選択されていません。",
@@ -291,7 +345,7 @@ export const MainApp: React.FC = () => {
   const handleSearch = async (query: string) => {
     try {
       const results = await api.search(query);
-      setSearchResults(results);
+      setSearchResults(results); // results の型は SearchItem[]
       setIsSearchActive(true);
     } catch (error) {
       console.error(error);
@@ -449,38 +503,13 @@ export const MainApp: React.FC = () => {
           <div className="h-full flex items-center justify-center">
             <Loader2 className="w-8 h-8 animate-spin" />
           </div>
-      ) : isSearchActive ? (
-        <SearchResults
-          results={searchResults}
-          onAddToQueue={async (track: Track) => {
-            if (activeServerId) {
-              const user = getUserInfo();
-              if (!user) {
-                toast({
-                  title: "エラー",
-                  description: "ユーザー情報を取得できませんでした。",
-                  variant: "destructive",
-                });
-                return;
-              }
-              try {
-                setIsLoading(true);
-                await api.playTrack(activeServerId, track, user);
-                setIsSearchActive(false);
-                toast({
-                  title: "成功",
-                  description: "曲がキューに追加されました。",
-                });
-              } catch (error) {
-                // エラーハンドリング
-                console.error(error);
-              } finally {
-                setIsLoading(false);
-              }
-            }
-          }}
-          onClose={() => setIsSearchActive(false)}
-          onSearch={handleSearch}
+        ) : isSearchActive ? (
+          <SearchResults
+            results={searchResults}
+            onAddToQueue={handleAddToQueue}
+            onAddTrackToQueue={handleAddTrackToQueue}
+            onClose={() => setIsSearchActive(false)}
+            onSearch={handleSearch}
           />
         ) : (
           <>
@@ -504,8 +533,8 @@ export const MainApp: React.FC = () => {
             </AnimatePresence>
             {!isMainPlayerVisible && (
               <HomeScreen
-                onSelectTrack={(track: Track) => {
-                  handleAddTrackToQueue(track);
+                onSelectTrack={(item: SearchItem) => {
+                  handleAddToQueue(item);
                   setIsMainPlayerVisible(true);
                 }}
               />
