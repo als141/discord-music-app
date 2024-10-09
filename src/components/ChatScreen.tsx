@@ -72,16 +72,22 @@ export const ChatScreen: React.FC = () => {
 
       const reader = response.body!.getReader()
       const decoder = new TextDecoder('utf-8')
-      const assistantMessage: Message = { role: 'assistant', content: '' }
+
+      // 初期のassistantMessageを追加
+      let assistantMessage: Message = { role: 'assistant', content: '' }
+      setMessages((prev) => [...prev, assistantMessage])
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
         const chunk = decoder.decode(value)
-        assistantMessage.content += chunk
+        // assistantMessageを新しいオブジェクトとして作成
+        assistantMessage = { ...assistantMessage, content: assistantMessage.content + chunk }
+        // メッセージ一覧を更新
         setMessages((prev) => {
-          const updated = [...prev.filter((msg) => msg.role !== 'assistant' || msg !== assistantMessage), assistantMessage]
-          return updated
+          const updatedMessages = [...prev]
+          updatedMessages[updatedMessages.length - 1] = assistantMessage
+          return updatedMessages
         })
       }
     } catch (error) {
@@ -95,6 +101,7 @@ export const ChatScreen: React.FC = () => {
       setIsStreaming(false)
     }
   }
+
 
   const handleClear = () => {
     setMessages([])
