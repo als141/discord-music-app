@@ -232,6 +232,28 @@ async def get_related_songs(video_id: str):
     except Exception as e:
         print(f"関連動画の取得中にエラーが発生しました: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/history/{guild_id}", response_model=List[QueueItem])
+async def get_history(guild_id: str):
+    player = music_players.get(guild_id)
+    if player:
+        history_items = []
+        for i, item in enumerate(list(player.history)):
+            history_items.append(
+                QueueItem(
+                    track=Track(
+                        title=item.title,
+                        artist=item.artist,
+                        thumbnail=item.thumbnail,
+                        url=item.url,
+                        added_by=item.added_by
+                    ),
+                    position=i,
+                    isCurrent=False
+                )
+            )
+        return history_items
+    return []
 
 
 @app.post("/remove-from-queue/{guild_id}")

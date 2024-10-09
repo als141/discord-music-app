@@ -12,6 +12,24 @@ export interface User {
   image: string | null;
 }
 
+// 共通のインターフェースを定義
+export interface PlayableItem {
+  title: string;
+  artist: string;
+  thumbnail: string;
+  url: string;
+}
+
+export interface Track extends PlayableItem {
+  added_by?: User;
+}
+
+export interface SearchItem extends PlayableItem {
+  type: string;  // 'song', 'video', 'album', 'playlist'
+  browseId?: string;
+  items?: Track[];
+}
+
 export interface Track {
   title: string;
   artist: string;
@@ -151,7 +169,7 @@ export const api = {
     const response = await axios.get(`${API_URL}/bot-voice-status/${serverId}`);
     return response.data.channel_id;
   },
-  
+
   getRecommendations: async (): Promise<SearchItem[]> => {
     const response = await axios.get(`${API_URL}/recommendations`);
     return response.data.results;
@@ -165,6 +183,11 @@ export const api = {
   getRelatedSongs: async (videoId: string): Promise<SearchItem[]> => {
     const response = await axios.get(`${API_URL}/related/${videoId}`);
     return response.data.results;
+  },
+
+  getHistory: async (guildId: string): Promise<QueueItem[]> => {
+    const response = await axios.get(`${API_URL}/history/${guildId}`);
+    return response.data;
   },
 
   removeFromQueue: async (guildId: string, position: number): Promise<void> => {

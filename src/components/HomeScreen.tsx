@@ -1,19 +1,16 @@
-"use client"
-
 import React, { useEffect, useState } from 'react'
-import { SearchItem, api } from '@/utils/api'
+import { PlayableItem, SearchItem, api, QueueItem } from '@/utils/api'
 import { useToast } from '@/hooks/use-toast'
-import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Button } from '@/components/ui/button'
-import { ChevronDown, ChevronUp, Music, Headphones } from 'lucide-react'
 import Image from 'next/image'
+import { Play, User, History, Sparkles, BarChart3 } from 'lucide-react'
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
-import { Badge } from "@/components/ui/badge"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 interface HomeScreenProps {
-  onSelectTrack: (item: SearchItem) => void
+  onSelectTrack: (item: PlayableItem) => void;
+  guildId: string | null;
 }
 
 interface StoredData {
@@ -23,14 +20,13 @@ interface StoredData {
 }
 
 const STORAGE_KEY = 'homeScreenData'
-const DATA_EXPIRY_TIME = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
+const DATA_EXPIRY_TIME = 24 * 60 * 60 * 1000 // 24時間（ミリ秒単位）
 
-export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack }) => {
+export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack, guildId }) => {
   const [recommendations, setRecommendations] = useState<SearchItem[]>([])
   const [charts, setCharts] = useState<SearchItem[]>([])
+  const [history, setHistory] = useState<QueueItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [showAllRecommendations, setShowAllRecommendations] = useState(false)
-  const [showAllCharts, setShowAllCharts] = useState(false)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -73,114 +69,183 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack }) => {
     fetchData()
   }, [toast])
 
-  const renderItem = (item: SearchItem, key: string) => (
-    <motion.div
-      key={key}
-      whileHover={{ scale: 1.05 }}
-      whileTap={{ scale: 0.95 }}
-      onClick={() => onSelectTrack(item)}
-    >
-      <Card className="overflow-hidden cursor-pointer group">
-        <CardContent className="p-0">
-          <div className="relative w-full h-48">
-            <Image 
-              src={item.thumbnail} 
-              alt={item.title} 
-              fill
-              style={{ objectFit: 'cover' }}
-              className="transition-transform duration-300 group-hover:scale-110"
-              unoptimized
-            />
-            <div className="absolute inset-0 bg-black bg-opacity-30 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
-              <Badge variant="secondary" className="text-xs font-semibold px-2 py-1 flex items-center gap-1">
-                <Music className="w-3 h-3" />
-                {item.type.toUpperCase()}
-              </Badge>
-            </div>
-          </div>
-          <div className="p-4 bg-card transition-colors duration-300 group-hover:bg-accent">
-            <h3 className="font-bold text-lg mb-2 truncate">{item.title}</h3>
-            <p className="text-sm text-muted-foreground truncate">{item.artist}</p>
-          </div>
-        </CardContent>
-      </Card>
-    </motion.div>
+  useEffect(() => {
+    const fetchHistory = async () => {
+      if (guildId) {
+        try {
+          const historyData = await api.getHistory(guildId);
+          setHistory(historyData);
+        } catch (error) {
+          console.error('履歴の取得に失敗しました:', error);
+          toast({
+            title: 'エラー',
+            description: '履歴の取得に失敗しました。',
+            variant: 'destructive',
+          });
+        }
+      } else {
+        setHistory([]);
+      }
+    };
+    fetchHistory();
+  }, [guildId, toast]);
+
+  const renderItem = (item: SearchItem, index: number) => (
+    <TooltipProvider key={`item-${index}`}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Card className="overflow-hidden cursor-pointer h-full bg-card hover:bg-card/80 transition-colors duration-200">
+            <CardContent className="p-0 h-full flex flex-col">
+              <div className="relative w-full pt-[100%] group">
+                <Image 
+                  src={item.thumbnail} 
+                  alt={item.title} 
+                  fill
+                  style={{ objectFit: 'cover' }}
+                  className="rounded-t-lg"
+                  unoptimized
+                />
+                <div className="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
+                  <Play className="text-white w-12 h-12" onClick={() => onSelectTrack(item)} />
+                </div>
+              </div>
+              <div className="p-3 flex-grow flex flex-col justify-between bg-card/50 backdrop-blur-sm">
+                <h3 className="font-bold text-sm mb-1 line-clamp-2">{item.title}</h3>
+                <p className="text-xs text-muted-foreground truncate">{item.artist}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>{item.title}</p>
+          <p className="text-xs text-muted-foreground">{item.artist}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+
+  const renderHistoryItem = (item: QueueItem, index: number) => (
+    <TooltipProvider key={`history-${index}`}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Card className="overflow-hidden cursor-pointer h-full bg-card hover:bg-card/80 transition-colors duration-200">
+            <CardContent className="p-0 h-full flex flex-col">
+              <div className="relative w-full pt-[100%] group">
+                <Image 
+                  src={item.track.thumbnail} 
+                  alt={item.track.title} 
+                  fill
+                  style={{ objectFit: 'cover' }}
+                  className="rounded-t-lg"
+                  unoptimized
+                />
+                <div className="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
+                  <Play className="text-white w-12 h-12" onClick={() => onSelectTrack(item.track)} />
+                </div>
+                {item.track.added_by && item.track.added_by.image && (
+                  <div className="absolute top-2 right-2 w-8 h-8">
+                    <Image
+                      src={item.track.added_by.image}
+                      alt={item.track.added_by.name || 'User'}
+                      width={32}
+                      height={32}
+                      className="rounded-full border-2 border-white"
+                      unoptimized
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="p-3 flex-grow flex flex-col justify-between bg-card/50 backdrop-blur-sm">
+                <h3 className="font-bold text-sm mb-1 line-clamp-2">{item.track.title}</h3>
+                <p className="text-xs text-muted-foreground truncate">{item.track.artist}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>{item.track.title}</p>
+          <p className="text-xs text-muted-foreground">{item.track.artist}</p>
+          {item.track.added_by && (
+            <p className="text-xs text-muted-foreground mt-1">
+              <User className="inline-block w-3 h-3 mr-1" />
+              {item.track.added_by.name}
+            </p>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   )
 
   const renderSkeletonItem = (key: number) => (
-    <Card key={key} className="overflow-hidden">
-      <CardContent className="p-0">
-        <Skeleton className="w-full h-48" />
-        <div className="p-4">
-          <Skeleton className="h-6 w-3/4 mb-2" />
-          <Skeleton className="h-4 w-1/2" />
+    <Card key={`skeleton-${key}`} className="overflow-hidden h-full">
+      <CardContent className="p-0 h-full">
+        <Skeleton className="w-full pt-[100%]" />
+        <div className="p-3">
+          <Skeleton className="h-4 w-3/4 mb-2" />
+          <Skeleton className="h-3 w-1/2" />
         </div>
       </CardContent>
     </Card>
   )
 
-  const renderSection = (title: string, items: SearchItem[], showAll: boolean, setShowAll: (show: boolean) => void) => (
-    <div className="mb-8 w-full">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-2xl font-bold flex items-center">
-          {title === 'おすすめの曲' ? (
-            <Headphones className="mr-2 h-6 w-6 text-primary" />
-          ) : (
-            <Music className="mr-2 h-6 w-6 text-primary" />
-          )}
-          {title}
-        </h2>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowAll(!showAll)}
-          className="flex items-center transition-colors duration-200 hover:bg-primary hover:text-primary-foreground"
-        >
-          {showAll ? (
-            <>
-              <span className="mr-2">折りたたむ</span>
-              <ChevronUp size={20} />
-            </>
-          ) : (
-            <>
-              <span className="mr-2">もっと見る</span>
-              <ChevronDown size={20} />
-            </>
-          )}
-        </Button>
-      </div>
-      <ScrollArea className="w-full whitespace-nowrap rounded-md border">
-        <div className="flex space-x-4 p-4">
-          <AnimatePresence>
-            {items.slice(0, showAll ? undefined : 4).map((item, index) => (
-              <motion.div
-                key={`${title}-${index}`}
-                initial={index >= 4 ? { opacity: 0, scale: 0.8 } : false}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.8 }}
-                transition={{ duration: 0.3 }}
-                className="w-[250px] flex-shrink-0"
-              >
-                {renderItem(item, `${title}-${index}`)}
-              </motion.div>
-            ))}
-          </AnimatePresence>
+  const ScrollableSection: React.FC<{ 
+    title: string; 
+    icon: React.ReactNode;
+    items: any[]; 
+    renderItem: (item: any, index: number) => React.ReactNode; 
+    reverse?: boolean 
+  }> = ({ title, icon, items, renderItem, reverse = false }) => {
+    return (
+      <div className="mb-8 w-full">
+        <div className="flex items-center mb-4">
+          <div className="mr-2 p-2 bg-primary/10 rounded-full">
+            {icon}
+          </div>
+          <h2 className="text-2xl font-bold">{title}</h2>
         </div>
-        <ScrollBar orientation="horizontal" />
-      </ScrollArea>
-    </div>
-  )
+        <ScrollArea className="w-full whitespace-nowrap rounded-md border">
+          <div className="flex space-x-4 p-4">
+            {(reverse ? [...items].reverse() : items).map((item, index) => (
+              <div key={index} className="w-[200px] h-[280px]">
+                {renderItem(item, index)}
+              </div>
+            ))}
+          </div>
+          <ScrollBar orientation="horizontal" />
+        </ScrollArea>
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col items-center justify-start h-full bg-gradient-to-b from-background to-background/80 text-foreground p-4 overflow-auto">
       {loading ? (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 w-full">
-          {Array.from({ length: 8 }).map((_, index) => renderSkeletonItem(index))}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
+          {Array.from({ length: 16 }).map((_, index) => renderSkeletonItem(index))}
         </div>
       ) : (
         <>
-          {renderSection('おすすめの曲', recommendations, showAllRecommendations, setShowAllRecommendations)}
-          {renderSection('チャート', charts, showAllCharts, setShowAllCharts)}
+          {history.length > 0 && guildId && (
+            <ScrollableSection 
+              title="再生履歴" 
+              icon={<History className="w-6 h-6 text-primary" />}
+              items={history} 
+              renderItem={renderHistoryItem} 
+              reverse={true} 
+            />
+          )}
+          <ScrollableSection 
+            title="おすすめの曲" 
+            icon={<Sparkles className="w-6 h-6 text-primary" />}
+            items={recommendations} 
+            renderItem={renderItem} 
+          />
+          <ScrollableSection 
+            title="チャート" 
+            icon={<BarChart3 className="w-6 h-6 text-primary" />}
+            items={charts} 
+            renderItem={renderItem} 
+          />
         </>
       )}
     </div>

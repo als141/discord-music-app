@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { SearchItem, Track } from '@/utils/api';
+import { PlayableItem, SearchItem, Track } from '@/utils/api';
 import { X, Search, Music, Disc, PlaySquare, ListMusic, Plus, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,7 +22,7 @@ import { api } from '@/utils/api';
 
 interface SearchResultsProps {
   results: SearchItem[];
-  onAddToQueue: (item: SearchItem) => Promise<void>;
+  onAddToQueue: (item: PlayableItem) => Promise<void>;
   onAddTrackToQueue: (track: Track) => Promise<void>;
   onClose: () => void;
   onSearch: (query: string) => Promise<void>;

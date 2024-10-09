@@ -10,7 +10,7 @@ MUSIC_DIR = "music"
 
 # OAuth2認証情報
 OAUTH2_USERNAME = "oauth2"  # 必要に応じて変更
-OAUTH2_PASSWORD = "" # 初回認証後は不要
+OAUTH2_PASSWORD = ""  # 初回認証後は不要
 
 # yt-dlpの設定
 ytdl_format_options = {
@@ -58,6 +58,7 @@ class MusicPlayer:
         await self.bot.wait_until_ready()
         while not self.bot.is_closed():
             self.next.clear()
+
             if not self.queue:
                 await self.next.wait()
                 continue
@@ -74,11 +75,14 @@ class MusicPlayer:
                     self.queue.popleft()  # エラーが発生した曲をキューから削除
                     continue
 
-            self.current = song
+            self.current = song  # 現在の曲を設定
+
             if not self.voice_client.is_playing():
                 try:
-                    self.voice_client.play(discord.FFmpegPCMAudio(song.source),
-                                        after=lambda _: self.bot.loop.call_soon_threadsafe(self.next.set))
+                    self.voice_client.play(
+                        discord.FFmpegPCMAudio(song.source),
+                        after=lambda _: self.bot.loop.call_soon_threadsafe(self.next.set)
+                    )
                     # 再生が開始された直後にクライアントに通知
                     await self.notify_clients(self.guild_id)
                 except Exception as e:
@@ -87,10 +91,11 @@ class MusicPlayer:
                 print("Voice client is already playing. Waiting for current song to finish.")
 
             await self.next.wait()
+
             # 再生終了後
-            self.current = None
             finished_song = self.queue.popleft()  # 再生が終了した曲をキューから削除
             self.history.append(finished_song)    # 履歴に追加
+            self.current = None  # 現在の曲をリセット
             await self.notify_clients(self.guild_id)
 
     def download_song(self, song):
@@ -107,10 +112,10 @@ class MusicPlayer:
             return song
         except yt_dlp.utils.DownloadError as e:
             print(f"ダウンロードエラー: {song.url}\n{e}")
-            return None # ダウンロードエラー時はNoneを返す
+            return None  # ダウンロードエラー時はNoneを返す
         except Exception as e:
             print(f"予期せぬエラー: {song.url}\n{e}")
-            return None # エラー時はNoneを返す
+            return None  # エラー時はNoneを返す
 
     def get_song_info(self, url, added_by=None):
         info = ytdl.extract_info(url, download=False)
@@ -126,7 +131,6 @@ class MusicPlayer:
         thumbnail = info.get('thumbnail', '')
         artist = info.get('uploader', 'Unknown Artist')
         return Song(None, title, webpage_url, thumbnail, artist, added_by)
-
 
     async def join_voice_channel(self, channel_id: str):
         channel = self.guild.get_channel(int(channel_id))
@@ -150,7 +154,7 @@ class MusicPlayer:
         await self.notify_clients(self.guild_id)
         if not self.voice_client.is_playing() and self.current is None:
             self.next.set()
-            
+
     async def remove_from_queue(self, position: int):
         try:
             queue_list = list(self.queue)
@@ -159,7 +163,6 @@ class MusicPlayer:
                 self.queue = deque(queue_list)
         except IndexError:
             pass  # インデックスが範囲外の場合は無視
-
 
     async def pause(self):
         if self.voice_client.is_playing():
@@ -173,9 +176,6 @@ class MusicPlayer:
 
     async def skip(self):
         if self.voice_client.is_playing():
-            # 現在の曲を履歴に追加
-            if self.current:
-                self.history.append(self.current)
             self.voice_client.stop()
         await self.notify_clients(self.guild_id)
 
@@ -201,8 +201,10 @@ class MusicPlayer:
                 self.current = previous_song  # ダウンロード後に再度設定
 
             # 前の曲を再生
-            self.voice_client.play(discord.FFmpegPCMAudio(previous_song.source),
-                                after=lambda _: self.bot.loop.call_soon_threadsafe(self.next.set))
+            self.voice_client.play(
+                discord.FFmpegPCMAudio(previous_song.source),
+                after=lambda _: self.bot.loop.call_soon_threadsafe(self.next.set)
+            )
 
             # クライアントに通知
             await self.notify_clients(self.guild_id)
@@ -212,9 +214,6 @@ class MusicPlayer:
     async def reorder_queue(self, start_index: int, end_index: int):
         try:
             queue_list = list(self.queue)
-            # 再生中の曲（インデックス0）を移動させない
-            if start_index == 0 or end_index == 0:
-                return
             item = queue_list.pop(start_index)
             queue_list.insert(end_index, item)
             self.queue = deque(queue_list)

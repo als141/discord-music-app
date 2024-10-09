@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { api, setupWebSocket } from '@/utils/api';
+import { api, setupWebSocket, PlayableItem } from '@/utils/api';
 import { MainPlayer } from './MainPlayer';
 import { QueueList } from './QueueList';
 import { Header } from './Header';
@@ -183,7 +183,7 @@ export const MainApp: React.FC = () => {
   }, []);
   
   const swipeHandlers = useSwipeable({
-    onSwipedRight: () => setIsMenuOpen(true),
+    onSwipedRight: () => setIsMenuOpen(false),
     trackMouse: true,
     delta: 50,
   });
@@ -194,7 +194,7 @@ export const MainApp: React.FC = () => {
     trackMouse: false
   });
 
-  const handleAddToQueue = async (item: SearchItem) => {
+  const handleAddToQueue = async (item: PlayableItem) => {
     if (activeServerId) {
       const user = getUserInfo();
       if (!user) {
@@ -207,24 +207,10 @@ export const MainApp: React.FC = () => {
       }
       try {
         setIsLoading(true);
-        if (item.type === 'song' || item.type === 'video') {
-          await api.addUrl(activeServerId, item.url, user);
-        } else if (item.type === 'album' || item.type === 'single' || item.type === 'ep' || item.type === 'playlist') {
-          // Fetch the tracks
-          let tracks: Track[] = [];
-          if (item.type === 'playlist') {
-            tracks = await api.getPlaylistItems(item.browseId!);
-          } else {
-            tracks = await api.getAlbumItems(item.browseId!);
-          }
-          // Add each track to the queue
-          for (const track of tracks) {
-            await api.addUrl(activeServerId, track.url, user);
-          }
-        }
+        await api.addUrl(activeServerId, item.url, user);
         toast({
           title: "成功",
-          description: "曲がキューに追加されました。",
+          description: `"${item.title}" をキューに追加しました。`,
         });
       } catch (error) {
         console.error(error);
@@ -533,10 +519,11 @@ export const MainApp: React.FC = () => {
             </AnimatePresence>
             {!isMainPlayerVisible && (
               <HomeScreen
-                onSelectTrack={(item: SearchItem) => {
+                onSelectTrack={(item: PlayableItem) => {
                   handleAddToQueue(item);
                   setIsMainPlayerVisible(true);
                 }}
+                guildId={activeServerId}
               />
             )}
           </>
