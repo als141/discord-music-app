@@ -5,7 +5,6 @@ import { Inter } from 'next/font/google'
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
-import DifyChatButton from '@/components/DifyChatButton'
 import { SessionProvider } from 'next-auth/react' // 追加
 import { GuildProvider } from '@/contexts/GuildContext';
 
@@ -29,7 +28,6 @@ export default function RootLayout({
             <GuildProvider> {/* 追加 */}
             {children}
             <Toaster />
-            <DifyChatButton />
             </GuildProvider>
         </ThemeProvider>
           </SessionProvider>
