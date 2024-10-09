@@ -12,6 +12,9 @@ import { QueueList } from './QueueList'
 import { useToast } from '@/hooks/use-toast'
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem } from '@/components/ui/context-menu'
 import { useSwipeable } from 'react-swipeable'
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { useSession } from 'next-auth/react'
+import { User } from '@/utils/api'
 
 interface MainPlayerProps {
   currentTrack: Track | null
@@ -42,6 +45,7 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
   onClose,
   isVisible
 }) => {
+  const { data: session } = useSession()
   const [imageLoaded, setImageLoaded] = useState(false)
   const imageRef = useRef<HTMLImageElement>(null)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
@@ -94,8 +98,23 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
       })
       return
     }
+    const user: User | null = session && session.user ? {
+      id: session.user.id,
+      name: session.user.name || '',
+      image: session.user.image || '',
+    } : null;
+  
+    if (!user) {
+      // ユーザーがログインしていない場合の処理
+      toast({
+        title: "エラー",
+        description: "ログインが必要です。",
+        variant: "destructive",
+      });
+      return;
+    }  
     try {
-      await api.addUrl(guildId, track.url)
+      await api.addUrl(guildId, track.url, user)
       toast({
         title: '成功',
         description: '曲がキューに追加されました。',
@@ -213,7 +232,19 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
           >
             <h2 className="text-xl sm:text-2xl font-bold truncate">{currentTrack?.title}</h2>
             <p className="text-base sm:text-lg text-gray-300 mt-1 sm:mt-2">{currentTrack?.artist}</p>
-          </motion.div>
+            </motion.div>
+        <div className="flex items-center mt-4">
+          <Avatar>
+            {currentTrack?.added_by?.image ? (
+              <AvatarImage src={currentTrack.added_by.image} alt={currentTrack.added_by.name || 'Unknown'} />
+            ) : (
+              <AvatarFallback>U</AvatarFallback>
+            )}
+          </Avatar>
+          <span className="ml-2">
+            {currentTrack?.added_by?.name || 'Unknown'}さんが追加
+          </span>
+        </div>
           </div>
           <div className="w-full max-w-md">
           <div className="flex justify-center items-center space-x-4 sm:space-x-8 mb-4 sm:mb-8">

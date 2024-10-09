@@ -8,6 +8,7 @@ import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useToast } from '@/hooks/use-toast'
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
 interface QueueListProps {
   queue: Track[]
@@ -87,6 +88,18 @@ export const QueueList: React.FC<QueueListProps> = ({
           <div className="flex-grow overflow-hidden ml-4">
             <h3 className="font-semibold truncate">{truncateText(currentTrack?.title, 25)}</h3>
             <p className="text-sm text-muted-foreground truncate">{truncateText(currentTrack?.artist, 25)}</p>
+            <div className="flex items-center mt-2">
+            <Avatar>
+                {currentTrack?.added_by?.image ? (
+                  <AvatarImage src={currentTrack.added_by.image} alt={currentTrack.added_by.name || 'Unknown'} />
+                ) : (
+                  <AvatarFallback>U</AvatarFallback>
+                )}
+              </Avatar>
+              <span className="ml-2">
+                {currentTrack?.added_by?.name || 'Unknown'}さんが追加
+              </span>
+              </div>
           </div>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -137,6 +150,18 @@ export const QueueList: React.FC<QueueListProps> = ({
                 <div className="flex-grow overflow-hidden ml-4">
                   <h4 className="font-semibold truncate">{truncateText(track.title, 30)}</h4>
                   <p className="text-sm text-muted-foreground truncate">{truncateText(track.artist, 30)}</p>
+                  <div className="flex items-center mt-2">
+                    <Avatar>
+                      {track.added_by?.image ? (
+                        <AvatarImage src={track.added_by.image} alt={track.added_by.name || 'Unknown'} />
+                      ) : (
+                        <AvatarFallback>U</AvatarFallback>
+                      )}
+                    </Avatar>
+                    <span className="ml-2">
+                      {track.added_by?.name || 'Unknown'}さんが追加
+                    </span>
+                  </div>
                 </div>
                 <div className="flex items-center ml-4">
                   <Tooltip>

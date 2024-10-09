@@ -32,12 +32,13 @@ ytdl = yt_dlp.YoutubeDL(ytdl_format_options)
 guild_queues = defaultdict(asyncio.Queue)
 
 class Song:
-    def __init__(self, source, title, url, thumbnail, artist):
+    def __init__(self, source, title, url, thumbnail, artist, added_by=None):
         self.source = source
         self.title = title
         self.url = url
         self.thumbnail = thumbnail
         self.artist = artist
+        self.added_by = added_by  # ユーザー情報を追加
 
 class MusicPlayer:
     def __init__(self, bot, guild, guild_id, notify_clients):
@@ -111,20 +112,20 @@ class MusicPlayer:
             print(f"予期せぬエラー: {song.url}\n{e}")
             return None # エラー時はNoneを返す
 
-    def get_song_info(self, url):
+    def get_song_info(self, url, added_by=None):
         info = ytdl.extract_info(url, download=False)
 
         if 'entries' in info:
-            return [self._get_single_song_info(entry) for entry in info['entries']]
+            return [self._get_single_song_info(entry, added_by) for entry in info['entries']]
         else:
-            return [self._get_single_song_info(info)]
+            return [self._get_single_song_info(info, added_by)]
 
-    def _get_single_song_info(self, info):
+    def _get_single_song_info(self, info, added_by):
         title = info.get('title', 'Unknown Title')
         webpage_url = info.get('webpage_url', '')
         thumbnail = info.get('thumbnail', '')
         artist = info.get('uploader', 'Unknown Artist')
-        return Song(None, title, webpage_url, thumbnail, artist)
+        return Song(None, title, webpage_url, thumbnail, artist, added_by)
 
 
     async def join_voice_channel(self, channel_id: str):
@@ -141,9 +142,9 @@ class MusicPlayer:
         else:
             raise ValueError("Invalid voice channel")
 
-    async def add_to_queue(self, url):
+    async def add_to_queue(self, url, added_by=None):
         loop = asyncio.get_event_loop()
-        songs = await loop.run_in_executor(self.executor, self.get_song_info, url)
+        songs = await loop.run_in_executor(self.executor, self.get_song_info, url, added_by)
         for song in songs:
             self.queue.append(song)
         await self.notify_clients(self.guild_id)

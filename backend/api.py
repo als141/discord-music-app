@@ -34,11 +34,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+class User(BaseModel):
+    id: str
+    name: str
+    image: str
+
 class Track(BaseModel):
     title: str
     artist: str
     thumbnail: str
     url: str
+    added_by: Optional[User] = None  # ユーザー情報を追加
 
 class QueueItem(BaseModel):
     track: Track
@@ -58,6 +64,11 @@ class VoiceChannel(BaseModel):
 
 class AddUrlRequest(BaseModel):
     url: str
+    user: Optional[User] = None
+    
+class PlayTrackRequest(BaseModel):
+    track: Track
+    user: Optional[User] = None
 
 class ReorderRequest(BaseModel):
     start_index: int
@@ -90,10 +101,11 @@ async def notify_clients(guild_id: str):
             active_connections[guild_id].remove(connection) # エラーが発生した接続を削除
             if not active_connections[guild_id]:
                 del active_connections[guild_id]
+                
 async def add_and_play_track(guild_id: str, track: Track):
     player = music_players.get(guild_id)
     if player:
-        await player.add_to_queue(track.url)
+        await player.add_to_queue(track.url, added_by=track.added_by)
         # 再生はplayer内で制御するため、ここでは呼び出さない
 
 @app.get("/bot-guilds")
@@ -263,7 +275,8 @@ async def get_current_track(guild_id: str):
             title=player.current.title,
             artist=player.current.artist,
             thumbnail=player.current.thumbnail,
-            url=player.current.url
+            url=player.current.url,
+            added_by=player.current.added_by
         )
     return None
 
@@ -279,7 +292,8 @@ async def get_queue(guild_id: str):
                         title=item.title,
                         artist=item.artist,
                         thumbnail=item.thumbnail,
-                        url=item.url
+                        url=item.url,
+                        added_by=item.added_by
                     ),
                     position=i,
                     isCurrent=(i == 0)
@@ -294,7 +308,9 @@ async def is_playing(guild_id: str):
     return player.is_playing() if player else False
 
 @app.post("/play/{guild_id}")
-async def play_track(guild_id: str, track: Track, background_tasks: BackgroundTasks):
+async def play_track(guild_id: str, request: PlayTrackRequest, background_tasks: BackgroundTasks):
+    track = request.track
+    track.added_by = request.user
     background_tasks.add_task(add_and_play_track, guild_id, track)
     return {"message": "Track is being added to queue and will start playing soon"}
 
@@ -361,8 +377,10 @@ async def search(query: str):
 
 @app.post("/add-url/{guild_id}")
 async def add_url(guild_id: str, request: AddUrlRequest, background_tasks: BackgroundTasks):
-    background_tasks.add_task(add_and_play_track, guild_id, Track(url=request.url, title="Loading...", artist="Unknown", thumbnail=""))
+    track = Track(url=request.url, title="Loading...", artist="Unknown", thumbnail="", added_by=request.user)
+    background_tasks.add_task(add_and_play_track, guild_id, track)
     return {"message": "URL is being processed and will be added to queue soon"}
+
 
 @app.post("/reorder-queue/{guild_id}")
 async def reorder_queue(guild_id: str, reorder_request: ReorderRequest):

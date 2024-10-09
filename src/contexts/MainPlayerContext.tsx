@@ -5,6 +5,9 @@ import React, { createContext, useState, useEffect, useContext } from 'react';
 import { Track } from '@/utils/api';
 import { api } from '@/utils/api';
 import { useToast } from '@/hooks/use-toast';
+import { useSession } from 'next-auth/react';
+import { User } from '@/utils/api';
+
 
 // コンテキストの型定義
 interface MainPlayerContextProps {
@@ -34,6 +37,7 @@ const MainPlayerContext = createContext<MainPlayerContextProps>({
 export const useMainPlayer = () => useContext(MainPlayerContext);
 
 export const MainPlayerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { data: session } = useSession();
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [queue, setQueue] = useState<Track[]>([]);
@@ -48,6 +52,17 @@ export const MainPlayerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       fetchInitialState(savedServerId);
     }
   }, []);
+
+  const getUserInfo = (): User | null => {
+    if (session && session.user) {
+      return {
+        id: session.user.id,
+        name: session.user.name || '',
+        image: session.user.image || '',
+      };
+    }
+    return null;
+  };  
 
   // 初期状態の取得関数
   const fetchInitialState = async (guildId: string) => {
@@ -80,8 +95,19 @@ export const MainPlayerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       });
       return;
     }
+  
+    const user = getUserInfo();
+    if (!user) {
+      toast({
+        title: 'エラー',
+        description: 'ユーザー情報を取得できませんでした。',
+        variant: 'destructive',
+      });
+      return;
+    }
+  
     try {
-      await api.playTrack(activeServerId, track);
+      await api.playTrack(activeServerId, track, user);
       setCurrentTrack(track);
       setIsPlaying(true);
       // キューに追加
@@ -95,6 +121,7 @@ export const MainPlayerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       });
     }
   };
+  
 
   // 楽曲の一時停止
   const pauseTrack = async () => {

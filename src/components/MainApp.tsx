@@ -19,6 +19,7 @@ import { useSwipeable } from 'react-swipeable';
 import { useSession, signIn } from 'next-auth/react';
 import { useGuilds } from '@/contexts/GuildContext';
 import Image from 'next/image';
+import { User } from '@/utils/api';
 
 declare global {
   interface BigInt {
@@ -150,6 +151,18 @@ export const MainApp: React.FC = () => {
       }
     };
   }, [activeServerId, toast]);
+  
+  // ユーザー情報を取得する関数を作成
+  const getUserInfo = (): User | null => {
+    if (session && session.user) {
+      return {
+        id: session.user.id,
+        name: session.user.name || '',
+        image: session.user.image || '',
+      };
+    }
+    return null;
+  };
 
   const handleInviteBot = (serverId: string) => {
     const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID;
@@ -183,21 +196,27 @@ export const MainApp: React.FC = () => {
   
   const handleAddTrackToQueue = async (track: Track) => {
     if (activeServerId) {
+      const user = getUserInfo();
+      if (!user) {
+        toast({
+          title: "エラー",
+          description: "ユーザー情報を取得できませんでした。",
+          variant: "destructive",
+        });
+        return;
+      }
       try {
-        await api.addUrl(activeServerId, track.url);
+        await api.addUrl(activeServerId, track.url, user);
         toast({
           title: "成功",
           description: "曲がキューに追加されました。",
         });
       } catch (error) {
+        // エラーハンドリング
         console.error(error);
-        toast({
-          title: "エラー",
-          description: "曲の追加に失敗しました。",
-          variant: "destructive",
-        });
       }
     } else {
+      // サーバーが選択されていない場合のエラーハンドリング
       toast({
         title: "エラー",
         description: "サーバーが選択されていません。",
@@ -286,19 +305,24 @@ export const MainApp: React.FC = () => {
 
   const handleAddUrl = async (url: string) => {
     if (activeServerId) {
+      const user = getUserInfo();
+      if (!user) {
+        toast({
+          title: "エラー",
+          description: "ユーザー情報を取得できませんでした。",
+          variant: "destructive",
+        });
+        return;
+      }
       try {
-        await api.addUrl(activeServerId, url);
+        await api.addUrl(activeServerId, url, user);
         toast({
           title: "成功",
           description: "URLが追加されました。",
         });
       } catch (error) {
+        // エラーハンドリング
         console.error(error);
-        toast({
-          title: "エラー",
-          description: "URLの追加に失敗しました。",
-          variant: "destructive",
-        });
       }
     }
   };
@@ -425,33 +449,38 @@ export const MainApp: React.FC = () => {
           <div className="h-full flex items-center justify-center">
             <Loader2 className="w-8 h-8 animate-spin" />
           </div>
-        ) : isSearchActive ? (
-          <SearchResults
-            results={searchResults}
-            onAddToQueue={async (track: Track) => {
-              if (activeServerId) {
-                try {
-                  setIsLoading(true);
-                  await api.playTrack(activeServerId, track);
-                  setIsSearchActive(false);
-                  toast({
-                    title: "成功",
-                    description: "曲がキューに追加されました。",
-                  });
-                } catch (error) {
-                  console.error(error);
-                  toast({
-                    title: "エラー",
-                    description: "曲の追加に失敗しました。",
-                    variant: "destructive",
-                  });
-                } finally {
-                  setIsLoading(false);
-                }
+      ) : isSearchActive ? (
+        <SearchResults
+          results={searchResults}
+          onAddToQueue={async (track: Track) => {
+            if (activeServerId) {
+              const user = getUserInfo();
+              if (!user) {
+                toast({
+                  title: "エラー",
+                  description: "ユーザー情報を取得できませんでした。",
+                  variant: "destructive",
+                });
+                return;
               }
-            }}
-            onClose={() => setIsSearchActive(false)}
-            onSearch={handleSearch}
+              try {
+                setIsLoading(true);
+                await api.playTrack(activeServerId, track, user);
+                setIsSearchActive(false);
+                toast({
+                  title: "成功",
+                  description: "曲がキューに追加されました。",
+                });
+              } catch (error) {
+                // エラーハンドリング
+                console.error(error);
+              } finally {
+                setIsLoading(false);
+              }
+            }
+          }}
+          onClose={() => setIsSearchActive(false)}
+          onSearch={handleSearch}
           />
         ) : (
           <>

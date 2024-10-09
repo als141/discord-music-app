@@ -6,11 +6,18 @@ if (!API_URL) {
   throw new Error('API URL is not defined. Please set NEXT_PUBLIC_API_URL environment variable.');
 }
 
+export interface User {
+  id: string;
+  name: string | null;
+  image: string | null;
+}
+
 export interface Track {
   title: string;
   artist: string;
   thumbnail: string;
   url: string;
+  added_by?: User; // フィールド名を 'added_by' に修正
 }
 
 export interface QueueItem {
@@ -76,8 +83,8 @@ export const api = {
     return response.data;
   },
 
-  playTrack: async (guildId: string, track: Track): Promise<void> => {
-    await axios.post(`${API_URL}/play/${guildId}`, track);
+  playTrack: async (guildId: string, track: Track, user: User): Promise<void> => {
+    await axios.post(`${API_URL}/play/${guildId}`, { track, user });
   },
 
   pausePlayback: async (guildId: string): Promise<void> => {
@@ -101,8 +108,8 @@ export const api = {
     return response.data.tracks;
   },
 
-  addUrl: async (guildId: string, url: string): Promise<void> => {
-    await axios.post(`${API_URL}/add-url/${guildId}`, { url });
+  addUrl: async (guildId: string, url: string, user: User): Promise<void> => {
+    await axios.post(`${API_URL}/add-url/${guildId}`, { url, user });
   },
 
   reorderQueue: async (guildId: string, startIndex: number, endIndex: number): Promise<void> => {
