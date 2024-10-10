@@ -15,6 +15,7 @@ interface HomeScreenProps {
   guildId: string | null;
   activeTab: string;                        // 追加
   onTabChange: (tab: string) => void;       // 追加
+  history: QueueItem[];                     // 追加
 }
 
 interface StoredData {

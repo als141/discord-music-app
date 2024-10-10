@@ -70,6 +70,7 @@ export interface VoiceChannel {
 interface QueueData {
   queue: QueueItem[];
   is_playing: boolean;
+  history: QueueItem[];
 }
 
 export const api = {

@@ -52,6 +52,7 @@ export const MainApp: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isMainPlayerVisible, setIsMainPlayerVisible] = useState(false);
   const [homeActiveTab, setHomeActiveTab] = useState<string>('home');
+  const [history, setHistory] = useState<QueueItem[]>([])
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -128,6 +129,7 @@ export const MainApp: React.FC = () => {
             setCurrentTrack(currentTrackItem?.track || null);
             setQueue(queueItems.filter(item => !item.isCurrent).map(item => item.track));
             setIsPlaying(data.is_playing);
+            setHistory(data.history);
           });
           wsRef.current = ws;
         } catch (error) {
@@ -527,6 +529,7 @@ export const MainApp: React.FC = () => {
                 guildId={activeServerId}
                 activeTab={homeActiveTab}                 // 追加
                 onTabChange={(tab) => setHomeActiveTab(tab)} // 追加
+                history={history}
               />
             )}
           </>

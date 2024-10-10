@@ -96,12 +96,14 @@ async def notify_clients(guild_id: str):
             current_track = await get_current_track(guild_id)
             queue = await get_queue(guild_id)
             is_playing_status = await is_playing(guild_id)
+            history = await get_history(guild_id) # 変更点: 履歴を取得
             await connection.send_json({
                 "type": "update",
                 "data": {
                     "current_track": jsonable_encoder(current_track),
                     "queue": jsonable_encoder(queue),
-                    "is_playing": is_playing_status
+                    "is_playing": is_playing_status,
+                    "history": jsonable_encoder(history) # 変更点: 履歴を追加
                 }
             })
         except WebSocketDisconnect:
@@ -376,6 +378,7 @@ async def skip(guild_id: str):
     player = music_players.get(guild_id)
     if player:
         await player.skip()
+        await notify_clients(guild_id)
         return {"message": "Skipped to next track"}
     raise HTTPException(status_code=404, detail="No active music player found")
 
@@ -384,6 +387,7 @@ async def previous(guild_id: str):
     player = music_players.get(guild_id)
     if player:
         await player.previous()
+        await notify_clients(guild_id)
         return {"message": "Moved to previous track"}
     raise HTTPException(status_code=404, detail="No active music player found")
 
