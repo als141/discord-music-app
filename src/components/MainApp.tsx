@@ -535,7 +535,7 @@ export const MainApp: React.FC = () => {
           </>
         )}
       </main>
-      {currentTrack && !isMainPlayerVisible && homeActiveTab !== 'chat' && (
+      {currentTrack && !isMainPlayerVisible && homeActiveTab !== 'chat' && homeActiveTab !== 'ai-recommend' && (
         <motion.div
         className="fixed bottom-0 left-0 right-0 bg-card p-4 flex items-center cursor-pointer"
         onClick={() => setIsMainPlayerVisible(true)}

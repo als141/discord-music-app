@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { ChatScreen } from './ChatScreen'
+import { AIRecommendScreen } from './AIRecommendScreen'
 import { PlayableItem, SearchItem, api, QueueItem } from '@/utils/api'
 import { useToast } from '@/hooks/use-toast'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import Image from 'next/image'
-import { Play, User, History, Sparkles, BarChart3 } from 'lucide-react'
+import { Play, User, History, Sparkles, BarChart3, Home, MessageSquare, Brain } from 'lucide-react'
+import { motion } from 'framer-motion'
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
@@ -33,6 +35,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack, guildId, 
   const [history, setHistory] = useState<QueueItem[]>([])
   const [loading, setLoading] = useState(true)
   const { toast } = useToast()
+  const tabs = [
+    { id: 'home', label: 'ホーム', icon: <Home className="w-5 h-5" /> },
+    { id: 'chat', label: 'チャット', icon: <MessageSquare className="w-5 h-5" /> },
+    { id: 'ai-recommend', label: 'AIリコメンド', icon: <Brain className="w-5 h-5" /> },
+  ]
 
   useEffect(() => {
     const fetchData = async () => {
@@ -253,12 +260,28 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack, guildId, 
 
   return (
     <div className="flex flex-col h-full">
-      <Tabs value={activeTab} onValueChange={onTabChange} className="w-full h-full flex flex-col">
-        <TabsList className="flex">
-          <TabsTrigger value="home">ホーム</TabsTrigger>
-          <TabsTrigger value="chat">チャット</TabsTrigger>
-        </TabsList>
-        <TabsContent value="home" className="flex-grow overflow-auto">
+      <div className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-25 flex justify-center py-4 sticky top-0">
+        <nav className="flex space-x-1 p-1 rounded-full bg-muted">
+          {tabs.map((tab) => (
+            <motion.button
+              key={tab.id}
+              className={`${
+                activeTab === tab.id
+                  ? 'bg-background text-foreground'
+                  : 'text-muted-foreground'
+              } flex items-center px-4 py-2 text-sm font-medium rounded-full transition-colors duration-200`}
+              onClick={() => onTabChange(tab.id)}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              {tab.icon}
+              <span className="ml-2">{tab.label}</span>
+            </motion.button>
+          ))}
+        </nav>
+      </div>
+      <div className="flex-grow overflow-hidden">
+        {activeTab === 'home' && (
           <ScrollArea className="h-full">
             {loading ? (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full p-4">
@@ -290,11 +313,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack, guildId, 
               </div>
             )}
           </ScrollArea>
-        </TabsContent>
-        <TabsContent value="chat" className="flex-grow overflow-hidden">
-          <ChatScreen />
-        </TabsContent>
-      </Tabs>
+        )}
+        {activeTab === 'chat' && <ChatScreen />}
+        {activeTab === 'ai-recommend' && <AIRecommendScreen onSelectTrack={onSelectTrack} />}
+      </div>
     </div>
   )
 }
