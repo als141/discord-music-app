@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { ChatScreen } from './ChatScreen'
 import { AIRecommendScreen } from './AIRecommendScreen'
 import { PlayableItem, SearchItem, api, QueueItem } from '@/utils/api'
