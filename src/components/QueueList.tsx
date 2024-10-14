@@ -80,49 +80,56 @@ export const QueueList: React.FC<QueueListProps> = ({
           </motion.div>
         )}
 
-        <div className="flex items-center p-4 bg-card" aria-label="現在再生中の曲">
-          <Image
-            src={currentTrack?.thumbnail || '/default_thumbnail.png'}
-            alt={currentTrack?.title || 'No track selected'}
-            width={64}
-            height={64}
-            className="rounded-md"
-          />
-          <div className="flex-grow overflow-hidden ml-4">
-            <h3 className="font-semibold truncate">{truncateText(currentTrack?.title, 25)}</h3>
-            <p className="text-sm text-muted-foreground truncate">{truncateText(currentTrack?.artist, 25)}</p>
-            {/* オンデバイスモードでない場合のみ表示 */}
-            {!isOnDeviceMode && currentTrack?.added_by && (
-              <div className="flex items-center mt-2">
-                <Avatar>
-                  {currentTrack.added_by.image ? (
-                    <AvatarImage src={currentTrack.added_by.image} alt={currentTrack.added_by.name || 'Unknown'} />
-                  ) : (
-                    <AvatarFallback>U</AvatarFallback>
-                  )}
-                </Avatar>
-                <span className="ml-2">
-                  {currentTrack.added_by.name || 'Unknown'}さんが追加
-                </span>
+<div className="flex items-center p-4 bg-card" aria-label="現在再生中の曲">
+          {currentTrack ? (
+            <>
+              <Image
+                src={currentTrack.thumbnail || '/default_thumbnail.png'}
+                alt={currentTrack.title || 'No track selected'}
+                width={64}
+                height={64}
+                className="rounded-md"
+              />
+              <div className="flex-grow overflow-hidden ml-4">
+                <h3 className="font-semibold truncate">{truncateText(currentTrack.title, 25)}</h3>
+                <p className="text-sm text-muted-foreground truncate">{truncateText(currentTrack.artist, 25)}</p>
+                {!isOnDeviceMode && currentTrack.added_by && (
+                  <div className="flex items-center mt-2">
+                    <Avatar>
+                      {currentTrack.added_by.image ? (
+                        <AvatarImage src={currentTrack.added_by.image} alt={currentTrack.added_by.name || 'Unknown'} />
+                      ) : (
+                        <AvatarFallback>U</AvatarFallback>
+                      )}
+                    </Avatar>
+                    <span className="ml-2">
+                      {currentTrack.added_by.name || 'Unknown'}さんが追加
+                    </span>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                onClick={onPlayPause}
-                variant="ghost"
-                size="icon"
-                className="ml-2"
-                aria-label={isPlaying ? "一時停止" : "再生"}
-              >
-                {isPlaying ? <PauseIcon size={24} /> : <PlayIcon size={24} />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{isPlaying ? "一時停止" : "再生"}</p>
-            </TooltipContent>
-          </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={onPlayPause}
+                    variant="ghost"
+                    size="icon"
+                    className="ml-2"
+                    aria-label={isPlaying ? "一時停止" : "再生"}
+                  >
+                    {isPlaying ? <PauseIcon size={24} /> : <PlayIcon size={24} />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{isPlaying ? "一時停止" : "再生"}</p>
+                </TooltipContent>
+              </Tooltip>
+            </>
+          ) : (
+            <div className="flex-grow text-center">
+              <p className="text-muted-foreground">再生中の曲がありません</p>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-between p-4 border-b border-border">
