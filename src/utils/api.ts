@@ -97,6 +97,10 @@ export const api = {
     await axios.post(`${API_URL}/join-voice-channel/${serverId}/${channelId}`);
   },
 
+  disconnectVoiceChannel: async (guildId: string): Promise<void> => {
+    await axios.post(`${API_URL}/disconnect-voice-channel/${guildId}`);
+  },
+
   getCurrentTrack: async (guildId: string): Promise<Track | null> => {
     const response = await axios.get(`${API_URL}/current-track/${guildId}`);
     return response.data;

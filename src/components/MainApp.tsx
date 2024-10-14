@@ -60,7 +60,6 @@ export const MainApp: React.FC = () => {
   const [searchResults, setSearchResults] = useState<SearchItem[]>([]); // 型を修正
   const [isSearchActive, setIsSearchActive] = useState(false);
   const { toast } = useToast();
-  const [botVoiceChannelId, setBotVoiceChannelId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isMainPlayerVisible, setIsMainPlayerVisible] = useState(false);
   const [homeActiveTab, setHomeActiveTab] = useState<string>('home');
@@ -231,7 +230,6 @@ export const MainApp: React.FC = () => {
           ]);
 
           setVoiceChannels(channels);
-          setBotVoiceChannelId(botStatus);
           if (botStatus) setActiveChannelId(botStatus);
 
           const currentTrackItem = queueResponse.find(item => item.isCurrent);
@@ -511,42 +509,53 @@ export const MainApp: React.FC = () => {
     }
   };
 
-  const handleSelectServer = (serverId: string) => {
-    // botServersをmutualServersに変更
-    const serverExists = mutualServers.some((server) => server.id === serverId);
-    if (serverExists) {
-      setActiveServerId(serverId);
-      setActiveChannelId(null);
+  const handleSelectServer = (serverId: string | null) => { // string | null に変更
+    if (serverId) {
+      const serverExists = mutualServers.some((server) => server.id === serverId);
+      if (serverExists) {
+        setActiveServerId(serverId);
+        setActiveChannelId(null);
+      } else {
+        toast({
+          title: "エラー",
+          description: "選択したサーバーは利用できません。",
+          variant: "destructive",
+        });
+      }
     } else {
-      toast({
-        title: "エラー",
-        description: "選択したサーバーは利用できません。",
-        variant: "destructive",
-      });
+      // サーバーをnullに設定（切断後）
+      setActiveServerId(null);
+      setActiveChannelId(null);
     }
   };
   
 
-  const handleSelectChannel = async (channelId: string) => {
-    if (activeServerId && channelId !== botVoiceChannelId) {
-      try {
-        await api.joinVoiceChannel(activeServerId, channelId);
-        setActiveChannelId(channelId);
-        setBotVoiceChannelId(channelId);
-        toast({
-          title: "成功",
-          description: "ボイスチャンネルに参加しました。",
+  const handleSelectChannel = (channelId: string | null) => {
+    if (channelId) {
+      // 非同期処理を内部でハンドリング
+      api.joinVoiceChannel(activeServerId!, channelId)
+        .then(() => {
+          setActiveChannelId(channelId);
+          toast({
+            title: "成功",
+            description: "ボイスチャネルに参加しました。",
+          });
+          // 必要に応じて追加のロジック
+        })
+        .catch((error) => {
+          console.error('ボイスチャネルへの参加に失敗しました:', error);
+          toast({
+            title: "エラー",
+            description: "ボイスチャネルへの参加に失敗しました。",
+            variant: "destructive",
+          });
         });
-      } catch (error) {
-        console.error(error);
-        toast({
-          title: "エラー",
-          description: "ボイスチャンネルへの参加に失敗しました。",
-          variant: "destructive",
-        });
-      }
+    } else {
+      // `null` の場合の処理
+      setActiveChannelId(null);
     }
   };
+  
 
   const handleDeleteFromQueue = async (index: number) => {
     if (activeServerId) {
@@ -609,7 +618,6 @@ export const MainApp: React.FC = () => {
             onSelectChannel={handleSelectChannel}
             onRefresh={handleRefresh}
             onInviteBot={handleInviteBot}
-            
           />
         )}
       </AnimatePresence>

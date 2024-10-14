@@ -214,6 +214,18 @@ async def get_bot_guilds():
         })
     return bot_guilds
 
+@app.post("/disconnect-voice-channel/{guild_id}")
+async def disconnect_voice_channel(guild_id: str):
+    guild = bot.get_guild(int(guild_id))
+    if guild and guild.voice_client:
+        await guild.voice_client.disconnect()
+        # MusicPlayerのインスタンスを削除
+        if guild_id in music_players:
+            del music_players[guild_id]
+        await notify_clients(guild_id)
+        return {"message": "ボイスチャネルから切断しました"}
+    raise HTTPException(status_code=404, detail="指定されたギルドでボットはボイスチャネルに接続されていません")
+
 @app.websocket("/ws/{guild_id}")
 async def websocket_endpoint(websocket: WebSocket, guild_id: str):
     await websocket.accept()
