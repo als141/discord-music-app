@@ -730,15 +730,16 @@ export const MainApp: React.FC = () => {
             alt={isOnDeviceMode ? deviceCurrentTrack!.title : currentTrack!.title} 
             width={48} 
             height={48} 
-            className="object-cover rounded-md"
+            className="object-cover rounded-md flex-shrink-0"
             unoptimized
           />
-          <div className="ml-4 flex-grow">
+          <div className="ml-4 flex-grow min-w-0 mr-4">
             <h4 className="font-semibold truncate">{isOnDeviceMode ? deviceCurrentTrack!.title : currentTrack!.title}</h4>
             <p className="text-muted-foreground truncate">{isOnDeviceMode ? deviceCurrentTrack!.artist : currentTrack!.artist}</p>
           </div>
           <Button
             variant="ghost" 
+            className="flex-shrink-0"
             onClick={(e) => { 
               e.stopPropagation(); 
               if (isOnDeviceMode) {

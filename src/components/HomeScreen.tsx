@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { ChatScreen } from './ChatScreen'
 import { AIRecommendScreen } from './AIRecommendScreen'
 import { PlayableItem, SearchItem, api, QueueItem } from '@/utils/api'
@@ -102,7 +102,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack, guildId, 
     fetchHistory();
   }, [guildId, toast]);
 
-  const renderItem = (item: SearchItem, index: number) => (
+  const renderItem = useCallback((item: SearchItem, index: number) => (
     <TooltipProvider key={`item-${index}`}>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -134,9 +134,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack, guildId, 
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
-  )
+  ), [onSelectTrack])
 
-  const renderHistoryItem = (item: QueueItem, index: number) => (
+  const renderHistoryItem = useCallback((item: QueueItem, index: number) => (
     <TooltipProvider key={`history-${index}`}>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -186,9 +186,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack, guildId, 
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
-  )
+  ), [onSelectTrack])
 
-  const renderSkeletonItem = (key: number) => (
+  const renderSkeletonItem = useCallback((key: number) => (
     <Card key={`skeleton-${key}`} className="overflow-hidden h-full">
       <CardContent className="p-0 h-full">
         <Skeleton className="w-full pt-[100%]" />
@@ -198,15 +198,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack, guildId, 
         </div>
       </CardContent>
     </Card>
-  )
+  ), [])
 
-  const ScrollableSectionForSearchItems: React.FC<{ 
+  const ScrollableSectionForSearchItems = useCallback<React.FC<{ 
     title: string; 
     icon: React.ReactNode;
     items: SearchItem[]; 
     renderItem: (item: SearchItem, index: number) => React.ReactNode; 
     reverse?: boolean 
-  }> = ({ title, icon, items, renderItem, reverse = false }) => {
+  }>>(({ title, icon, items, renderItem, reverse = false }) => {
     return (
       <div className="mb-8 w-full">
         <div className="flex items-center mb-4">
@@ -227,15 +227,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack, guildId, 
         </ScrollArea>
       </div>
     );
-  };
-  
-  const ScrollableSectionForQueueItems: React.FC<{ 
+  }, []);
+
+  const ScrollableSectionForQueueItems = useCallback<React.FC<{ 
     title: string; 
     icon: React.ReactNode;
     items: QueueItem[]; 
     renderItem: (item: QueueItem, index: number) => React.ReactNode; 
     reverse?: boolean 
-  }> = ({ title, icon, items, renderItem, reverse = false }) => {
+  }>>(({ title, icon, items, renderItem, reverse = false }) => {
     return (
       <div className="mb-8 w-full">
         <div className="flex items-center mb-4">
@@ -256,7 +256,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack, guildId, 
         </ScrollArea>
       </div>
     );
-  };
+  }, []);
 
   return (
     <div className="flex flex-col h-full">
@@ -320,3 +320,5 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack, guildId, 
     </div>
   )
 }
+
+HomeScreen.displayName = 'HomeScreen'
