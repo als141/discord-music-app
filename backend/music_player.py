@@ -116,6 +116,10 @@ class MusicPlayer:
         except Exception as e:
             print(f"予期せぬエラー: {song.url}\n{e}")
             return None  # エラー時はNoneを返す
+        
+    async def set_volume(self, volume: float):
+        if self.voice_client and self.voice_client.source:
+            self.voice_client.source.volume = volume
 
     def get_song_info(self, url, added_by=None):
         info = ytdl.extract_info(url, download=False)

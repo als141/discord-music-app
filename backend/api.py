@@ -1,10 +1,10 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict
 import asyncio
 from bot import bot, music_players
-from music_player import MusicPlayer, Song
+from music_player import MusicPlayer, Song, MUSIC_DIR, OAUTH2_USERNAME, OAUTH2_PASSWORD
 import yt_dlp
 import uvicorn
 from fastapi.encoders import jsonable_encoder
@@ -13,6 +13,9 @@ import os
 from ytmusicapi import YTMusic
 from discord import utils
 import chat
+from fastapi.responses import StreamingResponse, Response
+import aiofiles
+import urllib.parse
 
 ytmusic = YTMusic("oauth.json", language='ja', location='JP')
 
@@ -122,6 +125,84 @@ async def add_and_play_track(guild_id: str, track: Track):
     if player:
         await player.add_to_queue(track.url, added_by=track.added_by)
         # 再生はplayer内で制御するため、ここでは呼び出さない
+
+@app.get("/stream")
+async def stream_audio(request: Request, url: str):
+    decoded_url = urllib.parse.unquote(url)
+    try:
+        # 楽曲をダウンロード（既にダウンロード済みであればスキップ）
+        ytdl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': f'{MUSIC_DIR}/%(title)s-%(id)s.%(ext)s',
+            'restrictfilenames': True,
+            'noplaylist': False,
+            'nocheckcertificate': True,
+            'ignoreerrors': False,
+            'quiet': True,
+            'no_warnings': True,
+            'default_search': 'auto',
+            'source_address': '0.0.0.0',
+            'username': OAUTH2_USERNAME,
+            'password': OAUTH2_PASSWORD,
+        }
+        with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
+            info = ydl.extract_info(decoded_url, download=False)
+            if 'entries' in info:
+                info = info['entries'][0]
+            filename = ydl.prepare_filename(info)
+            if not os.path.exists(filename):
+                ydl.download([decoded_url])
+
+        file_size = os.path.getsize(filename)
+        headers = {}
+        status_code = 200
+
+        range_header = request.headers.get('Range')
+        if range_header:
+            range_start, range_end = range_header.strip().strip('bytes=').split('-')
+            range_start = int(range_start) if range_start else 0
+            range_end = int(range_end) if range_end else file_size - 1
+            content_length = (range_end - range_start) + 1
+
+            async def iterfile():
+                async with aiofiles.open(filename, 'rb') as f:
+                    await f.seek(range_start)
+                    remaining = content_length
+                    while remaining > 0:
+                        chunk_size = min(1024 * 1024, remaining)
+                        chunk = await f.read(chunk_size)
+                        if not chunk:
+                            break
+                        yield chunk
+                        remaining -= len(chunk)
+
+            headers['Content-Range'] = f'bytes {range_start}-{range_end}/{file_size}'
+            headers['Accept-Ranges'] = 'bytes'
+            headers['Content-Length'] = str(content_length)
+            status_code = 206
+        else:
+            async def iterfile():
+                async with aiofiles.open(filename, 'rb') as f:
+                    chunk = await f.read(1024 * 1024)
+                    while chunk:
+                        yield chunk
+                        chunk = await f.read(1024 * 1024)
+            headers['Content-Length'] = str(file_size)
+
+        return StreamingResponse(iterfile(), media_type="audio/mpeg", headers=headers, status_code=status_code)
+    except Exception as e:
+        print(f"ストリーミング中にエラーが発生しました: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/set-volume/{guild_id}")
+async def set_volume(guild_id: str, volume: float):
+    if not 0.0 <= volume <= 1.0:
+        raise HTTPException(status_code=400, detail="Volume must be between 0.0 and 1.0")
+    player = music_players.get(guild_id)
+    if player:
+        await player.set_volume(volume)
+        return {"message": "Volume set"}
+    raise HTTPException(status_code=404, detail="No active music player found")
 
 @app.get("/bot-guilds")
 async def get_bot_guilds():

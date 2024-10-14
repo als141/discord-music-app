@@ -1,14 +1,13 @@
 // layout.tsx
 'use client'
 
-import { Inter } from 'next/font/google'
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
 import { SessionProvider } from 'next-auth/react' // 追加
 import { GuildProvider } from '@/contexts/GuildContext';
-
-const inter = Inter({ subsets: ['latin'] })
+import { PlaybackProvider } from '@/contexts/PlaybackContext';
+import { VolumeProvider } from '@/contexts/VolumeContext'; // 追加
 
 export default function RootLayout({
   children,
@@ -17,21 +16,25 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ja" suppressHydrationWarning>
-      <body className={inter.className}>
-        <SessionProvider> {/* 追加 */}
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-            <GuildProvider> {/* 追加 */}
-            {children}
-            <Toaster />
+      <body>
+        <SessionProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <GuildProvider>
+              <PlaybackProvider>
+                <VolumeProvider> {/* VolumeProvider を追加 */}
+                  {children}
+                  <Toaster />
+                </VolumeProvider>
+              </PlaybackProvider>
             </GuildProvider>
-        </ThemeProvider>
-          </SessionProvider>
+          </ThemeProvider>
+        </SessionProvider>
       </body>
     </html>
-  )
+  );
 }

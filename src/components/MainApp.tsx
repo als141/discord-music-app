@@ -5,7 +5,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { api, setupWebSocket, PlayableItem } from '@/utils/api';
 import { MainPlayer } from './MainPlayer';
-import { QueueList } from './QueueList';
 import { Header } from './Header';
 import { SideMenu } from './SideMenu';
 import { SearchResults } from './SearchResults';
@@ -20,6 +19,10 @@ import { useSession, signIn } from 'next-auth/react';
 import { useGuilds } from '@/contexts/GuildContext';
 import Image from 'next/image';
 import { User } from '@/utils/api';
+import { usePlayback } from '@/contexts/PlaybackContext';
+import { VolumeProvider, useVolume } from '@/contexts/VolumeContext';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 declare global {
   interface BigInt {
@@ -33,6 +36,7 @@ BigInt.prototype.toJSON = function() {
 
 export const MainApp: React.FC = () => {
   const { data: session, status } = useSession(); 
+  const { setCurrentTime, setDuration, audioRef } = usePlayback()
   const { botServers } = useGuilds();
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [queue, setQueue] = useState<Track[]>([]);
@@ -42,8 +46,15 @@ export const MainApp: React.FC = () => {
   const [activeServerId, setActiveServerId] = useState<string | null>(null);
   const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
 
+  const [isOnDeviceMode, setIsOnDeviceMode] = useState(false);
+
+  // オンデバイス用のキューと再生状態を管理
+  const [deviceQueue, setDeviceQueue] = useState<Track[]>([]);
+  const [deviceCurrentTrack, setDeviceCurrentTrack] = useState<Track | null>(null);
+  const [deviceIsPlaying, setDeviceIsPlaying] = useState(false);
+  const { volume } = useVolume(); // 音量を取得
+
   const [voiceChannels, setVoiceChannels] = useState<VoiceChannel[]>([]);
-  const [isQueueOpen, setIsQueueOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchItem[]>([]); // 型を修正
   const [isSearchActive, setIsSearchActive] = useState(false);
@@ -96,7 +107,115 @@ export const MainApp: React.FC = () => {
     }
   }, [activeChannelId]);
   
+  // 楽曲が変更されたときの処理を修正
+  useEffect(() => {
+    if (deviceCurrentTrack) {
+      setIsLoading(true); // ローディング開始
+      const playPromise = audioRef.current?.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            setDeviceIsPlaying(true);
+            setIsLoading(false); // ローディング終了
+          })
+          .catch((error) => {
+            console.error('再生エラー:', error);
+            setIsLoading(false);
+          });
+      }
+    }
+  }, [deviceCurrentTrack]);
 
+  useEffect(() => {
+    if (isOnDeviceMode && audioRef?.current) {
+      audioRef.current.volume = volume;
+    }
+  }, [volume, isOnDeviceMode]);
+
+  // オンデバイス用の再生関数を修正
+  const handleDevicePlay = () => {
+    setIsLoading(true); // ローディング開始
+    const playPromise = audioRef.current?.play();
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          setDeviceIsPlaying(true);
+          setIsLoading(false); // ローディング終了
+        })
+        .catch((error) => {
+          console.error('再生エラー:', error);
+          setIsLoading(false);
+        });
+    }
+  };
+  
+  const handleDevicePause = () => {
+    audioRef.current?.pause();
+    setDeviceIsPlaying(false);
+  };
+
+  const handleDeviceSkip = () => {
+    if (deviceQueue.length > 0) {
+      const nextTrack = deviceQueue[0];
+      setDeviceCurrentTrack(nextTrack);
+      setDeviceQueue(deviceQueue.slice(1));
+    } else {
+      setDeviceCurrentTrack(null);
+      setDeviceIsPlaying(false);
+    }
+  };
+
+  const handleDevicePrevious = () => {
+    // 必要に応じて実装
+  };
+
+  // オンデバイスモードのときに再生位置を管理
+  useEffect(() => {
+    if (isOnDeviceMode && audioRef?.current) {
+      const audio = audioRef.current;
+      const updateTime = () => {
+        setCurrentTime(audio.currentTime);
+      };
+      const updateDuration = () => {
+        setDuration(audio.duration);
+      };
+      audio.addEventListener('timeupdate', updateTime);
+      audio.addEventListener('durationchange', updateDuration);
+      return () => {
+        audio.removeEventListener('timeupdate', updateTime);
+        audio.removeEventListener('durationchange', updateDuration);
+      };
+    }
+  }, [isOnDeviceMode, audioRef, setCurrentTime, setDuration]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (audio) {
+      const handleCanPlay = () => {
+        setIsLoading(false); // ローディング終了
+      };
+  
+      audio.addEventListener('canplay', handleCanPlay);
+  
+      return () => {
+        audio.removeEventListener('canplay', handleCanPlay);
+      };
+    }
+  }, [audioRef]);
+
+  // 楽曲を追加する関数を修正
+  const handleDeviceAddToQueue = async (item: PlayableItem) => {
+    if (!deviceCurrentTrack) {
+      setDeviceCurrentTrack(item);
+      // ローディング状態は useEffect 内で管理される
+    } else {
+      setDeviceQueue([...deviceQueue, item]);
+      toast({
+        title: "成功",
+        description: `"${item.title}" をキューに追加しました。`,
+      });
+    }
+  };
 
   useEffect(() => {
     const fetchServerData = async () => {
@@ -467,124 +586,196 @@ export const MainApp: React.FC = () => {
   }
 
   return (
+    <VolumeProvider>
     <div className="h-screen bg-background text-foreground flex flex-col" {...swipeHandlers}>
       <Header
         onSearch={handleSearch}
         onAddUrl={handleAddUrl}
         onOpenMenu={() => setIsMenuOpen(true)}
+        isOnDeviceMode={isOnDeviceMode}
+        onToggleDeviceMode={() => setIsOnDeviceMode(!isOnDeviceMode)}
       />
       <AnimatePresence>
-        <SideMenu
-          isOpen={isMenuOpen}
-          onClose={handleCloseMenu}
-          activeServerId={activeServerId}
-          onSelectServer={handleSelectServer}
-          voiceChannels={voiceChannels}
-          activeChannelId={activeChannelId}
-          onSelectChannel={handleSelectChannel}
-          onRefresh={handleRefresh}
-          onInviteBot={handleInviteBot}
-          botServers={botServers}
-        />
+        {!isOnDeviceMode && (
+          <SideMenu
+            isOpen={isMenuOpen}
+            onClose={handleCloseMenu}
+            activeServerId={activeServerId}
+            onSelectServer={handleSelectServer}
+            voiceChannels={voiceChannels}
+            activeChannelId={activeChannelId}
+            onSelectChannel={handleSelectChannel}
+            onRefresh={handleRefresh}
+            onInviteBot={handleInviteBot}
+            botServers={botServers}
+          />
+        )}
       </AnimatePresence>
       <main className="flex-grow overflow-hidden pt-16">
-        {isLoading ? (
-          <div className="h-full flex items-center justify-center">
-            <Loader2 className="w-8 h-8 animate-spin" />
-          </div>
-        ) : isSearchActive ? (
+        {isSearchActive ? (
           <SearchResults
             results={searchResults}
-            onAddToQueue={handleAddToQueue}
-            onAddTrackToQueue={handleAddTrackToQueue}
+            onAddToQueue={isOnDeviceMode ? handleDeviceAddToQueue : handleAddToQueue}
+            onAddTrackToQueue={isOnDeviceMode ? handleDeviceAddToQueue : handleAddTrackToQueue}
             onClose={() => setIsSearchActive(false)}
             onSearch={handleSearch}
+            isOnDeviceMode={isOnDeviceMode}
           />
-        ) : (
+        ) : isOnDeviceMode ? (
           <>
             <AnimatePresence>
               {isMainPlayerVisible && (
                 <MainPlayer
-                  currentTrack={currentTrack}
-                  isPlaying={isPlaying}
-                  onPlay={handlePlay}
-                  onPause={handlePause}
-                  onSkip={handleSkip}
-                  onPrevious={handlePrevious}
-                  queue={queue}
-                  onReorder={handleReorderQueue}
-                  onDelete={handleDeleteFromQueue}
-                  guildId={activeServerId}
+                  currentTrack={deviceCurrentTrack}
+                  isPlaying={deviceIsPlaying}
+                  onPlay={handleDevicePlay}
+                  onPause={handleDevicePause}
+                  onSkip={handleDeviceSkip}
+                  onPrevious={handleDevicePrevious}
+                  queue={deviceQueue}
+                  onReorder={(startIndex, endIndex) => {
+                    const newQueue = Array.from(deviceQueue);
+                    const [movedItem] = newQueue.splice(startIndex, 1);
+                    newQueue.splice(endIndex, 0, movedItem);
+                    setDeviceQueue(newQueue);
+                  }}
+                  onDelete={(index) => {
+                    const newQueue = Array.from(deviceQueue);
+                    newQueue.splice(index, 1);
+                    setDeviceQueue(newQueue);
+                  }}
+                  guildId={null}
                   onClose={() => setIsMainPlayerVisible(false)}
                   isVisible={isMainPlayerVisible}
+                  isOnDeviceMode={isOnDeviceMode}
+                  audioRef={audioRef}
+                  handleDeviceAddToQueue={handleDeviceAddToQueue}
+                  isLoading={isLoading}
                 />
               )}
             </AnimatePresence>
             {!isMainPlayerVisible && (
               <HomeScreen
                 onSelectTrack={(item: PlayableItem) => {
-                  handleAddToQueue(item);
+                  handleDeviceAddToQueue(item);
                   setIsMainPlayerVisible(true);
                 }}
-                guildId={activeServerId}
-                activeTab={homeActiveTab}                 // 追加
-                onTabChange={(tab) => setHomeActiveTab(tab)} // 追加
-                history={history}
+                guildId={null}
+                activeTab={homeActiveTab}
+                onTabChange={(tab) => setHomeActiveTab(tab)}
+                history={[]}
+                isOnDeviceMode={isOnDeviceMode}
               />
+            )}
+          </>
+        ) : (
+          <>
+            {isLoading ? (
+              <div className="h-full flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin" />
+              </div>
+            ) : (
+              <>
+                <AnimatePresence>
+                  {isMainPlayerVisible && (
+                    <MainPlayer
+                      currentTrack={currentTrack}
+                      isPlaying={isPlaying}
+                      onPlay={handlePlay}
+                      onPause={handlePause}
+                      onSkip={handleSkip}
+                      onPrevious={handlePrevious}
+                      queue={queue}
+                      onReorder={handleReorderQueue}
+                      onDelete={handleDeleteFromQueue}
+                      guildId={activeServerId}
+                      onClose={() => setIsMainPlayerVisible(false)}
+                      isVisible={isMainPlayerVisible}
+                      isOnDeviceMode={isOnDeviceMode}
+                      handleDeviceAddToQueue={handleDeviceAddToQueue}
+                      isLoading={isLoading}
+                    />
+                  )}
+                </AnimatePresence>
+                {!isMainPlayerVisible && (
+                  <HomeScreen
+                    onSelectTrack={(item: PlayableItem) => {
+                      handleAddToQueue(item);
+                      setIsMainPlayerVisible(true);
+                    }}
+                    guildId={activeServerId}
+                    activeTab={homeActiveTab}
+                    onTabChange={(tab) => setHomeActiveTab(tab)}
+                    history={history}
+                    isOnDeviceMode={isOnDeviceMode}
+                  />
+                )}
+              </>
             )}
           </>
         )}
       </main>
-      {currentTrack && !isMainPlayerVisible && homeActiveTab !== 'chat' && homeActiveTab !== 'ai-recommend' && (
+      {((currentTrack && !isMainPlayerVisible && !isOnDeviceMode) || (deviceCurrentTrack && !isMainPlayerVisible && isOnDeviceMode)) && homeActiveTab !== 'chat' && homeActiveTab !== 'ai-recommend' && (
         <motion.div
-        className="fixed bottom-0 left-0 right-0 bg-card p-4 flex items-center cursor-pointer"
-        onClick={() => setIsMainPlayerVisible(true)}
-        initial={{ y: "100%" }}
-        animate={{ y: 0 }}
-        exit={{ y: "100%" }}
-        transition={{ duration: 0.3 }}
-        {...miniPlayerSwipeHandlers}
-      >
-        <Image 
-          src={currentTrack.thumbnail} 
-          alt={currentTrack.title} 
-          width={48} 
-          height={48} 
-          className="object-cover rounded-md"
-          unoptimized
-        />
-        <div className="ml-4 flex-grow">
-          <h4 className="font-semibold truncate">{currentTrack.title}</h4>
-          <p className="text-muted-foreground truncate">{currentTrack.artist}</p>
-        </div>
-        <Button
-          variant="ghost" 
-          onClick={(e) => { 
-            e.stopPropagation(); 
-            if (isPlaying) {
-              handlePause();
-            } else {
-              handlePlay();
-            }
-          }}
+          className="fixed bottom-0 left-0 right-0 bg-card p-4 flex items-center cursor-pointer"
+          onClick={() => setIsMainPlayerVisible(true)}
+          initial={{ y: "100%" }}
+          animate={{ y: 0 }}
+          exit={{ y: "100%" }}
+          transition={{ duration: 0.3 }}
+          {...miniPlayerSwipeHandlers}
         >
-          {isPlaying ? <PauseIcon /> : <PlayIcon />}
-        </Button>
-      </motion.div>
-      )}
-      <AnimatePresence>
-        {isQueueOpen && (
-          <QueueList
-            queue={queue}
-            currentTrack={currentTrack}
-            isPlaying={isPlaying}
-            onPlayPause={isPlaying ? handlePause : handlePlay}
-            onReorder={handleReorderQueue}
-            onClose={() => setIsQueueOpen(false)}
-            onDelete={handleDeleteFromQueue}
+          <Image 
+            src={isOnDeviceMode ? deviceCurrentTrack!.thumbnail : currentTrack!.thumbnail} 
+            alt={isOnDeviceMode ? deviceCurrentTrack!.title : currentTrack!.title} 
+            width={48} 
+            height={48} 
+            className="object-cover rounded-md"
+            unoptimized
           />
-        )}
-      </AnimatePresence>
+          <div className="ml-4 flex-grow">
+            <h4 className="font-semibold truncate">{isOnDeviceMode ? deviceCurrentTrack!.title : currentTrack!.title}</h4>
+            <p className="text-muted-foreground truncate">{isOnDeviceMode ? deviceCurrentTrack!.artist : currentTrack!.artist}</p>
+          </div>
+          <Button
+            variant="ghost" 
+            onClick={(e) => { 
+              e.stopPropagation(); 
+              if (isOnDeviceMode) {
+                if (deviceIsPlaying) {
+                  handleDevicePause();
+                } else {
+                  handleDevicePlay();
+                }
+              } else {
+                if (isPlaying) {
+                  handlePause();
+                } else {
+                  handlePlay();
+                }
+              }
+            }}
+          >
+            {(isOnDeviceMode ? deviceIsPlaying : isPlaying) ? <PauseIcon /> : <PlayIcon />}
+          </Button>
+        </motion.div>
+      )}
+      {/* オーディオ要素をオンデバイスモードのときのみレンダリング */}
+      {isOnDeviceMode && (
+      <audio
+        ref={audioRef}
+        src={
+          deviceCurrentTrack?.url
+            ? `${API_URL}/stream?url=${encodeURIComponent(deviceCurrentTrack.url)}`
+            : undefined
+        }
+        onEnded={handleDeviceSkip}
+        onPlay={() => setDeviceIsPlaying(true)}
+        onPause={() => setDeviceIsPlaying(false)}
+        autoPlay
+      />
+    )}
     </div>
+    </VolumeProvider>
   );
 };

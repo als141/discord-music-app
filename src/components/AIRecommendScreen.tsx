@@ -85,7 +85,7 @@ export const AIRecommendScreen: React.FC<AIRecommendScreenProps> = ({ onSelectTr
       className="text-center p-8"
     >
       <Sparkles className="w-24 h-24 text-primary mx-auto mb-8" />
-      <h2 className="text-4xl font-bold mb-6 text-white">AIリコメンドへようこそ！只今スーパーβ版です！</h2>
+      <h2 className="text-4xl font-bold mb-6 text-white">AIリコメンドへようこそ！</h2>
       <p className="text-xl mb-8 text-gray-300">あなたの好みに合わせて音楽をお探しします。いくつかの質問に答えてください。</p>
       <Button onClick={() => setStep('genre')} size="lg" className="px-8 py-4 text-lg rounded-full bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 transition-all duration-300">
         始めましょう
@@ -298,7 +298,7 @@ export const AIRecommendScreen: React.FC<AIRecommendScreenProps> = ({ onSelectTr
     <div className="flex flex-col h-full bg-gradient-to-br from-gray-900 to-black">
       <div className="flex items-center justify-center p-6 bg-black/50 backdrop-blur-lg">
         <Brain className="w-12 h-12 text-primary mr-4" />
-        <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-500 to-pink-500">AIリコメンド</h1>
+        <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-500 to-pink-500">AIリコメンド（仮）</h1>
       </div>
       <ScrollArea className="flex-grow">
         <AnimatePresence mode="wait">

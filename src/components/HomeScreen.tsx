@@ -17,6 +17,7 @@ interface HomeScreenProps {
   activeTab: string;                        // 追加
   onTabChange: (tab: string) => void;       // 追加
   history: QueueItem[];                     // 追加
+  isOnDeviceMode: boolean;                  // 追加
 }
 
 interface StoredData {

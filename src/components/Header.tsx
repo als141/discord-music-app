@@ -7,29 +7,33 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useToast } from '@/hooks/use-toast'
-import { useSession, signIn, signOut } from 'next-auth/react'; // 追加
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'; // 既にインポート済み
+import { useSession, signIn, signOut } from 'next-auth/react'
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
-} from '@/components/ui/dropdown-menu'; // 既にインポート済み
+} from '@/components/ui/dropdown-menu'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
 
 interface HeaderProps {
   onSearch: (query: string) => void
   onAddUrl: (url: string) => void
   onOpenMenu: () => void
+  isOnDeviceMode: boolean
+  onToggleDeviceMode: () => void
 }
 
-export const Header: React.FC<HeaderProps> = ({ onSearch, onAddUrl, onOpenMenu }) => {
+export const Header: React.FC<HeaderProps> = ({ onSearch, onAddUrl, onOpenMenu, isOnDeviceMode, onToggleDeviceMode }) => {
   const [searchQuery, setSearchQuery] = useState('')
   const [url, setUrl] = useState('')
   const [isSearchActive, setIsSearchActive] = useState(false)
   const [isUrlActive, setIsUrlActive] = useState(false)
   const [searchHistory, setSearchHistory] = useState<string[]>([])
   const { toast } = useToast()
-  const { data: session } = useSession();
+  const { data: session } = useSession()
 
   useEffect(() => {
     const history = localStorage.getItem('searchHistory')
@@ -96,18 +100,30 @@ export const Header: React.FC<HeaderProps> = ({ onSearch, onAddUrl, onOpenMenu }
       <header className="bg-card text-card-foreground p-4 fixed top-0 left-0 right-0 z-10 shadow-md">
         <div className="flex items-center justify-between h-8">
           <div className="flex items-center">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button onClick={onOpenMenu} variant="ghost" size="icon" aria-label="メニューを開く">
-                  <Menu size={24} />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>メニューを開く</p>
-              </TooltipContent>
-            </Tooltip>
+            {!isOnDeviceMode && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button onClick={onOpenMenu} variant="ghost" size="icon" aria-label="メニューを開く">
+                    <Menu size={24} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>メニューを開く</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="device-mode"
+                checked={isOnDeviceMode}
+                onCheckedChange={onToggleDeviceMode}
+              />
+              <Label htmlFor="device-mode" className="text-sm font-medium">
+                デバイスで聴く
+              </Label>
+            </div>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button

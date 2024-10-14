@@ -1,3 +1,4 @@
+// SearchResults.tsx
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -25,9 +26,10 @@ interface SearchResultsProps {
   onAddTrackToQueue: (track: Track) => Promise<void>;
   onClose: () => void;
   onSearch: (query: string) => Promise<void>;
+  isOnDeviceMode: boolean; // 追加
 }
 
-export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQueue, onAddTrackToQueue, onClose, onSearch }) => {
+export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQueue, onAddTrackToQueue, onClose, onSearch, isOnDeviceMode }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredResults, setFilteredResults] = useState<SearchItem[]>(results);
   const [isLoading, setIsLoading] = useState(false);
@@ -49,7 +51,11 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
 
   const handleAddToQueue = async (item: SearchItem) => {
     try {
-      await onAddToQueue(item);
+      if (isOnDeviceMode) {
+        await onAddToQueue(item); // オンデバイスモード用の関数を呼び出す
+      } else {
+        await onAddToQueue(item);
+      }
       toast({
         title: "追加しました",
         description: `"${item.title}" をキューに追加しました。`,
@@ -66,7 +72,11 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
 
   const handleAddTrackToQueue = async (track: Track) => {
     try {
-      await onAddTrackToQueue(track);
+      if (isOnDeviceMode) {
+        await onAddTrackToQueue(track); // オンデバイスモード用の関数を呼び出す
+      } else {
+        await onAddTrackToQueue(track);
+      }
       toast({
         title: "追加しました",
         description: `"${track.title}" をキューに追加しました。`,
@@ -174,7 +184,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
                       src={item.thumbnail} 
                       alt={item.title} 
                       fill
-                      objectFit="cover"
+                      style={{ objectFit: 'cover' }}
                       className="transition-transform duration-300 group-hover:scale-110"
                       unoptimized
                     />
@@ -201,7 +211,22 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
                     ) : (
                       <>
                         <Button
-                          onClick={() => handleAddToQueue(item)}
+                          onClick={async () => {
+                            if (playlistTracks[item.browseId!]) {
+                              // 既に取得済みの場合
+                              for (const track of playlistTracks[item.browseId!]) {
+                                await handleAddTrackToQueue(track);
+                              }
+                            } else {
+                              // まだ取得していない場合
+                              await fetchPlaylistTracks(item);
+                              if (playlistTracks[item.browseId!]) {
+                                for (const track of playlistTracks[item.browseId!]) {
+                                  await handleAddTrackToQueue(track);
+                                }
+                              }
+                            }
+                          }}
                           className="w-full mb-2 bg-secondary hover:bg-secondary/90 text-secondary-foreground transition-all duration-300 group"
                         >
                           <span className="mr-2">全曲を追加</span>
