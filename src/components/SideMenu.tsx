@@ -1,8 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Server as Mic, ChevronRight, X, RefreshCw } from 'lucide-react';
+import { Server, ChevronRight, X, RefreshCw, Mic,PlusCircle } from 'lucide-react';
 import { Server as VoiceChannel } from '@/utils/api';
-import { Server } from '@/utils/api';
 import { useSwipeable } from 'react-swipeable';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -16,6 +15,12 @@ import {
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
 import { useGuilds } from '@/contexts/GuildContext';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 
 interface SideMenuProps {
   isOpen: boolean;
@@ -27,7 +32,6 @@ interface SideMenuProps {
   onSelectChannel: (channelId: string) => void;
   onRefresh: () => void;
   onInviteBot: (serverId: string) => void;
-  botServers: Server[]; // 追加
 }
 
 export const SideMenu: React.FC<SideMenuProps> = ({
@@ -39,10 +43,11 @@ export const SideMenu: React.FC<SideMenuProps> = ({
   activeChannelId,
   onSelectChannel,
   onRefresh,
+  onInviteBot
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const { data: session } = useSession();
-  const { botServers } = useGuilds();
+  const { mutualServers, inviteServers } = useGuilds();
 
   const swipeHandlers = useSwipeable({
     onSwipedLeft: onClose,
@@ -97,23 +102,23 @@ export const SideMenu: React.FC<SideMenuProps> = ({
               {...swipeHandlers}
             >
               <div className="flex items-center justify-between p-4 border-b h-16">
-              <h2 className="text-xl font-bold">設定</h2>
+                <h2 className="text-xl font-bold">設定</h2>
                 <div className="flex items-center">
                   {session && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" aria-label="ユーザーメニュー">
-                    <Avatar className="w-8 h-8">
-                      <AvatarImage src={session.user.image} alt={session.user.name || ''} />
-                      <AvatarFallback>{session.user.name?.charAt(0) || 'U'}</AvatarFallback>
-                    </Avatar>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => signOut()}>ログアウト</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" aria-label="ユーザーメニュー">
+                          <Avatar className="w-8 h-8">
+                            <AvatarImage src={session.user.image} alt={session.user.name || ''} />
+                            <AvatarFallback>{session.user.name?.charAt(0) || 'U'}</AvatarFallback>
+                          </Avatar>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => signOut()}>ログアウト</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button variant="ghost" size="icon" onClick={onRefresh} aria-label="ページをリロード">
@@ -137,20 +142,25 @@ export const SideMenu: React.FC<SideMenuProps> = ({
                 </div>
               </div>
               <ScrollArea className="h-[calc(100vh-5rem)] p-4">
-      <div className="space-y-6">
-      <div className="p-4">
-        <h2 className="text-lg font-semibold mb-4">サーバー一覧</h2>
-        {botServers.map((server) => (
-          <Button
-            key={server.id}
-            onClick={() => onSelectServer(server.id)}
-            variant={activeServerId === server.id ? 'default' : 'ghost'}
-            className="w-full justify-start mb-2"
-          >
-            {server.name}
-          </Button>
-        ))}
-      </div>
+                <div className="space-y-6">
+                  {/* サーバー一覧 */}
+                  <div>
+                    <h3 className="text-lg font-semibold mb-3 flex items-center">
+                      <Server size={20} className="mr-2" /> サーバー一覧
+                    </h3>
+                    {mutualServers.map((server) => (
+                      <Button
+                        key={server.id}
+                        onClick={() => onSelectServer(server.id)}
+                        variant={activeServerId === server.id ? 'default' : 'ghost'}
+                        className="w-full justify-start mb-2"
+                      >
+                        {server.name}
+                      </Button>
+                    ))}
+                  </div>
+
+                  {/* ボイスチャンネル */}
                   <div>
                     <h3 className="text-lg font-semibold mb-3 flex items-center">
                       <Mic size={20} className="mr-2" /> ボイスチャンネル
@@ -176,6 +186,29 @@ export const SideMenu: React.FC<SideMenuProps> = ({
                       ))}
                     </ul>
                   </div>
+
+                  {/* 招待する (アコーディオン) */}
+                  <Accordion type="single" collapsible>
+                    <AccordionItem value="invite">
+                      <AccordionTrigger>
+                        <h3 className="text-lg font-semibold flex items-center">
+                          <PlusCircle size={20} className="mr-2" /> 招待する
+                        </h3>
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        {inviteServers.map((server) => (
+                          <Button
+                            key={server.id}
+                            onClick={() => onInviteBot(server.id)}
+                            variant="secondary"
+                            className="w-full justify-start mb-2"
+                          >
+                            {server.name}
+                          </Button>
+                        ))}
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
                 </div>
               </ScrollArea>
             </motion.div>

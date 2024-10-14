@@ -1,9 +1,9 @@
 // MainPlayer.tsx
 "use client"
 
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { PlayIcon, PauseIcon, SkipForwardIcon, SkipBackIcon, ChevronUpIcon, ChevronDownIcon, Volume2Icon, VolumeXIcon } from 'lucide-react'
+import { PlayIcon, PauseIcon, SkipForwardIcon, SkipBackIcon, ChevronUpIcon, ChevronDownIcon, Volume2Icon, VolumeXIcon, RefreshCwIcon, PlusIcon } from 'lucide-react'
 import { Track, api } from '@/utils/api'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
@@ -11,7 +11,6 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, Dr
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { QueueList } from './QueueList'
 import { useToast } from '@/hooks/use-toast'
-import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem } from '@/components/ui/context-menu'
 import { useSwipeable } from 'react-swipeable'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { useSession } from 'next-auth/react'
@@ -19,6 +18,7 @@ import { User } from '@/utils/api'
 import { Loader2 } from 'lucide-react';
 import { usePlayback } from '@/contexts/PlaybackContext';
 import { useVolume } from '@/contexts/VolumeContext';
+import { Skeleton } from '@/components/ui/skeleton'
 
 interface MainPlayerProps {
   currentTrack: Track | null
@@ -62,6 +62,7 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
   const imageRef = useRef<HTMLImageElement>(null)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [relatedTracks, setRelatedTracks] = useState<Track[]>([])
+  const [isRelatedLoading, setIsRelatedLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('queue')
   const { volume, setVolume } = useVolume();
   const { toast } = useToast()
@@ -118,7 +119,98 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
   const extractVideoId = (url: string) => {
     const match = url.match(/(?:v=|\/)([0-9A-Za-z_-]{11}).*/)
     return match ? match[1] : null
-  }
+  };
+
+  const getCachedTracks = useCallback((videoId: string) => {
+    const cachedData = localStorage.getItem(`relatedTracks_${videoId}`);
+    if (cachedData) {
+      const { tracks, timestamp } = JSON.parse(cachedData);
+      // キャッシュの有効期限を1時間とする
+      if (Date.now() - timestamp < 3600000) {
+        return tracks;
+      }
+    }
+    return null;
+  }, []);
+
+  const setCachedTracks = useCallback((videoId: string, tracks: Track[]) => {
+    localStorage.setItem(`relatedTracks_${videoId}`, JSON.stringify({
+      tracks,
+      timestamp: Date.now()
+    }));
+  }, []);
+
+  const fetchRelatedTracks = useCallback(async (forceRefresh = false) => {
+    if (currentTrack) {
+      setIsRelatedLoading(true);
+      const videoId = extractVideoId(currentTrack.url);
+      if (videoId) {
+        if (!forceRefresh) {
+          const cachedTracks = getCachedTracks(videoId);
+          if (cachedTracks) {
+            setRelatedTracks(cachedTracks);
+            setIsRelatedLoading(false);
+            return;
+          }
+        }
+        try {
+          const tracks = await api.getRelatedSongs(videoId);
+          setRelatedTracks(tracks);
+          setCachedTracks(videoId, tracks);
+        } catch (error) {
+          console.error('関連動画の取得中にエラーが発生しました:', error);
+          toast({
+            title: 'エラー',
+            description: '関連動画の取得に失敗しました。',
+            variant: 'destructive',
+          });
+        } finally {
+          setIsRelatedLoading(false);
+        }
+      }
+    }
+  }, [currentTrack, getCachedTracks, setCachedTracks, toast]);
+
+  useEffect(() => {
+    if (currentTrack && isDrawerOpen && activeTab === 'related') {
+      const videoId = extractVideoId(currentTrack.url);
+      if (videoId) {
+        const cachedTracks = getCachedTracks(videoId);
+        if (cachedTracks) {
+          setRelatedTracks(cachedTracks);
+        } else {
+          fetchRelatedTracks();
+        }
+      }
+    }
+  }, [currentTrack, isDrawerOpen, activeTab, getCachedTracks, fetchRelatedTracks])
+
+  const handleAddAllToQueue = async () => {
+    try {
+      setIsRelatedLoading(true); // ローディング状態を設定
+  
+      // 全てのトラックを並行して追加
+      await Promise.all(relatedTracks.map(track => handleAddToQueue(track)));
+  
+      toast({
+        title: '成功',
+        description: '全ての関連動画をキューに追加しました。',
+      });
+    } catch (error) {
+      console.error('キューへの追加中にエラーが発生しました:', error);
+      toast({
+        title: 'エラー',
+        description: '一部の動画をキューに追加できませんでした。',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsRelatedLoading(false); // ローディング状態を解除
+    }
+  };
+
+  const handleRefreshRelatedTracks = () => {
+    fetchRelatedTracks(true);
+  };
 
   const formatTime = (time: number) => {
     const minutes = Math.floor(time / 60);
@@ -148,12 +240,7 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
 
   const handleAddToQueue = async (track: Track) => {
     if (isOnDeviceMode) {
-      // オンデバイスモードの場合
-      await handleDeviceAddToQueue(track); // この関数をMainAppから渡す必要があります
-      toast({
-        title: '成功',
-        description: `"${track.title}" をキューに追加しました。`,
-      });
+      await handleDeviceAddToQueue(track);
     } else {
       if (!guildId) {
         toast({
@@ -194,40 +281,37 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
     }
   }
 
+
   const renderRelatedTrackItem = (track: Track) => (
-    <ContextMenu key={track.url}>
-      <ContextMenuTrigger>
-        <motion.div
-          className="flex items-center p-2 hover:bg-muted rounded-lg transition-colors duration-200"
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-        >
-          <Image src={track.thumbnail} alt={track.title} width={48} height={48} className="rounded-md" />
-          <div className="ml-2 flex-grow overflow-hidden">
-            <p className="text-sm font-semibold truncate">{track.title}</p>
-            <p className="text-xs text-muted-foreground truncate">{track.artist}</p>
-          </div>
-          <Button onClick={() => handleAddToQueue(track)} variant="ghost" size="sm">
-            追加
-          </Button>
-        </motion.div>
-      </ContextMenuTrigger>
-      <ContextMenuContent>
-        <ContextMenuItem onSelect={() => {/* 次のキューに追加 */}}>
-          次のキューに追加
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={() => {/* キューの最後に追加 */}}>
-          キューの最後に追加
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={() => window.open(track.url, '_blank')}>
-          Youtubeでリンクを開く
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={() => {/* 関連動画を表示 */}}>
-          関連動画を表示する
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
-  )
+    <motion.div
+      key={track.url}
+      className="flex items-center p-2 bg-zinc-950 rounded-lg transition-colors duration-200 hover:bg-zinc-900"
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+    >
+      <Image src={track.thumbnail} alt={track.title} width={48} height={48} className="rounded-md" />
+      <div className="ml-2 flex-grow overflow-hidden">
+        <p className="text-sm font-semibold truncate text-zinc-300">{track.title}</p>
+        <p className="text-xs text-zinc-500 truncate">{track.artist}</p>
+      </div>
+      <Button onClick={() => handleAddToQueue(track)} variant="ghost" size="sm" className="text-zinc-300 hover:bg-zinc-800 hover:text-white">
+        追加
+      </Button>
+    </motion.div>
+  );
+
+  const renderSkeletons = () => (
+    Array(5).fill(0).map((_, index) => (
+      <div key={index} className="flex items-center p-2 bg-zinc-950 rounded-lg">
+        <Skeleton className="w-12 h-12 rounded-md bg-zinc-900" />
+        <div className="ml-2 flex-grow">
+          <Skeleton className="h-4 w-3/4 mb-2 bg-zinc-900" />
+          <Skeleton className="h-3 w-1/2 bg-zinc-900" />
+        </div>
+        <Skeleton className="w-16 h-8 rounded-md bg-zinc-900" />
+      </div>
+    ))
+  );
 
   const swipeHandlers = useSwipeable({
     onSwipedDown: () => onClose(),
@@ -451,15 +535,15 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
 
 
       <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
-        <DrawerContent {...drawerSwipeHandlers}>
+        <DrawerContent {...drawerSwipeHandlers} className="bg-zinc-950 text-zinc-200 border-t border-zinc-800">
           <DrawerHeader>
-            <DrawerTitle>コンテンツ</DrawerTitle>
-            <DrawerDescription>キューと関連動画</DrawerDescription>
+            <DrawerTitle className="text-xl font-bold text-zinc-200">コンテンツ</DrawerTitle>
+            <DrawerDescription className="text-zinc-400">キューと関連動画</DrawerDescription>
           </DrawerHeader>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="queue">キュー</TabsTrigger>
-              <TabsTrigger value="related">関連動画</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-2 bg-zinc-900">
+              <TabsTrigger value="queue" className="data-[state=active]:bg-zinc-800 text-zinc-300">キュー</TabsTrigger>
+              <TabsTrigger value="related" className="data-[state=active]:bg-zinc-800 text-zinc-300">関連動画</TabsTrigger>
             </TabsList>
             <TabsContent value="queue" className="mt-4 overflow-y-auto" style={{ height: 'calc(100vh - 300px)' }}>
               <QueueList
@@ -471,23 +555,48 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
                 onClose={() => setIsDrawerOpen(false)}
                 onDelete={onDelete}
                 isEmbedded
-                isOnDeviceMode={isOnDeviceMode} // 追加
+                isOnDeviceMode={isOnDeviceMode}
               />
             </TabsContent>
-            <TabsContent value="related" className="mt-4 overflow-y-auto" style={{ height: 'calc(100vh - 300px)' }}>
-              <motion.div
-                className="space-y-2"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ staggerChildren: 0.05 }}
-              >
-                {relatedTracks.map(renderRelatedTrackItem)}
-              </motion.div>
+            <TabsContent value="related" className="mt-4 overflow-y-auto space-y-4" style={{ height: 'calc(100vh - 300px)' }}>
+              <div className="flex justify-between">
+                <Button 
+                  onClick={handleAddAllToQueue} 
+                  disabled={isRelatedLoading || relatedTracks.length === 0} 
+                  className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200"
+                >
+                  <PlusIcon className="mr-2 h-4 w-4" /> 全てキューに追加
+                </Button>
+                <Button 
+                  onClick={handleRefreshRelatedTracks} 
+                  disabled={isRelatedLoading} 
+                  className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200"
+                >
+                  <RefreshCwIcon className="mr-2 h-4 w-4" /> 関連動画を再取得
+                </Button>
+              </div>
+              <AnimatePresence>
+                {isRelatedLoading ? (
+                  renderSkeletons()
+                ) : (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="space-y-2"
+                  >
+                    {relatedTracks.map(renderRelatedTrackItem)}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </TabsContent>
           </Tabs>
           <DrawerFooter>
             <DrawerClose asChild>
-              <Button variant="outline" className="w-full">閉じる</Button>
+              <Button variant="outline" className="w-full bg-zinc-900 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 border-zinc-700">
+                閉じる
+              </Button>
             </DrawerClose>
           </DrawerFooter>
         </DrawerContent>

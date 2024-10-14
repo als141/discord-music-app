@@ -24,6 +24,7 @@ import { VolumeProvider, useVolume } from '@/contexts/VolumeContext';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
+// BigIntのJSONシリアライズの設定
 declare global {
   interface BigInt {
     toJSON: () => string;
@@ -37,7 +38,7 @@ BigInt.prototype.toJSON = function() {
 export const MainApp: React.FC = () => {
   const { data: session, status } = useSession(); 
   const { setCurrentTime, setDuration, audioRef } = usePlayback()
-  const { botServers } = useGuilds();
+  const { mutualServers } = useGuilds(); // botServersをmutualServersに変更
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [queue, setQueue] = useState<Track[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -511,7 +512,8 @@ export const MainApp: React.FC = () => {
   };
 
   const handleSelectServer = (serverId: string) => {
-    const serverExists = botServers.some((server) => server.id === serverId);
+    // botServersをmutualServersに変更
+    const serverExists = mutualServers.some((server) => server.id === serverId);
     if (serverExists) {
       setActiveServerId(serverId);
       setActiveChannelId(null);
@@ -607,7 +609,7 @@ export const MainApp: React.FC = () => {
             onSelectChannel={handleSelectChannel}
             onRefresh={handleRefresh}
             onInviteBot={handleInviteBot}
-            botServers={botServers}
+            
           />
         )}
       </AnimatePresence>
