@@ -21,6 +21,7 @@ import Image from 'next/image';
 import { User } from '@/utils/api';
 import { usePlayback } from '@/contexts/PlaybackContext';
 import { VolumeProvider, useVolume } from '@/contexts/VolumeContext';
+import { IntroPage } from './IntroPage';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -590,9 +591,7 @@ export const MainApp: React.FC = () => {
 
   if (status === 'unauthenticated' || !session) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center">
-        <Button onClick={() => signIn('discord')}>Discordでログイン</Button>
-      </div>
+      <IntroPage />
     );
   }
 
