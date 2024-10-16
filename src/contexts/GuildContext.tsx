@@ -45,7 +45,8 @@ export const GuildProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
           const userGuildsData = await userGuildsResponse.json();
 
-          // ユーザーが「サーバーを管理」権限を持つサーバーのみをフィルタリング
+          // 共通のサーバーと招待可能なサーバーを分類
+          const mutualGuilds = userGuildsData.filter((guild: Server) => botGuildIds.has(guild.id));
           const guildsWithManageServer = userGuildsData.filter((guild: Server) => {
             if (!guild.permissions) {
               return false;
@@ -55,9 +56,6 @@ export const GuildProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             const MANAGE_GUILD = BigInt(0x20); // 'サーバーを管理'の権限ビット
             return (permissions & MANAGE_GUILD) === MANAGE_GUILD;
           });
-
-          // 共通のサーバーと招待可能なサーバーを分類
-          const mutualGuilds = guildsWithManageServer.filter((guild: Server) => botGuildIds.has(guild.id));
           const inviteGuilds = guildsWithManageServer.filter((guild: Server) => !botGuildIds.has(guild.id));
 
           setMutualServers(mutualGuilds);
