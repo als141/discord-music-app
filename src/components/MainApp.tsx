@@ -15,7 +15,7 @@ import { HomeScreen } from './HomeScreen';
 import { PlayIcon, PauseIcon } from 'lucide-react';
 import { Button } from './ui/button';
 import { useSwipeable } from 'react-swipeable';
-import { useSession, signIn } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
 import { useGuilds } from '@/contexts/GuildContext';
 import Image from 'next/image';
 import { User } from '@/utils/api';
