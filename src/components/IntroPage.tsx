@@ -38,7 +38,7 @@ export const IntroPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-900 to-purple-900 text-white relative">
+    <div className="h-screen overflow-auto bg-gradient-to-br from-slate-900 via-indigo-900 to-purple-900 text-white relative">
       {/* 背景のデコレーション要素 - position: fixed に変更 */}
       <motion.div
         animate={{ rotate: 360 }}
@@ -50,8 +50,8 @@ export const IntroPage = () => {
         transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
         className="fixed bottom-1/4 left-1/4 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl"
       />
-
-      <div className="relative z-10 container mx-auto px-4 py-20 min-h-screen">
+  
+      <div className="relative z-10 container mx-auto px-4 py-20">
         <motion.div
           variants={containerVariants}
           initial="hidden"
