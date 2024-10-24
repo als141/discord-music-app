@@ -19,6 +19,7 @@ import { Loader2 } from 'lucide-react';
 import { usePlayback } from '@/contexts/PlaybackContext';
 import { useVolume } from '@/contexts/VolumeContext';
 import { Skeleton } from '@/components/ui/skeleton'
+import ArtistDialog from '@/components/ArtistDialog';
 
 interface MainPlayerProps {
   currentTrack: Track | null
@@ -66,6 +67,9 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
   const [activeTab, setActiveTab] = useState('queue')
   const { volume, setVolume } = useVolume();
   const { toast } = useToast()
+  const [isArtistDialogOpen, setIsArtistDialogOpen] = useState(false);
+  const [selectedArtistId, setSelectedArtistId] = useState<string | null>(null);
+  const [isArtistLoading, setIsArtistLoading] = useState(false);
 
   useEffect(() => {
     if (imageRef.current && imageRef.current.complete) {
@@ -115,6 +119,51 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
       fetchRelatedTracks()
     }
   }, [currentTrack?.url, toast])
+
+  const handleArtistClick = async (artistName: string) => {
+    setIsArtistLoading(true);
+    try {
+      // キャッシュの確認
+      const cachedArtistId = localStorage.getItem(`artistId_${artistName}`);
+      if (cachedArtistId) {
+        setSelectedArtistId(cachedArtistId);
+        setIsArtistDialogOpen(true);
+        return;
+      }
+      // アーティスト名で検索
+      const searchResults = await api.search(artistName, 'artists');
+      if (searchResults.length > 0) {
+        const artist = searchResults[0];
+        if (artist.browseId) {
+          setSelectedArtistId(artist.browseId);
+          setIsArtistDialogOpen(true);
+          // キャッシュに保存
+          localStorage.setItem(`artistId_${artistName}`, artist.browseId);
+        } else {
+          toast({
+            title: 'エラー',
+            description: 'アーティスト情報を取得できませんでした。',
+            variant: 'destructive',
+          });
+        }
+      } else {
+        toast({
+          title: 'エラー',
+          description: 'アーティストが見つかりませんでした。',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('アーティスト情報の取得に失敗しました:', error);
+      toast({
+        title: 'エラー',
+        description: 'アーティスト情報の取得に失敗しました。',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsArtistLoading(false);
+    }
+  };
 
   const extractVideoId = (url: string) => {
     const match = url.match(/(?:v=|\/)([0-9A-Za-z_-]{11}).*/)
@@ -398,9 +447,70 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
           >
-            <h2 className="text-xl sm:text-2xl font-bold truncate">{currentTrack?.title}</h2>
-            <p className="text-base sm:text-lg text-gray-300 mt-1 sm:mt-2">{currentTrack?.artist}</p>
-            </motion.div>
+            <h2 className="text-xl sm:text-2xl font-bold truncate mb-2">{currentTrack?.title}</h2>
+            {currentTrack?.artist ? (
+              <motion.div
+                className="inline-flex items-center justify-center max-w-[90%]"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <button
+                  onClick={() => handleArtistClick(currentTrack.artist)}
+                  disabled={isArtistLoading}
+                  className="group relative inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 transition-all duration-200"
+                >
+                  {isArtistLoading ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-primary/50 border-t-primary rounded-full animate-spin" />
+                      <span className="text-gray-300">読み込み中...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <span className="text-base sm:text-lg text-primary max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
+                        {currentTrack.artist}
+                      </span>
+                      <span className="flex-shrink-0">
+                        <div className="w-4 h-4 rounded-full bg-primary/20 flex items-center justify-center">
+                          <svg
+                            className="w-3 h-3 text-primary transform translate-x-[1px] group-hover:scale-110 transition-transform"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                            />
+                          </svg>
+                        </div>
+                      </span>
+                    </>
+                  )}
+                </button>
+              </motion.div>
+            ) : (
+              <p className="text-base sm:text-lg text-gray-300 mt-1 sm:mt-2">{currentTrack?.artist}</p>
+            )}
+          </motion.div>
+
+          {isArtistDialogOpen && selectedArtistId && (
+            <ArtistDialog
+              artistId={selectedArtistId}
+              isOpen={isArtistDialogOpen}
+              onClose={() => setIsArtistDialogOpen(false)}
+              onAddTrackToQueue={handleAddToQueue}
+              onAddItemToQueue={async (item) => {
+                // itemが Track 型の場合のみ handleAddToQueue を呼び出す
+                if ('url' in item && 'title' in item && 'artist' in item && 'thumbnail' in item) {
+                  await handleAddToQueue(item as Track);
+                } else {
+                  console.warn('Unsupported item type:', item);
+                }
+              }}
+            />
+          )}
         {/* オンデバイスモードでない場合のみ表示 */}
         {!isOnDeviceMode && currentTrack?.added_by && (
           <div className="flex items-center mt-4">

@@ -305,7 +305,7 @@ export const MainApp: React.FC = () => {
   }, []);
   
   const swipeHandlers = useSwipeable({
-    onSwipedRight: () => setIsMenuOpen(false),
+    onSwipedLeft: () => setIsMenuOpen(false),
     trackMouse: true,
     delta: 50,
   });
@@ -724,7 +724,7 @@ export const MainApp: React.FC = () => {
           </>
         )}
       </main>
-      {((currentTrack && !isMainPlayerVisible && !isOnDeviceMode) || (deviceCurrentTrack && !isMainPlayerVisible && isOnDeviceMode)) && homeActiveTab !== 'chat' && homeActiveTab !== 'ai-recommend' && (
+      {((currentTrack && !isMainPlayerVisible && !isOnDeviceMode) || (deviceCurrentTrack && !isMainPlayerVisible && isOnDeviceMode)) && homeActiveTab !== 'chat' && homeActiveTab !== 'ai-recommend' && homeActiveTab !== 'valorant' && (
         <motion.div
           className="fixed bottom-0 left-0 right-0 bg-card p-4 flex items-center cursor-pointer"
           onClick={() => setIsMainPlayerVisible(true)}

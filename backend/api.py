@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks, Request, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict
@@ -16,6 +16,9 @@ import chat
 from fastapi.responses import StreamingResponse, Response
 import aiofiles
 import urllib.parse
+from valorant_api import router as valorant_router
+import re
+from datetime import datetime, timedelta
 
 ytmusic = YTMusic("oauth.json", language='ja', location='JP')
 
@@ -30,6 +33,11 @@ origins = [
     "https://discord-music-app.vercel.app"
 ]
 
+# キャッシュ用の変数を定義
+recommendations_cache = None
+recommendations_cache_timestamp = None
+CACHE_DURATION = timedelta(hours=3)  # キャッシュの有効期間
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,  # フロントエンドのURLを許可
@@ -40,6 +48,7 @@ app.add_middleware(
 
 # ルーターを追加
 app.include_router(chat.router)
+app.include_router(valorant_router)
 
 class User(BaseModel):
     id: str
@@ -59,13 +68,14 @@ class QueueItem(BaseModel):
     isCurrent: bool = False
 
 class SearchItem(BaseModel):
-    type: str  # 'song', 'video', 'album', 'playlist'
+    type: str  # 'song', 'video', 'album', 'playlist', 'artist'
     title: str
     artist: str
     thumbnail: str
     url: str
     browseId: Optional[str] = None
-    items: Optional[List[Track]] = None  # For albums and playlists
+    artistId: Optional[str] = None
+    items: Optional[List[Track]] = None  # アルバムやプレイリストの場合
 
 class SearchResult(BaseModel):
     results: List[SearchItem]
@@ -89,6 +99,10 @@ class PlayTrackRequest(BaseModel):
 class ReorderRequest(BaseModel):
     start_index: int
     end_index: int
+    
+def extract_artist_id(artist_data):
+    # 'id' や 'browseId' を試して取得
+    return artist_data.get('id') or artist_data.get('browseId') or None
 
 active_connections: Dict[str, List[WebSocket]] = {}
 
@@ -253,38 +267,119 @@ async def websocket_endpoint(websocket: WebSocket, guild_id: str):
             del active_connections[guild_id]
             
 # 関連動画など
-@app.get("/recommendations", response_model=SearchResult)
+@app.get("/recommendations", response_model=List[dict])
 async def get_recommendations():
-    """おすすめの曲と動画を最大10件取得"""
+    global recommendations_cache, recommendations_cache_timestamp
     try:
-        home = ytmusic.get_home(limit=1)
-        search_items = []
+        now = datetime.now()
+        if recommendations_cache and recommendations_cache_timestamp:
+            if now - recommendations_cache_timestamp < CACHE_DURATION:
+                # キャッシュデータを返す
+                return recommendations_cache
+        home = ytmusic.get_home(limit=5)  # limitを増やして多くのセクションを取得
+        sections = []
         for section in home:
+            section_title = section.get('title', 'おすすめ')
+            contents = []
             for item in section.get('contents', []):
                 if item.get('videoId'):
+                    # 曲や動画の場合
                     video_url = f"https://music.youtube.com/watch?v={item['videoId']}"
                     thumbnail = item['thumbnails'][0]['url'] if 'thumbnails' in item and item['thumbnails'] else ""
                     artist_name = ', '.join([artist['name'] for artist in item.get('artists', [])]) or "Unknown Artist"
-                    search_items.append(
+                    # アーティストのIDを取得
+                    artist_data = item.get('artists', [{}])[0]
+                    artist_browseId = extract_artist_id(artist_data)
+                    contents.append(
                         SearchItem(
                             type='song',
                             title=item['title'],
                             artist=artist_name,
                             thumbnail=adjust_thumbnail_size(thumbnail),
-                            url=video_url
+                            url=video_url,
+                            artistId=artist_browseId  # ここで追加
                         )
                     )
-        return SearchResult(results=search_items)
+                elif item.get('playlistId'):
+                    # プレイリスト
+                    playlist_url = f"https://music.youtube.com/playlist?list={item['playlistId']}"
+                    thumbnail = item['thumbnails'][0]['url'] if 'thumbnails' in item and item['thumbnails'] else ""
+                    contents.append(
+                        SearchItem(
+                            type='playlist',
+                            title=item['title'],
+                            artist=item.get('author', [{}])[0].get('name', 'Unknown Artist'),
+                            thumbnail=adjust_thumbnail_size(thumbnail),
+                            url=playlist_url,
+                            browseId=item['playlistId']
+                        )
+                    )
+                elif item.get('browseId'):
+                    # アルバムやアーティスト
+                    browse_url = f"https://music.youtube.com/browse/{item['browseId']}"
+                    thumbnail = item['thumbnails'][0]['url'] if 'thumbnails' in item and item['thumbnails'] else ""
+                    contents.append(
+                        SearchItem(
+                            type='album' if item.get('year') else 'artist',
+                            title=item['title'],
+                            artist=', '.join([artist['name'] for artist in item.get('artists', [])]) or "Unknown Artist",
+                            thumbnail=adjust_thumbnail_size(thumbnail),
+                            url=browse_url,
+                            browseId=item['browseId']
+                        )
+                    )
+            if contents:
+                sections.append({
+                    "title": section_title,
+                    "contents": contents
+                })
+
+        # キャッシュを更新
+        recommendations_cache = sections
+        recommendations_cache_timestamp = now
+
+        return sections
     except Exception as e:
         print(f"おすすめの曲と動画の取得中にエラーが発生しました: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/mood-categories")
+async def get_mood_categories():
+    try:
+        categories = ytmusic.get_mood_categories()
+        return categories
+    except Exception as e:
+        print(f"ムードカテゴリの取得中にエラーが発生しました: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/mood-playlists/{params}", response_model=List[SearchItem])
+async def get_mood_playlists(params: str):
+    try:
+        playlists = ytmusic.get_mood_playlists(params)
+        search_items = []
+        for playlist in playlists:
+            playlist_url = f"https://music.youtube.com/playlist?list={playlist['playlistId']}"
+            thumbnail = playlist['thumbnails'][0]['url'] if 'thumbnails' in playlist and playlist['thumbnails'] else ""
+            search_items.append(
+                SearchItem(
+                    type='playlist',
+                    title=playlist['title'],
+                    artist=playlist.get('author', 'Unknown Artist'),
+                    thumbnail=adjust_thumbnail_size(thumbnail),
+                    url=playlist_url,
+                    browseId=playlist['playlistId']
+                )
+            )
+        return search_items
+    except Exception as e:
+        print(f"ムードプレイリストの取得中にエラーが発生しました: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/charts", response_model=SearchResult)
-async def get_charts():
-    """日本の音楽チャート上位20曲を取得"""
+async def get_charts(country: str = 'JP'):
+    """指定された国の音楽チャート上位20曲を取得"""
     try:
-        charts = ytmusic.get_charts(country='JP')
+        charts = ytmusic.get_charts(country=country)
         search_items = []
         for song in charts.get('songs', {}).get('items', [])[:20]:
             video_url = f"https://music.youtube.com/watch?v={song['videoId']}" if 'videoId' in song else ""
@@ -305,6 +400,35 @@ async def get_charts():
     except Exception as e:
         print(f"チャートの取得中にエラーが発生しました: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/artist/{artist_id}")
+async def get_artist_info(artist_id: str):
+    try:
+        artist = ytmusic.get_artist(artist_id)
+
+        # 安全にデータを取得
+        artist_info = {
+            "name": artist.get('name', 'Unknown Artist'),
+            "description": artist.get('description', ''),
+            "views": artist.get('views', ''),
+            "subscribers": artist.get('subscribers', ''),
+            "channelId": artist.get('channelId', artist_id),
+            "subscribed": artist.get('subscribed', False),
+            "thumbnails": artist.get('thumbnails', []),
+            "songs": artist.get('songs', {}).get('results', []),
+            "albums": artist.get('albums', {}).get('results', []),
+            "singles": artist.get('singles', {}).get('results', []),
+            "videos": artist.get('videos', {}).get('results', []),
+            "related": artist.get('related', {}).get('results', []),
+        }
+        # サムネイルのサイズを調整
+        for thumbnail in artist_info['thumbnails']:
+            thumbnail['url'] = adjust_thumbnail_size(thumbnail.get('url', ''))
+
+        return artist_info
+    except Exception as e:
+        print(f"アーティスト情報の取得中にエラーが発生しました: {e}")
+        raise HTTPException(status_code=500, detail="アーティスト情報の取得に失敗しました。")
 
 
 @app.get("/related/{video_id}", response_model=SearchResult)
@@ -485,54 +609,168 @@ async def previous(guild_id: str):
     raise HTTPException(status_code=404, detail="No active music player found")
 
 def adjust_thumbnail_size(thumbnail_url, width=400, height=400):
-    """サムネイルURLのサイズを調整する（デフォルトでは800x800に拡大）"""
-    if thumbnail_url and "w60-h60" in thumbnail_url:
-        return thumbnail_url.replace("w60-h60", f"w{width}-h{height}")
+    """サムネイルURLのサイズを調整する"""
+    if not thumbnail_url:
+        return ''
+    # サイズ指定のパターンを正規表現で置換
+    thumbnail_url = re.sub(r'w\d+-h\d+', f'w{width}-h{height}', thumbnail_url)
     return thumbnail_url
 
 @app.get("/search", response_model=SearchResult)
-async def search(query: str):
-    results = ytmusic.search(query)
+async def search(query: str, filter: str = None):
+    async def fetch_results(filter_type: str):
+        try:
+            return await asyncio.to_thread(
+                ytmusic.search,
+                query,
+                filter=filter_type,
+                limit=10
+            )
+        except Exception as e:
+            print(f"Error fetching {filter_type}: {e}")
+            return []
+    
+    if filter:
+        results = await fetch_results(filter)
+        # 取得した結果をSearchItemに変換
+        search_items = []
+        # 各タイプに応じた処理を追加
+        # 'artists'の場合の処理
+        if filter == 'artists':
+            for artist in results:
+                if 'browseId' not in artist:
+                    continue
+                browse_id = artist['browseId']
+                url = f"https://music.youtube.com/browse/{browse_id}"
+                thumbnail = artist['thumbnails'][0]['url'] if artist.get('thumbnails') else ""
+                search_items.append(
+                    SearchItem(
+                        type='artist',
+                        title=artist['artist'] if 'artist' in artist else artist['title'],
+                        artist=artist['artist'] if 'artist' in artist else artist['title'],
+                        thumbnail=adjust_thumbnail_size(thumbnail),
+                        url=url,
+                        browseId=browse_id
+                    )
+                )
+        return SearchResult(results=search_items)
+    else:
 
-    search_items = []
-    for result in results:
-        result_type = result['resultType']
-        if result_type in ('song', 'video'):
-            video_url = f"https://music.youtube.com/watch?v={result['videoId']}" if result_type == 'song' else f"https://www.youtube.com/watch?v={result['videoId']}"
-            thumbnail = result['thumbnails'][0]['url'] if 'thumbnails' in result and result['thumbnails'] else ""
-            artist_name = result['artists'][0]['name'] if 'artists' in result and result['artists'] else "Unknown Artist"
+        # 並行して各カテゴリの検索を実行
+        results = await asyncio.gather(
+            fetch_results('songs'),
+            fetch_results('videos'),
+            fetch_results('albums'),
+            fetch_results('artists'),
+            fetch_results('playlists')
+        )
 
+        # 結果を対応するカテゴリにマッピング
+        search_tasks = {
+            'songs': results[0],
+            'videos': results[1],
+            'albums': results[2],
+            'artists': results[3],
+            'playlists': results[4]
+        }
+
+        search_items = []
+
+        # 曲の処理
+        for song in search_tasks['songs']:
+            if 'videoId' not in song:
+                continue
+            video_url = f"https://music.youtube.com/watch?v={song['videoId']}"
+            thumbnail = song['thumbnails'][0]['url'] if song.get('thumbnails') else ""
+            artist_name = ', '.join([artist['name'] for artist in song.get('artists', [])]) or "Unknown Artist"
+            
             search_items.append(
                 SearchItem(
-                    type=result_type,
-                    title=result['title'],
+                    type='song',
+                    title=song['title'],
                     artist=artist_name,
                     thumbnail=adjust_thumbnail_size(thumbnail),
                     url=video_url
                 )
             )
-        elif result_type in ('album', 'single', 'ep', 'playlist'):
-            browse_id = result.get('browseId')
-            if not browse_id:
-                continue
-            if result_type == 'playlist':
-                url = f"https://music.youtube.com/playlist?list={browse_id}"
-            else:
-                url = f"https://music.youtube.com/browse/{browse_id}"
-            thumbnail = result['thumbnails'][0]['url'] if 'thumbnails' in result and result['thumbnails'] else ""
-            artist_name = result['artists'][0]['name'] if 'artists' in result and result['artists'] else "Unknown Artist"
 
+        # 動画の処理
+        for video in search_tasks['videos']:
+            if 'videoId' not in video:
+                continue
+            video_url = f"https://music.youtube.com/watch?v={video['videoId']}"
+            thumbnail = video['thumbnails'][0]['url'] if video.get('thumbnails') else ""
+            artist_name = ', '.join([artist['name'] for artist in video.get('artists', [])]) or "Unknown Artist"
+            
             search_items.append(
                 SearchItem(
-                    type=result_type,
-                    title=result['title'],
+                    type='video',
+                    title=video['title'],
+                    artist=artist_name,
+                    thumbnail=adjust_thumbnail_size(thumbnail),
+                    url=video_url
+                )
+            )
+
+        # アルバムの処理
+        for album in search_tasks['albums']:
+            if 'browseId' not in album:
+                continue
+            browse_id = album['browseId']
+            url = f"https://music.youtube.com/browse/{browse_id}"
+            thumbnail = album['thumbnails'][0]['url'] if album.get('thumbnails') else ""
+            artist_name = ', '.join([artist['name'] for artist in album.get('artists', [])]) or "Unknown Artist"
+            
+            search_items.append(
+                SearchItem(
+                    type=album.get('type', 'album').lower(),  # album, single, ep
+                    title=album['title'],
                     artist=artist_name,
                     thumbnail=adjust_thumbnail_size(thumbnail),
                     url=url,
                     browseId=browse_id
                 )
             )
-    return SearchResult(results=search_items)
+
+        # アーティストの処理
+        for artist in search_tasks['artists']:
+            if 'browseId' not in artist:
+                continue
+            browse_id = artist['browseId']
+            url = f"https://music.youtube.com/browse/{browse_id}"
+            thumbnail = artist['thumbnails'][0]['url'] if artist.get('thumbnails') else ""
+            
+            search_items.append(
+                SearchItem(
+                    type='artist',
+                    title=artist['artist'] if 'artist' in artist else artist['title'],
+                    artist=artist['artist'] if 'artist' in artist else artist['title'],
+                    thumbnail=adjust_thumbnail_size(thumbnail),
+                    url=url,
+                    browseId=browse_id
+                )
+            )
+
+        # プレイリストの処理
+        for playlist in search_tasks['playlists']:
+            if 'browseId' not in playlist:
+                continue
+            browse_id = playlist['browseId']
+            url = f"https://music.youtube.com/playlist?list={browse_id.replace('VL', '')}"
+            thumbnail = playlist['thumbnails'][0]['url'] if playlist.get('thumbnails') else ""
+            
+            search_items.append(
+                SearchItem(
+                    type='playlist',
+                    title=playlist['title'],
+                    artist=playlist.get('author', 'Unknown Author'),
+                    thumbnail=adjust_thumbnail_size(thumbnail),
+                    url=url,
+                    browseId=browse_id.replace('VL', '')
+                )
+            )
+
+        return SearchResult(results=search_items)
 
 @app.get("/playlist/{browse_id}", response_model=List[Track])
 async def get_playlist_items(browse_id: str):

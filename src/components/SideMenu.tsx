@@ -49,7 +49,8 @@ export const SideMenu: React.FC<SideMenuProps> = ({
   const swipeHandlers = useSwipeable({
     onSwipedLeft: onClose,
     trackMouse: true,
-  });
+    delta: 50,
+  });  
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

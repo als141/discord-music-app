@@ -46,8 +46,11 @@ next-env.d.ts
 
 /backend/.env
 
-/backend/*
-/backend/
+/backend/oauth.json
+/backend/Reference — ytmusicapi 1.8.1 documentation.pdf
+/backend/yt_music_play.py
+/backend/yt-premium.py
+/backend/music/*
 
 .env.local
 .env*

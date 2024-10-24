@@ -18,6 +18,12 @@ export interface PlayableItem {
   artist: string;
   thumbnail: string;
   url: string;
+  type?: string;
+}
+
+export interface Section {
+  title: string;
+  contents: SearchItem[];
 }
 
 export interface Track extends PlayableItem {
@@ -27,6 +33,7 @@ export interface Track extends PlayableItem {
 export interface SearchItem extends PlayableItem {
   type: string;  // 'song', 'video', 'album', 'playlist'
   browseId?: string;
+  artistId?: string; // 追加
   items?: Track[];
 }
 
@@ -71,6 +78,70 @@ interface QueueData {
   queue: QueueItem[];
   is_playing: boolean;
   history: QueueItem[];
+}
+
+export interface ValorantPlayerCard {
+  small: string;
+  large: string;
+  wide: string;
+  id: string;
+  assets: Record<string, string>;
+}
+
+export interface ValorantRank {
+  tier: number;
+  tier_name: string;
+  division: string;
+  rank_score: number;
+  elo?: number;
+  images: {
+    small: string;
+    large: string;
+  };
+}
+
+export interface ValorantPlayer {
+  puuid: string;
+  game_name: string;
+  tag_line: string;
+  region: string;
+  account_level: number;
+  card: ValorantPlayerCard;
+  rank?: ValorantRank;
+  last_updated: string;
+  is_authenticated: boolean;
+}
+
+export interface ValorantWeaponSkin {
+  uuid: string;
+  name: string;
+  price?: number;
+  image: string;
+  rarity: string;
+  rarity_weight: number;
+  featured: boolean;
+}
+
+export interface ValorantStore {
+  daily_offers: ValorantWeaponSkin[];
+  featured_bundle?: Record<string, string>; // 'any'を'unknown'に変更
+  remaining_duration: {
+    daily: number;
+    featured: number;
+  };
+}
+
+export interface ValorantAgent {
+  uuid: string;
+  name: string;
+  role: string;
+  images: {
+    small: string;
+    full: string;
+    bust: string;
+    killfeed: string;
+  };
+  stats?: Record<string, string>;
 }
 
 export const api = {
@@ -136,8 +207,8 @@ export const api = {
     await axios.post(`${API_URL}/previous/${guildId}`);
   },
 
-  search: async (query: string): Promise<SearchItem[]> => {
-    const response = await axios.get(`${API_URL}/search`, { params: { query } });
+  search: async (query: string, filter?: string): Promise<SearchItem[]> => {
+    const response = await axios.get(`${API_URL}/search`, { params: { query, filter } });
     return response.data.results;
   },
 
@@ -146,8 +217,13 @@ export const api = {
     return response.data;
   },
 
-  getAlbumItems: async (browseId: string): Promise<Track[]> => {
-    const response = await axios.get(`${API_URL}/album/${browseId}`);
+  getArtistInfo: async (artistId: string): Promise<unknown> => {
+    const response = await axios.get(`${API_URL}/artist/${artistId}`);
+    return response.data;
+  },
+
+  getAlbumItems: async (albumId: string): Promise<Track[]> => {
+    const response = await axios.get(`${API_URL}/album/${albumId}`);
     return response.data;
   },
 
@@ -175,9 +251,9 @@ export const api = {
     return response.data.channel_id;
   },
 
-  getRecommendations: async (): Promise<SearchItem[]> => {
+  getRecommendations: async (): Promise<Section[]> => {
     const response = await axios.get(`${API_URL}/recommendations`);
-    return response.data.results;
+    return response.data;
   },
 
   getCharts: async (): Promise<SearchItem[]> => {
@@ -197,6 +273,27 @@ export const api = {
 
   removeFromQueue: async (guildId: string, position: number): Promise<void> => {
     await axios.post(`${API_URL}/remove-from-queue/${guildId}?position=${position}`);
+  },
+
+  // VALORANT関連のメソッドを追加
+  valorant: {
+    // プレイヤー情報の取得
+    getPlayerInfo: async (name: string, tag: string): Promise<ValorantPlayer> => {
+      const response = await axios.get(`${API_URL}/valorant/player/${name}/${tag}`);
+      return response.data;
+    },
+
+    // ストア情報の取得
+    getStore: async (puuid: string): Promise<ValorantStore> => {
+      const response = await axios.get(`${API_URL}/valorant/store/${puuid}`);
+      return response.data;
+    },
+
+    // エージェント情報の取得
+    getAgents: async (): Promise<ValorantAgent[]> => {
+      const response = await axios.get(`${API_URL}/valorant/agents`);
+      return response.data;
+    },
   },
 };
 

@@ -84,6 +84,12 @@ export const AIRecommendScreen: React.FC<AIRecommendScreenProps> = ({ onSelectTr
       exit={{ opacity: 0, y: -50 }}
       className="text-center p-8"
     >
+      {/* 告知 */}
+      <div className="text-center text-sm text-gray-500 mb-4">
+        お試しモード
+        <br />
+        この機能はバージョン 1.0.0 でリリース予定です
+      </div>
       <Sparkles className="w-24 h-24 text-primary mx-auto mb-8" />
       <h2 className="text-4xl font-bold mb-6 text-white">AIリコメンドへようこそ！</h2>
       <p className="text-xl mb-8 text-gray-300">あなたの好みに合わせて音楽をお探しします。いくつかの質問に答えてください。</p>
