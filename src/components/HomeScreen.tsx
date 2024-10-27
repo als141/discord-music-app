@@ -16,7 +16,8 @@ import {
   MessageSquare, 
   Brain,
   Target,
-  ExternalLink
+  ExternalLink,
+  Info
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
@@ -33,6 +34,12 @@ interface HomeScreenProps {
   onTabChange: (tab: string) => void;
   isOnDeviceMode: boolean;
   history: QueueItem[];
+}
+
+// バージョン情報の型定義
+interface VersionInfo {
+  version: string;
+  buildDate: string;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack, guildId, activeTab, onTabChange }) => {
@@ -83,6 +90,30 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack, guildId, 
       gradient: 'from-red-500 to-orange-500'
     }
   ];
+
+  // バージョン情報のstate
+  const [versionInfo] = useState<VersionInfo>({
+    version: 'Ver. 0.7.1',  // 実際のバージョン番号に置き換えてください
+    buildDate: '2024.10.27'  // 実際のビルド日付に置き換えてください
+  });
+
+  // バージョン情報を表示するコンポーネント
+  const VersionDisplay = () => (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="flex items-center justify-center text-xs text-muted-foreground hover:text-foreground transition-colors duration-200 py-2">
+            <Info className="w-3 h-3 mr-1" />
+            <span>{versionInfo.version}</span>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Version: {versionInfo.version}</p>
+          <p>Build Date: {versionInfo.buildDate}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 
   useEffect(() => {
     const fetchData = async () => {
@@ -297,7 +328,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack, guildId, 
 
   return (
     <div className="flex flex-col h-full">
-      <div className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-25 flex justify-center py-4 sticky top-0">
+      <div className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-25 flex flex-col items-center py-4 sticky top-0">
         <nav className="flex space-x-1 p-1 rounded-full bg-muted">
           {tabs.map((tab) => (
             <motion.button
@@ -317,6 +348,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack, guildId, 
             </motion.button>
           ))}
         </nav>
+        <VersionDisplay />
       </div>
 
       <div className="flex-1 overflow-hidden">
