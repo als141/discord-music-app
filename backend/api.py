@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict
 import asyncio
-from bot import bot, music_players
+from bot import client, music_players
 from music_player import MusicPlayer, Song, MUSIC_DIR, OAUTH2_USERNAME, OAUTH2_PASSWORD
 import yt_dlp
 import uvicorn
@@ -19,8 +19,9 @@ import urllib.parse
 from valorant_api import router as valorant_router
 import re
 from datetime import datetime, timedelta
+import signal
 
-ytmusic = YTMusic("oauth.json", language='ja', location='JP')
+ytmusic = YTMusic(language='ja', location='JP')
 
 load_dotenv()
 
@@ -221,7 +222,7 @@ async def set_volume(guild_id: str, volume: float):
 @app.get("/bot-guilds")
 async def get_bot_guilds():
     bot_guilds = []
-    for guild in bot.guilds:
+    for guild in client.guilds:
         bot_guilds.append({
             'id': str(guild.id),
             'name': guild.name
@@ -230,7 +231,7 @@ async def get_bot_guilds():
 
 @app.post("/disconnect-voice-channel/{guild_id}")
 async def disconnect_voice_channel(guild_id: str):
-    guild = bot.get_guild(int(guild_id))
+    guild = client.get_guild(int(guild_id))
     if guild and guild.voice_client:
         await guild.voice_client.disconnect()
         # MusicPlayerのインスタンスを削除
@@ -495,32 +496,32 @@ async def remove_from_queue(guild_id: str, position: int):
 
 @app.get("/servers", response_model=List[Server])
 async def get_servers():
-    return [Server(id=str(guild.id), name=guild.name) for guild in bot.guilds]
+    return [Server(id=str(guild.id), name=guild.name) for guild in client.guilds]
 
 @app.get("/voice-channels/{guild_id}", response_model=List[VoiceChannel])
 async def get_voice_channels(guild_id: str):
-    guild = bot.get_guild(int(guild_id))
+    guild = client.get_guild(int(guild_id))
     if guild:
         return [VoiceChannel(id=str(channel.id), name=channel.name) for channel in guild.voice_channels]
     raise HTTPException(status_code=404, detail="Guild not found")
 
 @app.post("/join-voice-channel/{guild_id}/{channel_id}")
 async def join_voice_channel(guild_id: str, channel_id: str):
-    guild = bot.get_guild(int(guild_id))
+    guild = client.get_guild(int(guild_id))
     channel = guild.get_channel(int(channel_id))
     if guild and channel and channel.type.name == "voice":
         if guild.voice_client is None:
             await channel.connect()
         else:
             await guild.voice_client.move_to(channel)
-        music_players[guild_id] = MusicPlayer(bot, guild, guild_id, notify_clients)
+        music_players[guild_id] = MusicPlayer(client, guild, guild_id, notify_clients)
         await notify_clients(guild_id)
         return {"message": "Joined voice channel"}
     raise HTTPException(status_code=404, detail="Guild or Channel not found")
 
 @app.get("/bot-voice-status/{guild_id}")
 async def get_bot_voice_status(guild_id: str):
-    guild = bot.get_guild(int(guild_id))
+    guild = client.get_guild(int(guild_id))
     if guild and guild.voice_client:
         return {"channel_id": str(guild.voice_client.channel.id)}
     return {"channel_id": None}
@@ -837,7 +838,7 @@ async def reorder_queue(guild_id: str, reorder_request: ReorderRequest):
     raise HTTPException(status_code=404, detail="No active music player found")
 
 async def start_discord_bot():
-    await bot.start(DISCORD_TOKEN)
+    await client.start(DISCORD_TOKEN)
 
 async def start_web_server():
     config = uvicorn.Config(app, host="::", port=8000, loop="asyncio")
@@ -850,5 +851,20 @@ async def start_both():
         start_web_server()
     )
 
+def shutdown():
+    tasks = asyncio.all_tasks()
+    for task in tasks:
+        task.cancel()
+
 if __name__ == "__main__":
-    asyncio.run(start_both())
+    loop = asyncio.get_event_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, shutdown)
+
+    try:
+        loop.run_until_complete(start_both())
+    except asyncio.CancelledError:
+        pass
+    finally:
+        loop.run_until_complete(loop.shutdown_asyncgens())
+        loop.close()
