@@ -32,12 +32,8 @@ export const GuildProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           const botGuilds = await api.getBotGuilds(); // `/servers` エンドポイントを使用
           const botGuildIds = new Set(botGuilds.map((guild) => guild.id));
 
-          // ユーザーが参加しているサーバーを取得
-          const userGuildsResponse = await fetch('https://discord.com/api/users/@me/guilds', {
-            headers: {
-              Authorization: `Bearer ${session.accessToken}`,
-            },
-          });
+          // ユーザーが参加しているサーバーを取得（サーバーサイドの API 経由）
+          const userGuildsResponse = await fetch('/api/discord/userGuilds');
 
           if (!userGuildsResponse.ok) {
             throw new Error('Failed to fetch user guilds');

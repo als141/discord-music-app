@@ -155,7 +155,7 @@ export const api = {
     return response.data;
   },
   getBotGuilds: async (): Promise<Server[]> => {
-    const response = await axios.get(`${API_URL}/bot-guilds`);
+    const response = await axios.get(`${API_URL}/servers`);
     return response.data;
   },
 

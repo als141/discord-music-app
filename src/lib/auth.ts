@@ -1,9 +1,9 @@
 // src/lib/auth.ts
 
-import { NextAuthOptions } from "next-auth";
-import DiscordProvider from "next-auth/providers/discord";
-import { Session, Account } from "next-auth";
-import { JWT } from "next-auth/jwt";
+import { NextAuthOptions } from 'next-auth';
+import DiscordProvider from 'next-auth/providers/discord';
+import { Session } from 'next-auth';
+import { JWT } from 'next-auth/jwt';
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -12,40 +12,26 @@ export const authOptions: NextAuthOptions = {
       clientSecret: process.env.DISCORD_CLIENT_SECRET as string,
       authorization: {
         params: {
-          scope: "identify guilds",
+          scope: 'identify guilds',
         },
       },
     }),
   ],
   callbacks: {
-    async session({
-      session,
-      token,
-    }: {
-      session: Session;
-      token: JWT;
-    }) {
-      session.accessToken = token.accessToken;
+    async session({ session, token }: { session: Session; token: JWT }) {
+      session.accessToken = token.accessToken as string;
       session.user = {
         ...session.user,
-        id: token.id ?? "",
-        image: token.picture,
+        id: token.id as string,
+        image: token.picture as string,
       };
       return session;
     },
-    async jwt({
-      token,
-      account,
-      profile,
-    }: {
-      token: JWT;
-      account?: Account | null;
-      profile?: unknown;
-    }) {
+    async jwt({ token, account, profile }) {
       if (account) {
         token.accessToken = account.access_token;
       }
-      if (profile && typeof profile === "object" && profile !== null && "id" in profile) {
+      if (profile && typeof profile === 'object' && profile !== null && 'id' in profile) {
         const discordProfile = profile as { id: string; avatar?: string };
         token.id = discordProfile.id;
         token.picture = discordProfile.avatar
@@ -55,5 +41,4 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
   },
-  // ...その他の設定
 };
