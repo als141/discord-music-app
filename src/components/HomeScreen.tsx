@@ -17,7 +17,8 @@ import {
   Brain,
   Target,
   ExternalLink,
-  Info
+  Info,
+  Mic
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
@@ -26,6 +27,7 @@ import { ChatScreen } from './ChatScreen';
 import { AIRecommendScreen } from './AIRecommendScreen';
 import { VALORANTScreen } from './VALORANTScreen';
 import ArtistDialog from '@/components/ArtistDialog';
+import { RealtimeScreen } from './RealtimeScreen'; // 新規追加
 
 interface HomeScreenProps {
   onSelectTrack: (item: PlayableItem) => void;
@@ -36,7 +38,6 @@ interface HomeScreenProps {
   history: QueueItem[];
 }
 
-// バージョン情報の型定義
 interface VersionInfo {
   version: string;
   buildDate: string;
@@ -88,16 +89,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack, guildId, 
       label: { full: 'VALORANT', short: 'VALO' }, 
       icon: <Target className="w-5 h-5" />,
       gradient: 'from-red-500 to-orange-500'
+    },
+    { 
+      id: 'realtime', 
+      label: { full: 'ボイスチャット', short: 'Voice' }, 
+      icon: <Mic className="w-5 h-5" />,
+      gradient: 'from-orange-500 to-yellow-500'
     }
   ];
 
-  // バージョン情報のstate
   const [versionInfo] = useState<VersionInfo>({
-    version: 'Ver. 0.7.1',  // 実際のバージョン番号に置き換えてください
-    buildDate: '2024.10.27'  // 実際のビルド日付に置き換えてください
+    version: 'Ver. 0.7.1',
+    buildDate: '2024.10.27'
   });
 
-  // バージョン情報を表示するコンポーネント
   const VersionDisplay = () => (
     <TooltipProvider>
       <Tooltip>
@@ -393,10 +398,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack, guildId, 
                   <VALORANTScreen />
                 </div>
               )}
+              {activeTab === 'realtime' && (
+                <div className="h-full">
+                  <RealtimeScreen />
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
-      {/* ArtistDialogをレンダリング */}
+      {/* ArtistDialog */}
       {isArtistDialogOpen && selectedArtistId && (
         <ArtistDialog
           artistId={selectedArtistId}

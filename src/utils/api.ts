@@ -275,6 +275,12 @@ export const api = {
     await axios.post(`${API_URL}/remove-from-queue/${guildId}?position=${position}`);
   },
 
+  getRealtimeSession: async (): Promise<{ client_secret: { value: string } }> => {
+    // /session endpoint からエフェメラルキーを取得
+    const response = await axios.get(`${API_URL}/session`);
+    return response.data;
+  },
+
   // VALORANT関連のメソッドを追加
   valorant: {
     // プレイヤー情報の取得

@@ -1,4 +1,5 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks, Request, APIRouter
+# api.py
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict
@@ -13,13 +14,14 @@ import os
 from ytmusicapi import YTMusic
 from discord import utils
 import chat
-from fastapi.responses import StreamingResponse, Response
+from fastapi.responses import StreamingResponse
 import aiofiles
 import urllib.parse
 from valorant_api import router as valorant_router
 import re
 from datetime import datetime, timedelta
 import signal
+from realtimeapi import router as realtime_router
 
 ytmusic = YTMusic(language='ja', location='JP')
 
@@ -50,6 +52,7 @@ app.add_middleware(
 # ルーターを追加
 app.include_router(chat.router)
 app.include_router(valorant_router)
+app.include_router(realtime_router)
 
 class User(BaseModel):
     id: str
