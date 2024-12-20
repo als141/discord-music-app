@@ -74,7 +74,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack, guildId, 
     },
     { 
       id: 'chat', 
-      label: { full: 'チャット', short: 'チャット' }, 
+      label: { full: 'チャット', short: '' }, 
       icon: <MessageSquare className="w-5 h-5" />,
       gradient: 'from-green-500 to-teal-500'
     },
@@ -92,7 +92,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack, guildId, 
     },
     { 
       id: 'realtime', 
-      label: { full: 'ボイスチャット', short: 'Voice' }, 
+      label: { full: 'ボイスチャット', short: '' }, 
       icon: <Mic className="w-5 h-5" />,
       gradient: 'from-orange-500 to-yellow-500'
     }

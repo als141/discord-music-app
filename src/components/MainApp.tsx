@@ -724,7 +724,7 @@ export const MainApp: React.FC = () => {
           </>
         )}
       </main>
-      {((currentTrack && !isMainPlayerVisible && !isOnDeviceMode) || (deviceCurrentTrack && !isMainPlayerVisible && isOnDeviceMode)) && homeActiveTab !== 'chat' && homeActiveTab !== 'ai-recommend' && homeActiveTab !== 'valorant' && (
+      {((currentTrack && !isMainPlayerVisible && !isOnDeviceMode) || (deviceCurrentTrack && !isMainPlayerVisible && isOnDeviceMode)) && homeActiveTab !== 'chat' && homeActiveTab !== 'ai-recommend' && homeActiveTab !== 'valorant' && homeActiveTab !== 'realtime' && (
         <motion.div
           className="fixed bottom-0 left-0 right-0 bg-card p-4 flex items-center cursor-pointer"
           onClick={() => setIsMainPlayerVisible(true)}
@@ -735,12 +735,12 @@ export const MainApp: React.FC = () => {
           {...miniPlayerSwipeHandlers}
         >
           <Image 
-            src={isOnDeviceMode ? deviceCurrentTrack!.thumbnail : currentTrack!.thumbnail} 
-            alt={isOnDeviceMode ? deviceCurrentTrack!.title : currentTrack!.title} 
-            width={48} 
-            height={48} 
-            className="object-cover rounded-md flex-shrink-0"
-            unoptimized
+        src={isOnDeviceMode ? deviceCurrentTrack!.thumbnail : currentTrack!.thumbnail} 
+        alt={isOnDeviceMode ? deviceCurrentTrack!.title : currentTrack!.title} 
+        width={48} 
+        height={48} 
+        className="object-cover rounded-md flex-shrink-0"
+        unoptimized
           />
           <div className="ml-4 flex-grow min-w-0 mr-4">
             <h4 className="font-semibold truncate">{isOnDeviceMode ? deviceCurrentTrack!.title : currentTrack!.title}</h4>

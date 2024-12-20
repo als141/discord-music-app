@@ -1,21 +1,33 @@
+// RealtimeScreen.tsx
 import React, { useState, useRef, useEffect } from 'react';
-import { Mic, MicOff, PhoneOff, Phone, Bot, Activity } from 'lucide-react';
+import { Mic, MicOff, PhoneOff, Phone, Bot } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { api } from '@/utils/api';
+import { api } from '@/utils/api'; // サーバーサイドでセッション生成済みで"modalities": ["text"]なエフェメラルキーを取得
 import { useToast } from "@/hooks/use-toast";
+import Image from 'next/image';
 
 export const RealtimeScreen: React.FC = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [finalText, setFinalText] = useState<string>('');
   const { toast } = useToast();
-  
+
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // ユーザーメッセージ作成完了フラグ
+  const userMessageCreatedRef = useRef<boolean>(false);
+
+  // にじボイスAPIのパラメータ
+  const NIJI_API_KEY = process.env.NEXT_PUBLIC_NIJI_API_KEY;
+  const VOICE_ACTOR_ID = process.env.NEXT_PUBLIC_VOICE_ACTOR_ID;
+  
+  if (!NIJI_API_KEY || !VOICE_ACTOR_ID) {
+    throw new Error("環境変数が設定されていません");
+  }
 
   useEffect(() => {
     return () => {
@@ -26,47 +38,113 @@ export const RealtimeScreen: React.FC = () => {
     };
   }, []);
 
-  const setupAudioAnalyser = (stream: MediaStream) => {
-    audioContextRef.current = new AudioContext();
-    analyserRef.current = audioContextRef.current.createAnalyser();
-    const source = audioContextRef.current.createMediaStreamSource(stream);
-    source.connect(analyserRef.current);
+  const playVoiceFromText = async (text: string) => {
+    try {
+      // 既に再生中のオーディオがあれば停止
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+  
+      const res = await fetch(`https://api.nijivoice.com/api/platform/v1/voice-actors/${VOICE_ACTOR_ID}/generate-voice`, {
+        method: 'POST',
+        headers: {
+          'accept': 'application/json',
+          'content-type': 'application/json',
+          'x-api-key': NIJI_API_KEY
+        },
+        body: JSON.stringify({
+          script: text,
+          speed: "0.9",
+          format: "mp3"
+        })
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error("Failed to generate voice from NijiVoice API:", errText);
+        return;
+      }
+      const json = await res.json();
+      const audioUrl = json.generatedVoice?.audioFileUrl;
+      if (!audioUrl) {
+        console.error("No audioFileUrl returned from NijiVoice API");
+        return;
+      }
+      const audio = new Audio(audioUrl);
+      audioRef.current = audio;
+      audio.play();
+    } catch (e) {
+      console.error("Error in playVoiceFromText:", e);
+    }
   };
 
   const handleStart = async () => {
     try {
       setErrorMessage(null);
       const data = await api.getRealtimeSession();
+      // このセッション生成では "modalities":["text"] を指定してサーバー側でエフェメラルキー取得済みとする
       const EPHEMERAL_KEY = data.client_secret.value;
 
       const pc = new RTCPeerConnection({
         iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
       });
 
-      if (!audioRef.current) {
-        const audioEl = document.createElement("audio");
-        audioEl.autoplay = true;
-        audioRef.current = audioEl;
-        document.body.appendChild(audioEl);
-      }
-      
-      pc.ontrack = (e) => {
-        if (audioRef.current) {
-          audioRef.current.srcObject = e.streams[0];
-        }
-      };
-
+      // テキストのみで良いならマイク取得は任意だが、ここでは一応取得しておく
       const ms = await navigator.mediaDevices.getUserMedia({ audio: true });
-      setupAudioAnalyser(ms);
-      
       ms.getTracks().forEach(track => {
         track.enabled = !isMuted;
         pc.addTrack(track, ms);
       });
 
       const dc = pc.createDataChannel("oai-events");
-      dc.onmessage = (e) => console.log("Received event:", JSON.parse(e.data));
       dcRef.current = dc;
+
+      dc.onmessage = (e) => {
+        const event = JSON.parse(e.data);
+        console.log("Received event:", event);
+
+        if (event.type === "error") {
+          console.error("OpenAI Realtime API Error:", event.error);
+        }
+
+        if (event.type === "conversation.item.created") {
+          // ユーザーメッセージが作成されたらresponse.create送信
+          if (event.item && event.item.role === 'user') {
+            userMessageCreatedRef.current = true;
+            sendResponseCreate();
+          }
+        }
+
+        if (event.type === "response.done") {
+          // テキスト抽出
+          let collectedText = '';
+          const output = event.response?.output;
+          if (Array.isArray(output)) {
+            for (const item of output) {
+              // assistantメッセージを探す
+              if (item.type === 'message' && item.role === 'assistant' && Array.isArray(item.content)) {
+                for (const c of item.content) {
+                  if (c.type === 'text' && c.text) {
+                    collectedText += c.text;
+                  }
+                }
+              }
+            }
+          }
+
+          if (collectedText.trim()) {
+            setFinalText(collectedText);
+            playVoiceFromText(collectedText);
+          } else {
+            console.warn("No text found in response.done output.");
+          }
+        }
+      };
+
+      dc.onopen = () => {
+        console.log("DataChannel open. Updating session to ensure text-only...");
+        sendSessionUpdate(); // 念のためsession.updateでtextのみを再指定
+      };
 
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
@@ -95,15 +173,15 @@ export const RealtimeScreen: React.FC = () => {
 
       pcRef.current = pc;
       setIsConnected(true);
-      
+
       toast({
         title: "接続完了",
-        description: "イリーナと会話を開始できます",
+        description: "テキストのみの回答を取得します。",
       });
 
     } catch (error) {
       console.error("Error:", error);
-      const message = error instanceof Error ? error.message : "音声チャットの開始に失敗しました";
+      const message = error instanceof Error ? error.message : "開始に失敗しました";
       setErrorMessage(message);
       toast({
         title: "エラー",
@@ -113,23 +191,43 @@ export const RealtimeScreen: React.FC = () => {
     }
   };
 
+  const sendSessionUpdate = () => {
+    // 確実にtextのみを指定
+    const event = {
+      type: "session.update",
+      session: {
+        modalities: ["text"] // テキストのみ
+      }
+    };
+    dcRef.current?.send(JSON.stringify(event));
+  };
+
+  const sendResponseCreate = () => {
+    const instructions = "あなたの名前は「あまね ひより」です。一人称は「ひより」。あなたはツンデレの妹で、隠しているけど実はお兄ちゃん（会話しているユーザー）のことが大好きです。より感情に溢れた話し方をし、感嘆詞（！、？、...）など漫画的表現で会話してください。";
+    const maxTokens = 200;
+
+    const event = {
+      type: "response.create",
+      response: {
+        modalities: ["text"], // テキストのみ
+        system_instructions: instructions, // ここを system_instructions に変更
+        max_response_output_tokens: maxTokens
+      }
+    };
+    dcRef.current?.send(JSON.stringify(event));
+  };
+
   const handleStop = async () => {
     if (pcRef.current) {
       pcRef.current.close();
       pcRef.current = null;
     }
-    if (audioRef.current) {
-      audioRef.current.srcObject = null;
-    }
-    if (audioContextRef.current) {
-      await audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
     setIsConnected(false);
-    
+    setFinalText('');
+
     toast({
       title: "通話終了",
-      description: "AIとの会話を終了しました",
+      description: "終了しました。",
     });
   };
 
@@ -147,11 +245,11 @@ export const RealtimeScreen: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-950 text-gray-100">
       <div className="fixed inset-0 flex flex-col">
-        <header className="px-4 py-3 border-b border-gray-800 bg-gray-900/95 backdrop-blur supports-[backdrop-filter]:bg-gray-900/60">
+        <header className="px-4 py-3 border-b border-gray-800 bg-gray-900/95 backdrop-blur">
           <div className="flex items-center space-x-2">
-            <Bot className="w-6 h-6 text-blue-400" />
-            <h1 className="text-lg font-semibold bg-gradient-to-r from-blue-400 to-violet-400 bg-clip-text text-transparent">
-              AI Voice Chat
+            <Bot className="w-6 h-6 text-pink-400" />
+            <h1 className="text-lg font-semibold text-transparent bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text">
+              ひよりとチャット
             </h1>
           </div>
         </header>
@@ -168,13 +266,13 @@ export const RealtimeScreen: React.FC = () => {
                 >
                   <div className="relative">
                     <motion.div
-                      className="w-32 h-32 rounded-full bg-blue-500/10 flex items-center justify-center"
+                      className="w-40 h-40 rounded-full bg-gradient-to-r from-pink-400/20 to-purple-400/20 flex items-center justify-center"
                       animate={{
-                        scale: [1, 1.1, 1],
+                        scale: [1, 1.05, 1],
                         boxShadow: [
-                          '0 0 0 0 rgba(59, 130, 246, 0.4)',
-                          '0 0 0 20px rgba(59, 130, 246, 0)',
-                          '0 0 0 0 rgba(59, 130, 246, 0)'
+                          '0 0 0 0 rgba(236,72,153,0.4)',
+                          '0 0 0 20px rgba(236,72,153,0)',
+                          '0 0 0 0 rgba(236,72,153,0)'
                         ]
                       }}
                       transition={{
@@ -184,9 +282,9 @@ export const RealtimeScreen: React.FC = () => {
                       }}
                     >
                       <motion.div
-                        className="w-24 h-24 rounded-full bg-blue-500/20 flex items-center justify-center"
+                        className="w-36 h-36 rounded-full bg-gradient-to-r from-pink-400/30 to-purple-400/30 flex items-center justify-center overflow-hidden"
                         animate={{
-                          scale: [1, 1.1, 1],
+                          scale: [1, 1.05, 1],
                         }}
                         transition={{
                           duration: 1.5,
@@ -195,7 +293,16 @@ export const RealtimeScreen: React.FC = () => {
                           delay: 0.5
                         }}
                       >
-                        <Activity className="w-12 h-12 text-blue-400" />
+                        <div className="w-32 h-32 rounded-full overflow-hidden border-2 border-pink-400/30">
+                          <Image
+                            src="/hiyori.png"
+                            alt="Hiyori"
+                            width={128}
+                            height={128}
+                            className="object-cover"
+                            priority
+                          />
+                        </div>
                       </motion.div>
                     </motion.div>
                   </div>
@@ -205,33 +312,41 @@ export const RealtimeScreen: React.FC = () => {
                     animate={{ opacity: 1, y: 0 }}
                     className="text-center space-y-2"
                   >
-                    <p className="text-lg font-medium text-gray-200">AIと会話中...</p>
-                    <p className="text-sm text-gray-400">接続状態: 安定</p>
+                    <p className="text-lg font-medium text-transparent bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text">
+                      ひよりと会話中...
+                    </p>
+                    <p className="text-sm text-gray-400">安定接続</p>
                   </motion.div>
+
+                  {finalText && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="text-center text-gray-100 bg-gradient-to-r from-pink-400/10 to-purple-400/10 rounded-xl p-4 border border-pink-400/20"
+                    >
+                      {finalText}
+                    </motion.div>
+                  )}
 
                   <div className="flex items-center space-x-4">
                     <motion.button
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                       onClick={toggleMute}
-                      className={`p-4 rounded-full transition-colors ${
-                        isMuted 
-                          ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' 
-                          : 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30'
+                      className={`p-4 rounded-full transition-colors backdrop-blur-sm ${
+                        isMuted
+                          ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                          : 'bg-pink-400/20 text-pink-400 hover:bg-pink-400/30'
                       }`}
                     >
-                      {isMuted ? (
-                        <MicOff className="w-6 h-6" />
-                      ) : (
-                        <Mic className="w-6 h-6" />
-                      )}
+                      {isMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
                     </motion.button>
 
                     <motion.button
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                       onClick={handleStop}
-                      className="p-6 rounded-full bg-gradient-to-r from-red-500 to-pink-500 text-white shadow-lg shadow-red-500/25"
+                      className="p-6 rounded-full bg-gradient-to-r from-red-500 to-pink-500 text-white shadow-lg shadow-red-500/25 backdrop-blur-sm"
                     >
                       <PhoneOff className="w-8 h-8" />
                     </motion.button>
@@ -244,19 +359,27 @@ export const RealtimeScreen: React.FC = () => {
                   exit={{ scale: 0.9, opacity: 0 }}
                   className="flex flex-col items-center space-y-6"
                 >
-                  <div className="p-8 rounded-full bg-gray-800/50">
-                    <Bot className="w-16 h-16 text-gray-400" />
+                  <div className="w-32 h-32 rounded-full overflow-hidden border-2 border-pink-400/30">
+                    <Image
+                      src="/hiyori.png"
+                      alt="Hiyori"
+                      width={128}
+                      height={128}
+                      className="object-cover"
+                      priority
+                    />
                   </div>
                   
                   <p className="text-center text-gray-400 max-w-xs">
-                    イリーナと音声で会話を始めましょう
+                    天音ひよりとお話しましょう！<br/>
+                    下のボタンをクリックして会話を始めてください。
                   </p>
 
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={handleStart}
-                    className="p-6 rounded-full bg-gradient-to-r from-blue-500 to-violet-500 text-white shadow-lg shadow-blue-500/25"
+                    className="p-6 rounded-full bg-gradient-to-r from-pink-400 to-purple-500 text-white shadow-lg shadow-pink-500/25 backdrop-blur-sm"
                   >
                     <Phone className="w-8 h-8" />
                   </motion.button>
@@ -268,7 +391,7 @@ export const RealtimeScreen: React.FC = () => {
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="mt-6 p-4 rounded-lg bg-red-900/50 border border-red-700/50 text-red-200 text-sm text-center"
+                className="mt-6 p-4 rounded-lg bg-red-900/50 border border-red-700/50 text-red-200 text-sm text-center backdrop-blur-sm"
               >
                 {errorMessage}
               </motion.div>

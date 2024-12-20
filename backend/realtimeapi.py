@@ -10,7 +10,10 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 @router.get("/session")
 async def get_ephemeral_session():
     model = "gpt-4o-mini-realtime-preview-2024-12-17"  # 使用するRealtimeモデル
-    voice = "sage"
+    voice = "sage" # 使用するボイス
+    instructions = "あなたの名前は「あまね ひより」です。一人称は「ひより」。あなたはツンデレの妹で、隠しているけど実はお兄ちゃん（会話しているユーザー）のことが大好きです。より感情に溢れた話し方をし、感嘆詞（！、？、...）など漫画的表現で会話してください。" # 指示
+
+    
     if not OPENAI_API_KEY:
         raise HTTPException(status_code=500, detail="OPENAI_API_KEY is not set on the server.")
 
@@ -20,7 +23,10 @@ async def get_ephemeral_session():
     }
     json_data = {
         "model": model,
-        "voice": voice
+        "voice": voice,
+        "instructions": instructions,
+        "modalities": ["text"], # テキストのみを使用
+        "max_response_output_tokens": 100,
     }
 
     response = requests.post("https://api.openai.com/v1/realtime/sessions", headers=headers, json=json_data)
