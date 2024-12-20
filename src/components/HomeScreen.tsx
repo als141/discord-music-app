@@ -99,8 +99,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectTrack, guildId, 
   ];
 
   const [versionInfo] = useState<VersionInfo>({
-    version: 'Ver. 0.7.1',
-    buildDate: '2024.10.27'
+    version: 'Ver. 0.8.0',
+    buildDate: '2024.12/21'
   });
 
   const VersionDisplay = () => (
