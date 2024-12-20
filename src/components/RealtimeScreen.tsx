@@ -249,7 +249,7 @@ export const RealtimeScreen: React.FC = () => {
                   </div>
                   
                   <p className="text-center text-gray-400 max-w-xs">
-                    AIアシスタントと音声で会話を始めましょう
+                    イリーナと音声で会話を始めましょう
                   </p>
 
                   <motion.button
