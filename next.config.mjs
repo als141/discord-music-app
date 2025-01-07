@@ -39,7 +39,15 @@ const nextConfig = {
         headers: [
           {
             key: 'Content-Security-Policy',
-            value: "script-src 'self' 'unsafe-eval' 'unsafe-inline';",
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://vercel.live https://*.vercel.live",
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' https: data:",
+              "font-src 'self'",
+              "connect-src 'self' https:",
+              "frame-src 'self' https:",
+            ].join('; '),
           },
         ],
       },
