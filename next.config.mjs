@@ -39,7 +39,7 @@ const nextConfig = {
         headers: [
           {
             key: 'Content-Security-Policy',
-            value: "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://udify.app;",
+            value: "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://udify.app https://vercel.live;",
           },
         ],
       },
