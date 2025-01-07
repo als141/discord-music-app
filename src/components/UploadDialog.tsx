@@ -85,12 +85,13 @@ export const UploadDialog: React.FC<UploadDialogProps> = ({
       });
       onClose();
       onUploaded(); // アップロード完了時に楽曲一覧を再取得するなど
-    } catch (error: any) {
-      toast({
-        title: "エラー",
-        description: error.message || "アップロードに失敗しました。",
-        variant: "destructive",
-      });
+    } catch (error: unknown) {
+        const errorMsg = error instanceof Error ? error.message : '未知のエラーが発生しました。';
+        toast({
+          title: 'エラー',
+          description: errorMsg,
+          variant: 'destructive',
+        });
     } finally {
       setIsLoading(false);
     }

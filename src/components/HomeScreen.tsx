@@ -128,11 +128,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       }
       const data: UploadedSong[] = await res.json();
       setUploadedSongs(data);
-    } catch (error: any) {
-      console.error('アップロード済み楽曲の取得エラー:', error);
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : '未知のエラーが発生しました。';
+      console.error('アップロード済み楽曲の取得エラー:', errorMsg);
       toast({
         title: 'エラー',
-        description: error.message,
+        description: errorMsg,
         variant: 'destructive',
       });
     }
@@ -141,7 +142,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   // -------------------------------
   // 楽曲削除
   // -------------------------------
-  const handleDeleteUploadedSong = async (song: UploadedSong) => {
+  const handleDeleteUploadedSong = useCallback(async (song: UploadedSong) => {
     if (!session || !session.user || !guildId) return;
     try {
       const params = new URLSearchParams();
@@ -159,19 +160,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         description: `"${song.title}" を削除しました。`,
       });
       fetchUploadedSongs();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : '未知のエラーが発生しました。';
       toast({
         title: "エラー",
-        description: error.message,
+        description: errorMsg,
         variant: "destructive",
       });
     }
-  };
+  }, [session, guildId, fetchUploadedSongs, toast]);
 
   // -------------------------------
   // 楽曲編集（タイトル・アーティスト）
   // -------------------------------
-  const handleEditUploadedSong = async (song: UploadedSong) => {
+  const handleEditUploadedSong = useCallback(async (song: UploadedSong) => {
     if (!session || !session.user || !guildId) return;
     const newTitle = prompt("新しいタイトルを入力してください", song.title);
     const newArtist = prompt("新しいアーティスト名を入力してください", song.artist);
@@ -197,19 +199,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         description: "楽曲情報を更新しました。",
       });
       fetchUploadedSongs();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : '未知のエラーが発生しました。';
       toast({
         title: "エラー",
-        description: error.message,
+        description: errorMsg,
         variant: "destructive",
       });
     }
-  };
+  }, [session, guildId, fetchUploadedSongs, toast]);
 
   // -------------------------------
   // アップロード楽曲を再生キューに追加
   // -------------------------------
-  const handleAddUploadedSongToQueue = async (song: UploadedSong) => {
+  const handleAddUploadedSongToQueue = useCallback(async (song: UploadedSong) => {
     if (!guildId) {
       toast({
         title: "エラー",
@@ -241,14 +244,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         title: "成功",
         description: `"${song.title}" をキューに追加しました。`,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : '未知のエラーが発生しました。';
       toast({
         title: "エラー",
-        description: error.message || "キューに追加できませんでした。",
+        description: errorMsg || "キューに追加できませんでした。",
         variant: "destructive",
       });
     }
-  };
+  }, [guildId, session, toast, api]);
 
   // -------------------------------
   // ギルドIDが変わったらアップロード一覧を再取得
@@ -264,19 +268,19 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   // -------------------------------
   // 元々の「selectTrack」などの処理
   // -------------------------------
-  const handleSelectTrack = async (item: PlayableItem) => {
+  const handleSelectTrackCallback = useCallback(async (item: PlayableItem) => {
     await onSelectTrack(item);
-  };
+  }, [onSelectTrack]);
 
-  const handleArtistClick = (artistId: string) => {
+  const handleArtistClick = useCallback((artistId: string) => {
     setSelectedArtistId(artistId);
     setIsArtistDialogOpen(true);
-  };
+  }, []);
 
-  const closeArtistDialog = () => {
+  const closeArtistDialog = useCallback(() => {
     setIsArtistDialogOpen(false);
     setSelectedArtistId(null);
-  };
+  }, []);
 
   // -------------------------------
   // タブ定義
@@ -323,8 +327,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         setLoading(true);
         const homeSections = await api.getRecommendations();
         setSections(homeSections);
-      } catch (error) {
-        console.error('データの取得に失敗しました:', error);
+      } catch (error: unknown) {
+        const errorMsg = error instanceof Error ? error.message : '未知のエラーが発生しました。';
+        console.error('データの取得に失敗しました:', errorMsg);
         toast({
           title: 'エラー',
           description: 'データの取得に失敗しました。',
@@ -335,33 +340,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       }
     };
     fetchData();
-  }, [toast]);
+  }, [api, toast]);
 
   // -------------------------------
   // 再生履歴の取得
   // -------------------------------
-  const [localHistory, setLocalHistory] = useState<QueueItem[]>([]);
-
-  useEffect(() => {
-    const fetchHistory = async () => {
-      if (guildId) {
-        try {
-          const historyData = await api.getHistory(guildId);
-          setLocalHistory(historyData);
-        } catch (error: any) {
-          console.error('履歴の取得に失敗しました:', error);
-          toast({
-            title: 'エラー',
-            description: '履歴の取得に失敗しました。',
-            variant: 'destructive',
-          });
-        }
-      } else {
-        setLocalHistory([]);
-      }
-    };
-    fetchHistory();
-  }, [guildId, toast]);
+  // 'history' は props から受け取るため、state には保持しない
+  // 直接 props を使用して表示する
+  // 'isOnDeviceMode' を使用して何らかの表示や機能を追加
 
   // -------------------------------
   // レンダリング用のヘルパー
@@ -490,7 +476,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       <ScrollArea className="h-full">
         <div className="p-4">
           {/* 再生履歴 */}
-          {localHistory.length > 0 && guildId && (
+          {history.length > 0 && guildId && (
             <div key="section-history" className="mb-8 w-full">
               <div className="flex items-center mb-4">
                 <div className="mr-2 p-2 bg-primary/10 rounded-full">
@@ -500,7 +486,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               </div>
               <ScrollArea className="w-full whitespace-nowrap rounded-md border">
                 <div className="flex space-x-4 p-4">
-                  {localHistory.slice().reverse().map((item, idx) => (
+                  {history.slice().reverse().map((item, idx) => (
                     <div key={idx} className="w-[200px] h-[280px]">
                       {renderHistoryItem(item, idx)}
                     </div>
@@ -624,6 +610,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
       </ScrollArea>
     );
+
   };
 
   // -------------------------------
@@ -669,6 +656,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             <Button variant="default" onClick={() => setIsUploadDialogOpen(true)}>
               楽曲をアップロード
             </Button>
+          </div>
+        )}
+
+        {/* デバイスモードの表示 */}
+        {isOnDeviceMode && (
+          <div className="mt-2">
+            <p className="text-sm text-muted-foreground">デバイスモードで動作中です。</p>
           </div>
         )}
       </div>
@@ -718,7 +712,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               )}
               {activeTab === 'ai-recommend' && (
                 <div className="h-full">
-                  <AIRecommendScreen onSelectTrack={onSelectTrack} />
+                  <AIRecommendScreen onSelectTrack={handleSelectTrackCallback} />
                 </div>
               )}
               {activeTab === 'valorant' && (
@@ -742,8 +736,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           artistId={selectedArtistId}
           isOpen={isArtistDialogOpen}
           onClose={closeArtistDialog}
-          onAddTrackToQueue={handleSelectTrack}
-          onAddItemToQueue={handleSelectTrack}
+          onAddTrackToQueue={handleSelectTrackCallback}
+          onAddItemToQueue={handleSelectTrackCallback}
         />
       )}
     </div>
