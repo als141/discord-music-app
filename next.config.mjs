@@ -32,6 +32,19 @@ const nextConfig = {
     domains: ['i.ytimg.com', 'lh3.googleusercontent.com'],
     unoptimized: true, // 画像最適化を無効化
   },
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value: "script-src 'self' 'unsafe-eval' 'unsafe-inline';",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default withPWA(nextConfig);
