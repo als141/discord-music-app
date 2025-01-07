@@ -91,8 +91,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   // バージョン情報（元コードに含まれる）
   // -------------------------------
   const [versionInfo] = useState<VersionInfo>({
-    version: 'Ver. 0.8.0',
-    buildDate: '2024.12/21',
+    version: 'Ver. 0.8.1β',
+    buildDate: '2025.1/7',
   });
 
   // -------------------------------
