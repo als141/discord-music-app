@@ -2,7 +2,7 @@ import nextPWA from '@ducanh2912/next-pwa';
 
 const withPWA = nextPWA({
   dest: 'public',
-  disable: process.env.NODE_ENV === 'development',
+  disable: process.env.NODE_ENV === 'development', // 開発環境では無効化
   register: true,
   runtimeCaching: [
     {
@@ -18,28 +18,43 @@ const withPWA = nextPWA({
         cacheName: 'static-resources',
         expiration: {
           maxEntries: 50,
-          maxAgeSeconds: 60 * 60 * 24 * 30, // 30日
+          maxAgeSeconds: 60 * 60 * 24 * 30, // 30日間
         },
       },
     },
-    // 追加のキャッシュ戦略があればここに記載
   ],
 });
 
 const nextConfig = {
   reactStrictMode: true,
   images: {
-    domains: ['i.ytimg.com', 'lh3.googleusercontent.com'],
+    domains: [
+      'i.ytimg.com',
+      'lh3.googleusercontent.com',
+      'cdn.discordapp.com', // 必要な画像ドメインを許可
+    ],
     unoptimized: true, // 画像最適化を無効化
   },
   async headers() {
     return [
       {
-        source: '/(.*)',
+        source: '/(.*)', // すべてのリクエストを対象
         headers: [
           {
             key: 'Content-Security-Policy',
-            value: "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://udify.app https://vercel.live;",
+            value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; connect-src 'self' https://irina.f5.si; img-src 'self' data: https://cdn.discordapp.com; style-src 'self' 'unsafe-inline';",
+          },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin',
+          },
+          {
+            key: 'Permissions-Policy',
+            value: 'geolocation=(), microphone=(), camera=()',
           },
         ],
       },
