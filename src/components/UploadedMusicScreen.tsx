@@ -234,7 +234,7 @@ export const UploadedMusicScreen: React.FC<UploadedMusicScreenProps> = ({ guildI
         <div className="container mx-auto px-4 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <Music2 className="w-6 h-6" />
-            <h1 className="text-2xl font-bold">Uploaded Music</h1>
+            <h1 className="text-2xl font-bold">ライブラリ</h1>
             <Badge variant="secondary" className="ml-2">
               {filteredAndSortedSongs.length} songs
             </Badge>
@@ -268,10 +268,10 @@ export const UploadedMusicScreen: React.FC<UploadedMusicScreenProps> = ({ guildI
               variant="outline"
               onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
             >
-              {viewMode === 'grid' ? 'List View' : 'Grid View'}
+              {viewMode === 'grid' ? 'リスト表示' : 'グリッド表示'}
             </Button>
             <Button variant="default" onClick={() => setIsUploadDialogOpen(true)}>
-              Upload Music
+              音楽をアップロード
             </Button>
           </div>
         </div>
@@ -310,7 +310,7 @@ export const UploadedMusicScreen: React.FC<UploadedMusicScreenProps> = ({ guildI
                 >
                   <Music2 className="w-12 h-12 mx-auto text-muted-foreground" />
                   <p className="mt-4 text-lg text-muted-foreground">
-                    No songs found. Try adjusting your search or upload some music!
+                    楽曲が見つかりませんでした。検索条件を変更するか、音楽をアップロードしてください！
                   </p>
                 </motion.div>
               ) : viewMode === 'grid' ? (
