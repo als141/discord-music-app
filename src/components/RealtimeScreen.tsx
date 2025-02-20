@@ -1,8 +1,7 @@
-// RealtimeScreen.tsx
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Mic, MicOff, PhoneOff, Phone, Bot } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { api } from '@/utils/api'; // サーバーサイドでセッション生成済みで"modalities": ["text"]なエフェメラルキーを取得
+import { api } from '@/utils/api';
 import { useToast } from "@/hooks/use-toast";
 import Image from 'next/image';
 
@@ -18,25 +17,41 @@ export const RealtimeScreen: React.FC = () => {
   const animationFrameRef = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // ユーザーメッセージ作成完了フラグ
   const userMessageCreatedRef = useRef<boolean>(false);
 
-  // にじボイスAPIのパラメータ
   const NIJI_API_KEY = process.env.NEXT_PUBLIC_NIJI_API_KEY;
   const VOICE_ACTOR_ID = process.env.NEXT_PUBLIC_VOICE_ACTOR_ID;
-  
   if (!NIJI_API_KEY || !VOICE_ACTOR_ID) {
     throw new Error("環境変数が設定されていません");
   }
 
+  // handleStopは通常関数として定義し、useEffectは含めない
+  const handleStop = useCallback(() => {
+    // ここでuseEffectは使わない
+    // ピア切断などの処理
+    if (pcRef.current) {
+      pcRef.current.close();
+      pcRef.current = null;
+    }
+    if (dcRef.current) {
+      dcRef.current.close();
+      dcRef.current = null;
+    }
+  }, []);
+
+  // クリーンアップ用のuseEffect
   useEffect(() => {
+    // このuseEffect自体はマウント時に実行され、アンマウント時に返却される関数が呼ばれる
+    const frameId = animationFrameRef.current;
+
     return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
+      if (frameId) {
+        cancelAnimationFrame(frameId);
       }
+      // handleStop()を呼ぶ
       handleStop();
     };
-  }, []);
+  }, [handleStop]);
 
   const playVoiceFromText = async (text: string) => {
     try {
@@ -45,7 +60,7 @@ export const RealtimeScreen: React.FC = () => {
         audioRef.current.pause();
         audioRef.current = null;
       }
-  
+
       const res = await fetch(`https://api.nijivoice.com/api/platform/v1/voice-actors/${VOICE_ACTOR_ID}/generate-voice`, {
         method: 'POST',
         headers: {
@@ -82,14 +97,12 @@ export const RealtimeScreen: React.FC = () => {
     try {
       setErrorMessage(null);
       const data = await api.getRealtimeSession();
-      // このセッション生成では "modalities":["text"] を指定してサーバー側でエフェメラルキー取得済みとする
       const EPHEMERAL_KEY = data.client_secret.value;
 
       const pc = new RTCPeerConnection({
         iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
       });
 
-      // テキストのみで良いならマイク取得は任意だが、ここでは一応取得しておく
       const ms = await navigator.mediaDevices.getUserMedia({ audio: true });
       ms.getTracks().forEach(track => {
         track.enabled = !isMuted;
@@ -108,7 +121,6 @@ export const RealtimeScreen: React.FC = () => {
         }
 
         if (event.type === "conversation.item.created") {
-          // ユーザーメッセージが作成されたらresponse.create送信
           if (event.item && event.item.role === 'user') {
             userMessageCreatedRef.current = true;
             sendResponseCreate();
@@ -116,12 +128,10 @@ export const RealtimeScreen: React.FC = () => {
         }
 
         if (event.type === "response.done") {
-          // テキスト抽出
           let collectedText = '';
           const output = event.response?.output;
           if (Array.isArray(output)) {
             for (const item of output) {
-              // assistantメッセージを探す
               if (item.type === 'message' && item.role === 'assistant' && Array.isArray(item.content)) {
                 for (const c of item.content) {
                   if (c.type === 'text' && c.text) {
@@ -131,7 +141,6 @@ export const RealtimeScreen: React.FC = () => {
               }
             }
           }
-
           if (collectedText.trim()) {
             setFinalText(collectedText);
             playVoiceFromText(collectedText);
@@ -143,7 +152,7 @@ export const RealtimeScreen: React.FC = () => {
 
       dc.onopen = () => {
         console.log("DataChannel open. Updating session to ensure text-only...");
-        sendSessionUpdate(); // 念のためsession.updateでtextのみを再指定
+        sendSessionUpdate();
       };
 
       const offer = await pc.createOffer();
@@ -160,7 +169,6 @@ export const RealtimeScreen: React.FC = () => {
           },
         }
       );
-
       if (!sdpResponse.ok) {
         throw new Error('AIとの接続に失敗しました');
       }
@@ -192,43 +200,25 @@ export const RealtimeScreen: React.FC = () => {
   };
 
   const sendSessionUpdate = () => {
-    // 確実にtextのみを指定
     const event = {
       type: "session.update",
       session: {
-        modalities: ["text"] // テキストのみ
+        modalities: ["text"]
       }
     };
     dcRef.current?.send(JSON.stringify(event));
   };
 
   const sendResponseCreate = () => {
-    const instructions = "あなたの名前は「あまね ひより」です。一人称は「ひより」。あなたはツンデレの妹で、隠しているけど実はお兄ちゃん（会話しているユーザー）のことが大好きです。より感情に溢れた話し方をし、感嘆詞（！、？、...）など漫画的表現で会話してください。";
-    const maxTokens = 200;
-
+    const instructions = "（キャラ設定などの文字列）";
     const event = {
       type: "response.create",
       response: {
-        modalities: ["text"], // テキストのみ
-        system_instructions: instructions, // ここを system_instructions に変更
-        max_response_output_tokens: maxTokens
+        role: "assistant",
+        content: instructions,
       }
     };
     dcRef.current?.send(JSON.stringify(event));
-  };
-
-  const handleStop = async () => {
-    if (pcRef.current) {
-      pcRef.current.close();
-      pcRef.current = null;
-    }
-    setIsConnected(false);
-    setFinalText('');
-
-    toast({
-      title: "通話終了",
-      description: "終了しました。",
-    });
   };
 
   const toggleMute = () => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -73,37 +73,30 @@ export const ArtistDialog: React.FC<ArtistDialogProps> = ({
   const [expandedAlbums, setExpandedAlbums] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
-	const fetchArtistData = async (id: string) => {
-		setLoading(true);
-		try {
-			const response = await api.getArtistInfo(id);
-			const data = response as ArtistData;
-			setArtistData({
-				name: data.name,
-				subscribers: data.subscribers,
-				thumbnails: data.thumbnails,
-				songs: data.songs || [],
-				albums: data.albums || [],
-				related: data.related || []
-			});
-		} catch (error) {
-			console.error('アーティスト情報の取得に失敗しました:', error);
-			toast({
-				title: 'エラー',
-				description: 'アーティスト情報の取得に失敗しました。',
-				variant: 'destructive',
-			});
-			onClose();
-		} finally {
-			setLoading(false);
-		}
-	};
+  const fetchArtistData = useCallback(async (id: string) => {
+    setLoading(true)
+    try {
+      const response = await api.getArtistInfo(id)
+      // キャストや整形が必要ならここで実施
+      setArtistData(response as ArtistData)
+    } catch (error) {
+      console.error('アーティスト情報の取得に失敗しました:', error)
+      toast({
+        title: 'エラー',
+        description: 'アーティスト情報の取得に失敗しました。',
+        variant: 'destructive',
+      })
+      onClose()
+    } finally {
+      setLoading(false)
+    }
+  }, [toast, onClose])
 
   useEffect(() => {
     if (isOpen && artistId) {
-      fetchArtistData(artistId);
+      fetchArtistData(artistId)
     }
-  }, [isOpen, artistId, onClose]);
+  }, [isOpen, artistId, fetchArtistData])
 
   const fetchAlbumTracks = async (albumId: string) => {
     if (albumTracks[albumId]) return;

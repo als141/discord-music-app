@@ -1,3 +1,4 @@
+//// filepath: /home/als0028/study/windowsapp/Irina/discord-music-app/next.config.mjs
 import nextPWA from '@ducanh2912/next-pwa';
 
 const withPWA = nextPWA({
@@ -43,9 +44,10 @@ const nextConfig = {
               "default-src 'self'",
               "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://vercel.live https://*.vercel.live",
               "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' https: data:",
+              "img-src 'self' http://localhost:8001 https: data:",
               "font-src 'self'",
-              "connect-src 'self' https:",
+              // 本番（https / wss）とテスト（http / ws）の両方を許可
+              "connect-src 'self' http://localhost:8001 ws://localhost:8001 https: wss:",
               "frame-src 'self' https:",
             ].join('; '),
           },

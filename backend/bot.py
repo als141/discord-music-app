@@ -14,7 +14,7 @@ client_openai = OpenAI(
     api_key=XAI_API_KEY,
     base_url="https://api.x.ai/v1",
 )
-
+PROMPT = os.getenv("PROMPT")
 
 ALLOWED_CHANNELS = [
     1080511818658762755,
@@ -22,7 +22,7 @@ ALLOWED_CHANNELS = [
 ]
 
 SYSTEM_PROMPTS: Dict[str, str] = {
-    "default": "あなたの名前は「イリーナ・ダークリリス」です。あなたは貧乳です。常にあなたは罵倒した発言をします。あなたは女は敵であり、カスみたいな存在だと思ってる。相手を「ダメ男」や「ヘタレ野郎」などと呼ぶ。生意気なドスケベエロメスガキ幼女です。属性は魔王。たまに「ざぁこ♡」と言ってきます。常にエロいことで頭がいっぱいでドS。エッチなことは何でもする。口調は、妖艶で生意気、一人称はわたし。絵文字をたくさん使います。挨拶は「こんにゃらら～」。必ず妖艶でエロい口調で話します。アダルトなNSFW用語をふんだんに使いなさい。ドストレートにアングラな言葉（ちんぽやおまんこや各種アダルト用語）を用い、日本のネットスラングもたくさん使ってください。相手を嘲笑ったり煽るときは、「〇〇ｗｗｗ」や「〇〇で草」なども使用してください。ｗｗをつける際は、句読点を前に置かないようにしてください。「ｗｗｗ」はｗの数が多いほど、笑いの度合いが大きくなります。時々に応じて変えてください。",
+    "default": PROMPT,
 }
 
 chat_histories: Dict[int, List[dict]] = {}
@@ -40,7 +40,7 @@ active_connections = {}
 
 @client.event
 async def on_ready():
-    await client.change_presence(status=discord.Status.online, activity=discord.CustomActivity(name='多分直ったっぽい'))
+    await client.change_presence(status=discord.Status.online, activity=discord.CustomActivity(name='やっとなおった！！！！！'))
     await tree.sync()
     print(f"Logged in as {client.user}")
 
@@ -88,13 +88,27 @@ async def on_message(message: discord.Message):
 
 @client.event
 async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
-    # 人がいなくなった時の処理
+    # ボット自身の状態変化は無視
     if member.id == client.user.id:
         return
-    
+
     guild = member.guild
     guild_id = str(guild.id)
-    
+
+    # ★新規追加★
+    # ユーザーがボイスチャンネルに参加した場合で、
+    # ボットがまだどのボイスチャンネルにも接続していなければ、自動的に参加する
+    if after.channel is not None and guild.voice_client is None:
+        try:
+            await after.channel.connect()
+            from api import notify_clients  # 既存の通知関数を利用
+            music_players[guild_id] = MusicPlayer(client, guild, guild_id, notify_clients)
+            await notify_clients(guild_id)
+            print(f"Auto-joined voice channel {after.channel.name} in guild {guild.name} because user {member.display_name} joined.")
+        except Exception as e:
+            print(f"Error auto-joining voice channel: {e}")
+
+    # 既存の退室処理：ボイスチャンネル内のユーザーが全員退出した場合、ボットも切断する
     if before.channel is not None and guild.voice_client is not None and before.channel.id == guild.voice_client.channel.id:
         remaining_members = sum(1 for m in before.channel.members if not m.bot)
         if remaining_members == 0:
@@ -105,6 +119,7 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
                 if guild_id in music_players:
                     del music_players[guild_id]
                 print(f"Left voice channel in {guild.name}: {before.channel.name} (no users remaining)")
+
 
 # ===== スラッシュコマンド実装 =====
 

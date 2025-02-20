@@ -38,33 +38,30 @@ BigInt.prototype.toJSON = function() {
 
 export const MainApp: React.FC = () => {
   const { data: session, status } = useSession(); 
-  const { setCurrentTime, setDuration, audioRef } = usePlayback()
-  const { mutualServers } = useGuilds(); // botServersをmutualServersに変更
+  const { setCurrentTime, setDuration, audioRef } = usePlayback();
+  const { mutualServers } = useGuilds();
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [queue, setQueue] = useState<Track[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  // activeServerId と activeChannelId の状態を管理
   const [activeServerId, setActiveServerId] = useState<string | null>(null);
   const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
 
   const [isOnDeviceMode, setIsOnDeviceMode] = useState(false);
-
-  // オンデバイス用のキューと再生状態を管理
   const [deviceQueue, setDeviceQueue] = useState<Track[]>([]);
   const [deviceCurrentTrack, setDeviceCurrentTrack] = useState<Track | null>(null);
   const [deviceIsPlaying, setDeviceIsPlaying] = useState(false);
-  const { volume } = useVolume(); // 音量を取得
+  const { volume } = useVolume();
 
   const [voiceChannels, setVoiceChannels] = useState<VoiceChannel[]>([]);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [searchResults, setSearchResults] = useState<SearchItem[]>([]); // 型を修正
+  const [searchResults, setSearchResults] = useState<SearchItem[]>([]);
   const [isSearchActive, setIsSearchActive] = useState(false);
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [isMainPlayerVisible, setIsMainPlayerVisible] = useState(false);
   const [homeActiveTab, setHomeActiveTab] = useState<string>('home');
-  const [history, setHistory] = useState<QueueItem[]>([])
+  const [history, setHistory] = useState<QueueItem[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -109,15 +106,16 @@ export const MainApp: React.FC = () => {
   }, [activeChannelId]);
   
   // 楽曲が変更されたときの処理を修正
+  // deviceCurrentTrack が変わったら再生開始する（audioRefが依存に含まれる）
   useEffect(() => {
     if (deviceCurrentTrack) {
-      setIsLoading(true); // ローディング開始
+      setIsLoading(true);
       const playPromise = audioRef.current?.play();
       if (playPromise !== undefined) {
         playPromise
           .then(() => {
             setDeviceIsPlaying(true);
-            setIsLoading(false); // ローディング終了
+            setIsLoading(false);
           })
           .catch((error) => {
             console.error('再生エラー:', error);
@@ -125,26 +123,26 @@ export const MainApp: React.FC = () => {
           });
       }
     }
-  }, [deviceCurrentTrack]);
+  }, [deviceCurrentTrack, audioRef]);
 
   useEffect(() => {
     if (isOnDeviceMode && audioRef?.current) {
       audioRef.current.volume = volume;
     }
-  }, [volume, isOnDeviceMode]);
+  }, [volume, isOnDeviceMode, audioRef]);
 
   // オンデバイス用の再生関数を修正
   const handleDevicePlay = () => {
-    setIsLoading(true); // ローディング開始
+    setIsLoading(true);
     const playPromise = audioRef.current?.play();
-    if (playPromise !== undefined) {
+    if (playPromise) {
       playPromise
         .then(() => {
           setDeviceIsPlaying(true);
-          setIsLoading(false); // ローディング終了
+          setIsLoading(false);
         })
-        .catch((error) => {
-          console.error('再生エラー:', error);
+        .catch(err => {
+          console.error('再生エラー:', err);
           setIsLoading(false);
         });
     }
@@ -159,7 +157,7 @@ export const MainApp: React.FC = () => {
     if (deviceQueue.length > 0) {
       const nextTrack = deviceQueue[0];
       setDeviceCurrentTrack(nextTrack);
-      setDeviceQueue(deviceQueue.slice(1));
+      setDeviceQueue(prev => prev.slice(1));
     } else {
       setDeviceCurrentTrack(null);
       setDeviceIsPlaying(false);
@@ -189,78 +187,73 @@ export const MainApp: React.FC = () => {
     }
   }, [isOnDeviceMode, audioRef, setCurrentTime, setDuration]);
 
+  // canplay時にローディング解除
   useEffect(() => {
     const audio = audioRef.current;
-    if (audio) {
-      const handleCanPlay = () => {
-        setIsLoading(false); // ローディング終了
-      };
-  
-      audio.addEventListener('canplay', handleCanPlay);
-  
-      return () => {
-        audio.removeEventListener('canplay', handleCanPlay);
-      };
-    }
+    if (!audio) return;
+    const handleCanPlay = () => {
+      setIsLoading(false);
+    };
+    audio.addEventListener('canplay', handleCanPlay);
+    return () => {
+      audio.removeEventListener('canplay', handleCanPlay);
+    };
   }, [audioRef]);
 
-  // 楽曲を追加する関数を修正
+
   const handleDeviceAddToQueue = async (item: PlayableItem) => {
     if (!deviceCurrentTrack) {
-      setDeviceCurrentTrack(item);
-      // ローディング状態は useEffect 内で管理される
+      setDeviceCurrentTrack(item as Track);
     } else {
-      setDeviceQueue([...deviceQueue, item]);
+      setDeviceQueue(prev => [...prev, item as Track]);
       toast({
         title: "成功",
         description: `"${item.title}" をキューに追加しました。`,
       });
     }
   };
-
+  
+  // Discord側サーバー情報の取得
   useEffect(() => {
     const fetchServerData = async () => {
-      if (activeServerId) {
-        setIsLoading(true);
-        try {
-          const [channels, botStatus, queueResponse, isPlayingResponse] = await Promise.all([
-            api.getVoiceChannels(activeServerId),
-            api.getBotVoiceStatus(activeServerId),
-            api.getQueue(activeServerId),
-            api.isPlaying(activeServerId)
-          ]);
+      if (!activeServerId) return;
+      setIsLoading(true);
+      try {
+        const [channels, botStatus, queueResponse, isPlayingResponse] = await Promise.all([
+          api.getVoiceChannels(activeServerId),
+          api.getBotVoiceStatus(activeServerId),
+          api.getQueue(activeServerId),
+          api.isPlaying(activeServerId),
+        ]);
+        setVoiceChannels(channels);
+        if (botStatus) setActiveChannelId(botStatus);
 
-          setVoiceChannels(channels);
-          if (botStatus) setActiveChannelId(botStatus);
+        const currentTrackItem = queueResponse.find(item => item.isCurrent);
+        setCurrentTrack(currentTrackItem?.track || null);
+        setQueue(queueResponse.filter(item => !item.isCurrent).map(item => item.track));
+        setIsPlaying(isPlayingResponse);
 
-          const currentTrackItem = queueResponse.find(item => item.isCurrent);
-          setCurrentTrack(currentTrackItem?.track || null);
-          setQueue(queueResponse.filter(item => !item.isCurrent).map(item => item.track));
-          setIsPlaying(isPlayingResponse);
-
-          // WebSocketの設定
-          if (wsRef.current) {
-            wsRef.current.close();
-          }
-          const ws = setupWebSocket(activeServerId, (data) => {
-            const queueItems: QueueItem[] = data.queue;
-            const currentTrackItem = queueItems.find(item => item.isCurrent);
-            setCurrentTrack(currentTrackItem?.track || null);
-            setQueue(queueItems.filter(item => !item.isCurrent).map(item => item.track));
-            setIsPlaying(data.is_playing);
-            setHistory(data.history);
-          });
-          wsRef.current = ws;
-        } catch (error) {
-          console.error("Failed to fetch server data:", error);
-          toast({
-            title: "エラー",
-            description: "サーバーデータの取得に失敗しました。",
-            variant: "destructive",
-          });
-        } finally {
-          setIsLoading(false);
+        if (wsRef.current) {
+          wsRef.current.close();
         }
+        const ws = setupWebSocket(activeServerId, (data) => {
+          const queueItems: QueueItem[] = data.queue;
+          const current = queueItems.find(item => item.isCurrent);
+          setCurrentTrack(current?.track || null);
+          setQueue(queueItems.filter(item => !item.isCurrent).map(item => item.track));
+          setIsPlaying(data.is_playing);
+          setHistory(data.history);
+        });
+        wsRef.current = ws;
+      } catch (error) {
+        console.error("Failed to fetch server data:", error);
+        toast({
+          title: "エラー",
+          description: "サーバーデータの取得に失敗しました。",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
       }
     };
 
@@ -272,7 +265,7 @@ export const MainApp: React.FC = () => {
         wsRef.current = null;
       }
     };
-  }, [activeServerId, toast]);
+  }, [activeServerId, toast, setHistory]);
   
   // ユーザー情報を取得する関数を作成
   const getUserInfo = (): User | null => {
@@ -288,11 +281,9 @@ export const MainApp: React.FC = () => {
 
   const handleInviteBot = (serverId: string) => {
     const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID;
-    const permissions = '8'; // 必要に応じて調整
+    const permissions = '8';
     const scopes = 'bot';
-    
     const inviteUrl = `https://discord.com/oauth2/authorize?client_id=${clientId}&scope=${scopes}&permissions=${permissions}&guild_id=${serverId}`;
-    
     window.open(inviteUrl, '_blank');
   };
 
@@ -724,7 +715,7 @@ export const MainApp: React.FC = () => {
           </>
         )}
       </main>
-      {((currentTrack && !isMainPlayerVisible && !isOnDeviceMode) || (deviceCurrentTrack && !isMainPlayerVisible && isOnDeviceMode)) && homeActiveTab !== 'chat' && homeActiveTab !== 'ai-recommend' && homeActiveTab !== 'valorant' && homeActiveTab !== 'realtime' && (
+      {((currentTrack && !isMainPlayerVisible && !isOnDeviceMode) || (deviceCurrentTrack && !isMainPlayerVisible && isOnDeviceMode)) && homeActiveTab !== 'chat' && homeActiveTab !== 'uploaded-music' && homeActiveTab !== 'ai-recommend' && homeActiveTab !== 'valorant' && homeActiveTab !== 'realtime' && (
         <motion.div
           className="fixed bottom-0 left-0 right-0 bg-card p-4 flex items-center cursor-pointer"
           onClick={() => setIsMainPlayerVisible(true)}

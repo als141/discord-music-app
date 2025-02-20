@@ -12,7 +12,6 @@ export interface User {
   image: string | null;
 }
 
-// 共通のインターフェースを定義
 export interface PlayableItem {
   title: string;
   artist: string;
@@ -33,25 +32,7 @@ export interface Track extends PlayableItem {
 export interface SearchItem extends PlayableItem {
   type: string;  // 'song', 'video', 'album', 'playlist'
   browseId?: string;
-  artistId?: string; // 追加
-  items?: Track[];
-}
-
-export interface Track {
-  title: string;
-  artist: string;
-  thumbnail: string;
-  url: string;
-  added_by?: User; // フィールド名を 'added_by' に修正
-}
-
-export interface SearchItem {
-  type: string;  // 'song', 'video', 'album', 'playlist'
-  title: string;
-  artist: string;
-  thumbnail: string;
-  url: string;
-  browseId?: string;
+  artistId?: string;
   items?: Track[];
 }
 
@@ -72,12 +53,6 @@ export interface Server {
 export interface VoiceChannel {
   id: string;
   name: string;
-}
-
-interface QueueData {
-  queue: QueueItem[];
-  is_playing: boolean;
-  history: QueueItem[];
 }
 
 export interface ValorantPlayerCard {
@@ -124,7 +99,7 @@ export interface ValorantWeaponSkin {
 
 export interface ValorantStore {
   daily_offers: ValorantWeaponSkin[];
-  featured_bundle?: Record<string, string>; // 'any'を'unknown'に変更
+  featured_bundle?: Record<string, unknown>;
   remaining_duration: {
     daily: number;
     featured: number;
@@ -142,6 +117,34 @@ export interface ValorantAgent {
     killfeed: string;
   };
   stats?: Record<string, string>;
+}
+
+// ArtistData内のanyをunknownなどにして @typescript-eslint/no-explicit-any を回避
+export interface ArtistData {
+  name: string;
+  subscribers?: string;
+  thumbnails: {
+    url: string;
+    width?: number;
+    height?: number;
+  }[];
+  songs: unknown[];    // 必要に応じてSong[]に修正
+  albums: unknown[];
+  related: unknown[];
+}
+
+// WebSocket受信時のデータ型例
+interface WebSocketData {
+  queue: QueueItem[];
+  is_playing: boolean;
+  history: QueueItem[];
+}
+
+// Realtime Sessionレスポンス
+interface RealtimeSessionData {
+  client_secret: {
+    value: string;
+  };
 }
 
 export const api = {
@@ -217,9 +220,9 @@ export const api = {
     return response.data;
   },
 
-  getArtistInfo: async (artistId: string): Promise<unknown> => {
+  getArtistInfo: async (artistId: string): Promise<ArtistData> => {
     const response = await axios.get(`${API_URL}/artist/${artistId}`);
-    return response.data;
+    return response.data as ArtistData;
   },
 
   getAlbumItems: async (albumId: string): Promise<Track[]> => {
@@ -275,9 +278,10 @@ export const api = {
     await axios.post(`${API_URL}/remove-from-queue/${guildId}?position=${position}`);
   },
 
-  getRealtimeSession: async (): Promise<{ client_secret: { value: string } }> => {
-    // /session endpoint からエフェメラルキーを取得
-    const response = await axios.get(`${API_URL}/session`);
+  getRealtimeSession: async (): Promise<RealtimeSessionData> => {
+    const response = await axios.post(`${API_URL}/realtime-session`, {
+      modalities: ["text"]
+    });
     return response.data;
   },
 
@@ -303,30 +307,41 @@ export const api = {
   },
 };
 
-export const setupWebSocket = (guildId: string, onUpdate: (data: QueueData) => void) => {
-  const protocol = API_URL.startsWith('https') ? 'wss' : 'ws';
-  const host = API_URL.replace(/^https?:\/\//, '');
-  const wsUrl = `${protocol}://${host}/ws/${guildId}`;
-
+export function setupWebSocket(guildId: string, onMessage: (data: WebSocketData) => void): WebSocket {
+  if (!process.env.NEXT_PUBLIC_API_URL) {
+    throw new Error('API URL is not defined. Please set NEXT_PUBLIC_API_URL environment variable.');
+  }
+  const wsUrl = `${process.env.NEXT_PUBLIC_API_URL.replace(/^http/, 'ws')}/ws/${guildId}`;
   const ws = new WebSocket(wsUrl);
 
+  ws.onopen = () => {
+    console.log("WebSocket 接続成功");
+  };
+
   ws.onmessage = (event) => {
-    const message = JSON.parse(event.data);
-    if (message.type === 'update') {
-      onUpdate(message.data);
+    try {
+      const data = JSON.parse(event.data);
+      if (data.type === "update") {
+        onMessage(data.data);
+      }
+    } catch (error) {
+      console.error("WebSocket メッセージ解析エラー:", error);
     }
   };
 
-  ws.onerror = (error) => {
-    console.error('WebSocket error:', error);
+  ws.onclose = () => {
+    console.log("WebSocket 接続切断。再接続を試みます...");
+    // 数秒後に再接続
+    setTimeout(() => {
+      setupWebSocket(guildId, onMessage);
+    }, 3000);
   };
 
-  ws.onclose = () => {
-    console.log('WebSocket connection closed');
-    // 再接続を試みる
-    // setTimeout(() => setupWebSocket(guildId, onUpdate), 5000); // setTimeout を削除
-    setupWebSocket(guildId, onUpdate) // 即時再接続を試みる
+  ws.onerror = (error) => {
+    console.error("WebSocket エラー:", error);
+    ws.close();
   };
 
   return ws;
-};
+}
+

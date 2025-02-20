@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence, useMotionValue, useAnimation, PanInfo } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -21,7 +21,6 @@ const mockArtists = [
   { id: '3', name: 'Artist 3', image: '/api/placeholder/100/100' },
   { id: '4', name: 'Artist 4', image: '/api/placeholder/100/100' },
   { id: '5', name: 'Artist 5', image: '/api/placeholder/100/100' },
-  // 必要に応じて追加
 ]
 
 const mockTracks: PlayableItem[] = [
@@ -30,7 +29,6 @@ const mockTracks: PlayableItem[] = [
   { title: 'Track 3', artist: 'Artist 3', thumbnail: '/api/placeholder/300/300', url: '' },
   { title: 'Track 4', artist: 'Artist 4', thumbnail: '/api/placeholder/300/300', url: '' },
   { title: 'Track 5', artist: 'Artist 5', thumbnail: '/api/placeholder/300/300', url: '' },
-  // 必要に応じて追加
 ]
 
 export const AIRecommendScreen: React.FC<AIRecommendScreenProps> = ({ onSelectTrack }) => {
@@ -44,17 +42,10 @@ export const AIRecommendScreen: React.FC<AIRecommendScreenProps> = ({ onSelectTr
   const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null)
   const [usedTracks, setUsedTracks] = useState<PlayableItem[]>([])
 
-  useEffect(() => {
-    if (step === 'matching' && !currentTrack) {
-      const nextTrack = getNextTrack()
-      setCurrentTrack(nextTrack)
-    }
-  }, [step])
-
-  const getNextTrack = () => {
+  // getNextTrackをuseCallback化し、usedTracksを依存に含める
+  const getNextTrack = useCallback((): PlayableItem | null => {
     const remainingTracks = mockTracks.filter(track => !usedTracks.includes(track))
     if (remainingTracks.length === 0) {
-      // すべての楽曲を使い切った場合、使用済みリストをリセット
       setUsedTracks([])
       return mockTracks[Math.floor(Math.random() * mockTracks.length)]
     } else {
@@ -62,7 +53,16 @@ export const AIRecommendScreen: React.FC<AIRecommendScreenProps> = ({ onSelectTr
       setUsedTracks(prev => [...prev, nextTrack])
       return nextTrack
     }
-  }
+  }, [usedTracks])
+
+  // stepが"matching"になったらcurrentTrackが未設定なら次の曲をセット
+  // ※ currentTrack, getNextTrack を依存配列に含める
+  useEffect(() => {
+    if (step === 'matching' && !currentTrack) {
+      const nextTrack = getNextTrack()
+      setCurrentTrack(nextTrack)
+    }
+  }, [step, currentTrack, getNextTrack])
 
   const handleGenreSelection = (genre: string) => {
     setSelectedGenres(prev => prev.includes(genre) ? prev.filter(g => g !== genre) : [...prev, genre])

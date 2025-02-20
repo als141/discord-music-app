@@ -18,20 +18,17 @@ import {
   Mic,
   ExternalLink,
   Info,
-  Trash2,
-  Edit
+  Music2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { UploadedMusicScreen } from './UploadedMusicScreen';
 import { ChatScreen } from './ChatScreen';
 import { AIRecommendScreen } from './AIRecommendScreen';
 import { VALORANTScreen } from './VALORANTScreen';
 import ArtistDialog from '@/components/ArtistDialog';
 import { RealtimeScreen } from './RealtimeScreen';
-import { UploadDialog } from './UploadDialog';
-import { Button } from '@/components/ui/button';
-import { useSession } from 'next-auth/react';
 
 interface HomeScreenProps {
   onSelectTrack: (item: PlayableItem) => void;
@@ -41,19 +38,6 @@ interface HomeScreenProps {
   history: QueueItem[];
   isOnDeviceMode: boolean;
 }
-
-/** DBから取得するアップロード曲の型 */
-type UploadedSong = {
-  id: string;
-  guild_id: string;
-  title: string;
-  artist: string;
-  filename: string;
-  thumbnail_filename: string;
-  uploader_id: string;
-  uploader_name: string;
-  full_path: string; // 実際のファイル絶対パス
-};
 
 interface VersionInfo {
   version: string;
@@ -65,11 +49,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   guildId,
   activeTab,
   onTabChange,
-  history,
+  history = [],
   isOnDeviceMode,
 }) => {
   const { toast } = useToast();
-  const { data: session } = useSession();
 
   // -------------------------------
   // 既存のステート
@@ -82,17 +65,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [selectedArtistId, setSelectedArtistId] = useState<string | null>(null);
 
   // -------------------------------
-  // 追加: アップロード関連ステート
-  // -------------------------------
-  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
-  const [uploadedSongs, setUploadedSongs] = useState<UploadedSong[]>([]);
-
-  // -------------------------------
   // バージョン情報（元コードに含まれる）
   // -------------------------------
   const [versionInfo] = useState<VersionInfo>({
-    version: 'Ver. 0.8.1β',
-    buildDate: '2025.1/7',
+    version: 'Ver. 0.8.5β',
+    buildDate: '2025.2.20',
   });
 
   // -------------------------------
@@ -114,156 +91,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       </Tooltip>
     </TooltipProvider>
   );
-
-  // -------------------------------
-  // アップロード済み楽曲の一覧取得
-  // -------------------------------
-  const fetchUploadedSongs = useCallback(async () => {
-    if (!guildId) return;
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/uploaded-audio-list/${guildId}`);
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || "アップロード済み楽曲の取得に失敗しました");
-      }
-      const data: UploadedSong[] = await res.json();
-      setUploadedSongs(data);
-    } catch (error: unknown) {
-      const errorMsg = error instanceof Error ? error.message : '未知のエラーが発生しました。';
-      console.error('アップロード済み楽曲の取得エラー:', errorMsg);
-      toast({
-        title: 'エラー',
-        description: errorMsg,
-        variant: 'destructive',
-      });
-    }
-  }, [guildId, toast]);
-
-  // -------------------------------
-  // 楽曲削除
-  // -------------------------------
-  const handleDeleteUploadedSong = useCallback(async (song: UploadedSong) => {
-    if (!session || !session.user || !guildId) return;
-    try {
-      const params = new URLSearchParams();
-      params.append('user_id', session.user.id);
-
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/uploaded-audio-delete/${guildId}/${song.id}?${params.toString()}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || "削除に失敗しました。");
-      }
-      toast({
-        title: "削除成功",
-        description: `"${song.title}" を削除しました。`,
-      });
-      fetchUploadedSongs();
-    } catch (error: unknown) {
-      const errorMsg = error instanceof Error ? error.message : '未知のエラーが発生しました。';
-      toast({
-        title: "エラー",
-        description: errorMsg,
-        variant: "destructive",
-      });
-    }
-  }, [session, guildId, fetchUploadedSongs, toast]);
-
-  // -------------------------------
-  // 楽曲編集（タイトル・アーティスト）
-  // -------------------------------
-  const handleEditUploadedSong = useCallback(async (song: UploadedSong) => {
-    if (!session || !session.user || !guildId) return;
-    const newTitle = prompt("新しいタイトルを入力してください", song.title);
-    const newArtist = prompt("新しいアーティスト名を入力してください", song.artist);
-    if (!newTitle || !newArtist) {
-      return; // キャンセル
-    }
-    try {
-      const formData = new FormData();
-      formData.append("title", newTitle);
-      formData.append("artist", newArtist);
-      formData.append("user_id", session.user.id);
-
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/uploaded-audio-edit/${guildId}/${song.id}`, {
-        method: "PUT",
-        body: formData,
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || "編集に失敗しました。");
-      }
-      toast({
-        title: "編集成功",
-        description: "楽曲情報を更新しました。",
-      });
-      fetchUploadedSongs();
-    } catch (error: unknown) {
-      const errorMsg = error instanceof Error ? error.message : '未知のエラーが発生しました。';
-      toast({
-        title: "エラー",
-        description: errorMsg,
-        variant: "destructive",
-      });
-    }
-  }, [session, guildId, fetchUploadedSongs, toast]);
-
-  // -------------------------------
-  // アップロード楽曲を再生キューに追加
-  // -------------------------------
-  const handleAddUploadedSongToQueue = useCallback(async (song: UploadedSong) => {
-    if (!guildId) {
-      toast({
-        title: "エラー",
-        description: "サーバーが選択されていません。",
-        variant: "destructive",
-      });
-      return;
-    }
-    const user = session?.user
-      ? {
-          id: session.user.id,
-          name: session.user.name || '',
-          image: session.user.image || '',
-        }
-      : null;
-    if (!user) {
-      toast({
-        title: "エラー",
-        description: "ユーザー情報を取得できませんでした。",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // ここで full_path を直接渡す(ローカルファイル再生)
-    try {
-      await api.addUrl(guildId, song.full_path, user);
-      toast({
-        title: "成功",
-        description: `"${song.title}" をキューに追加しました。`,
-      });
-    } catch (error: unknown) {
-      const errorMsg = error instanceof Error ? error.message : '未知のエラーが発生しました。';
-      toast({
-        title: "エラー",
-        description: errorMsg || "キューに追加できませんでした。",
-        variant: "destructive",
-      });
-    }
-  }, [guildId, session, toast, api]);
-
-  // -------------------------------
-  // ギルドIDが変わったらアップロード一覧を再取得
-  // -------------------------------
-  useEffect(() => {
-    if (guildId) {
-      fetchUploadedSongs();
-    } else {
-      setUploadedSongs([]);
-    }
-  }, [guildId, fetchUploadedSongs]);
 
   // -------------------------------
   // 元々の「selectTrack」などの処理
@@ -288,9 +115,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const tabs = [
     { 
       id: 'home', 
-      label: { full: 'ホーム', short: 'ホーム' }, 
+      label: { full: 'ホーム', short: '' }, 
       icon: <Home className="w-5 h-5" />,
       gradient: 'from-blue-500 to-purple-500'
+    },
+    { 
+      id: 'uploaded-music', 
+      label: { full: 'ライブラリ', short: '' }, 
+      icon: <Music2 className="w-5 h-5" />,
+      gradient: 'from-violet-500 to-indigo-500'
     },
     { 
       id: 'chat', 
@@ -300,13 +133,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     },
     { 
       id: 'ai-recommend', 
-      label: { full: 'AIリコメンド', short: 'AI' }, 
+      label: { full: 'AIリコメンド', short: '' }, 
       icon: <Brain className="w-5 h-5" />,
       gradient: 'from-purple-500 to-pink-500'
     },
     { 
       id: 'valorant', 
-      label: { full: 'VALORANT', short: 'VALO' }, 
+      label: { full: 'VALORANT', short: '' }, 
       icon: <Target className="w-5 h-5" />,
       gradient: 'from-red-500 to-orange-500'
     },
@@ -324,23 +157,23 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   useEffect(() => {
     const fetchData = async () => {
       try {
-        setLoading(true);
-        const homeSections = await api.getRecommendations();
-        setSections(homeSections);
+        setLoading(true)
+        const homeSections = await api.getRecommendations()
+        setSections(homeSections)
       } catch (error: unknown) {
-        const errorMsg = error instanceof Error ? error.message : '未知のエラーが発生しました。';
-        console.error('データの取得に失敗しました:', errorMsg);
+        const errorMsg = error instanceof Error ? error.message : '未知のエラーが発生しました。'
+        console.error('データの取得に失敗しました:', errorMsg)
         toast({
           title: 'エラー',
           description: 'データの取得に失敗しました。',
           variant: 'destructive',
-        });
+        })
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
-    };
-    fetchData();
-  }, [api, toast]);
+    }
+    fetchData()
+  }, [toast])
 
   // -------------------------------
   // 再生履歴の取得
@@ -497,95 +330,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </div>
           )}
 
-          {/* アップロードされた楽曲一覧 */}
-          <div className="my-8">
-            <h2 className="text-xl font-bold mb-3">アップロードされた楽曲一覧</h2>
-            {uploadedSongs.length === 0 ? (
-              <p className="text-sm text-muted-foreground">まだ楽曲がアップロードされていません。</p>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {uploadedSongs.map((song) => {
-                  const thumbUrl = song.thumbnail_filename
-                    ? `${process.env.NEXT_PUBLIC_API_URL}/uploaded_music/${song.thumbnail_filename}`
-                    : "/default_thumbnail.png";
-
-                  return (
-                    <Card
-                      key={song.id}
-                      className="overflow-hidden bg-card hover:bg-card/80 transition-colors cursor-pointer relative"
-                    >
-                      <CardContent className="p-0">
-                        <motion.div
-                          className="relative w-full pt-[100%] group"
-                          whileHover={{ scale: 1.03 }}
-                          transition={{ duration: 0.2 }}
-                        >
-                          <Image
-                            src={thumbUrl}
-                            alt={song.title}
-                            fill
-                            style={{ objectFit: 'cover' }}
-                            className="rounded-t-lg"
-                            unoptimized
-                          />
-                          <motion.div
-                            className="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-                            initial={{ opacity: 0 }}
-                            whileHover={{ opacity: 1 }}
-                          >
-                            <Play
-                              className="text-white w-12 h-12"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleAddUploadedSongToQueue(song);
-                              }}
-                            />
-                          </motion.div>
-                        </motion.div>
-                        <div className="p-3">
-                          <h3 className="font-bold text-sm mb-1 line-clamp-2">{song.title}</h3>
-                          <p className="text-xs text-muted-foreground line-clamp-1">{song.artist}</p>
-                          {/* アップローダー */}
-                          <p className="text-xs text-muted-foreground mt-2 flex items-center">
-                            <User className="w-3 h-3 mr-1" />
-                            {song.uploader_name}
-                          </p>
-                          {/* アップロード者のみ編集・削除ボタン */}
-                          {session?.user?.id === song.uploader_id && (
-                            <div className="flex space-x-2 mt-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEditUploadedSong(song);
-                                }}
-                              >
-                                <Edit className="w-4 h-4 mr-1" />
-                                編集
-                              </Button>
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteUploadedSong(song);
-                                }}
-                              >
-                                <Trash2 className="w-4 h-4 mr-1" />
-                                削除
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
           {/* おすすめセクション */}
           {sections.map((section, index) => (
             <div key={`section-${index}`} className="mb-8 w-full">
@@ -650,15 +394,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         {/* バージョン表示 */}
         <VersionDisplay />
 
-        {/* アップロードボタン (home & guildIdがある時) */}
-        {activeTab === 'home' && guildId && (
-          <div className="flex items-center mt-2">
-            <Button variant="default" onClick={() => setIsUploadDialogOpen(true)}>
-              楽曲をアップロード
-            </Button>
-          </div>
-        )}
-
         {/* デバイスモードの表示 */}
         {isOnDeviceMode && (
           <div className="mt-2">
@@ -666,14 +401,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </div>
         )}
       </div>
-
-      {/* アップロードダイアログ */}
-      <UploadDialog
-        isOpen={isUploadDialogOpen}
-        onClose={() => setIsUploadDialogOpen(false)}
-        guildId={guildId}
-        onUploaded={fetchUploadedSongs}
-      />
 
       {/* メイン表示領域 */}
       <div className="flex-1 overflow-hidden">
@@ -705,6 +432,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             >
               {activeTab === 'home' && renderHomeContent()}
 
+              {activeTab === 'uploaded-music' && (
+                <div className="h-full">
+                  <UploadedMusicScreen guildId={guildId} />
+                </div>
+              )}
               {activeTab === 'chat' && (
                 <div className="h-full">
                   <ChatScreen />

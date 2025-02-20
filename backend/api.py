@@ -25,8 +25,7 @@ import signal
 from realtimeapi import router as realtime_router
 from db import init_db, UploadedSong, add_uploaded_song, get_uploaded_songs_in_guild, find_uploaded_song_by_id, update_uploaded_song, delete_uploaded_song
 from contextlib import asynccontextmanager
-from fastapi.staticfiles import StaticFiles
-
+from fastapi.staticfiles import StaticFiles  # ← 追加
 
 ytmusic = YTMusic(language='ja', location='JP')
 
@@ -43,9 +42,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+# ここでアップロード先ディレクトリを静的ファイルとして公開する
+UPLOAD_DIR = "uploaded_music"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+app.mount("/uploaded_music", StaticFiles(directory=UPLOAD_DIR), name="uploaded_music")  # ← 追加
+
 origins = [
     "http://localhost:3000",
-    "https://discord-music-app.vercel.app"
+    "https://discord-music-app.vercel.app",
+    "http://localhost:8000",
 ]
 
 # キャッシュ用の変数を定義
@@ -129,14 +134,14 @@ async def notify_clients(guild_id: str):
             current_track = await get_current_track(guild_id)
             queue = await get_queue(guild_id)
             is_playing_status = await is_playing(guild_id)
-            history = await get_history(guild_id) # 変更点: 履歴を取得
+            history = await get_history(guild_id)  # 履歴を取得
             await connection.send_json({
                 "type": "update",
                 "data": {
                     "current_track": jsonable_encoder(current_track),
                     "queue": jsonable_encoder(queue),
                     "is_playing": is_playing_status,
-                    "history": jsonable_encoder(history) # 変更点: 履歴を追加
+                    "history": jsonable_encoder(history)
                 }
             })
         except WebSocketDisconnect:
@@ -146,7 +151,7 @@ async def notify_clients(guild_id: str):
                 del active_connections[guild_id]
         except Exception as e:
             print(f"Error notifying client: {str(e)}")
-            active_connections[guild_id].remove(connection) # エラーが発生した接続を削除
+            active_connections[guild_id].remove(connection)
             if not active_connections[guild_id]:
                 del active_connections[guild_id]
                 
@@ -154,10 +159,7 @@ async def add_and_play_track(guild_id: str, track: Track):
     player = music_players.get(guild_id)
     if player:
         await player.add_to_queue(track.url, added_by=track.added_by)
-        # 再生はplayer内で制御するため、ここでは呼び出さない
-
-UPLOAD_DIR = "uploaded_music"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+        await notify_clients(guild_id)
 
 # レスポンス用のモデル
 class SongResponse(BaseModel):
@@ -191,7 +193,7 @@ async def upload_audio(
     audio_id = str(uuid.uuid4())
     safe_audio_filename = f"{audio_id}.{audio_ext}"
     audio_path = os.path.join(UPLOAD_DIR, safe_audio_filename)
-    full_audio_path = os.path.abspath(audio_path)  # 絶対パス
+    full_audio_path = os.path.abspath(audio_path)
 
     # 音声ファイル保存
     try:
@@ -201,7 +203,7 @@ async def upload_audio(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"音声ファイル保存失敗: {e}")
 
-    # サムネイルファイル
+    # サムネイルファイルの処理
     thumb_filename = ""
     if thumbnail_file:
         thumb_ext = thumbnail_file.filename.split(".")[-1].lower()
@@ -217,10 +219,6 @@ async def upload_audio(
             thumb_filename = safe_thumb_filename
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"サムネイル保存失敗: {e}")
-    else:
-        # サムネイル無しの場合は空文字のまま
-        pass
-
     # DB登録
     new_song = UploadedSong(
         id=audio_id,
@@ -269,7 +267,6 @@ async def delete_uploaded_audio(guild_id: str, song_id: str, user_id: str):
     if song.uploader_id != user_id:
         raise HTTPException(status_code=403, detail="削除権限がありません。")
 
-    # 実際のファイル削除
     if os.path.exists(song.full_path):
         os.remove(song.full_path)
     thumb_abs = os.path.join(UPLOAD_DIR, song.thumbnail_filename)
@@ -283,7 +280,6 @@ async def delete_uploaded_audio(guild_id: str, song_id: str, user_id: str):
 async def stream_audio(request: Request, url: str):
     decoded_url = urllib.parse.unquote(url)
     try:
-        # 楽曲をダウンロード（既にダウンロード済みであればスキップ）
         ytdl_opts = {
             'format': 'bestaudio/best',
             'outtmpl': f'{MUSIC_DIR}/%(title)s-%(id)s.%(ext)s',
@@ -372,7 +368,6 @@ async def disconnect_voice_channel(guild_id: str):
     guild = client.get_guild(int(guild_id))
     if guild and guild.voice_client:
         await guild.voice_client.disconnect()
-        # MusicPlayerのインスタンスを削除
         if guild_id in music_players:
             del music_players[guild_id]
         await notify_clients(guild_id)
@@ -386,7 +381,6 @@ async def websocket_endpoint(websocket: WebSocket, guild_id: str):
         active_connections[guild_id] = []
     active_connections[guild_id].append(websocket)
     try:
-        # 接続時に初期データを送信
         current_track = await get_current_track(guild_id)
         queue = await get_queue(guild_id)
         is_playing_status = await is_playing(guild_id)
@@ -399,13 +393,12 @@ async def websocket_endpoint(websocket: WebSocket, guild_id: str):
             }
         })
         while True:
-            await asyncio.sleep(60)  # 接続を維持するためにスリープ
+            await asyncio.sleep(60)
     except WebSocketDisconnect:
         active_connections[guild_id].remove(websocket)
         if not active_connections[guild_id]:
             del active_connections[guild_id]
             
-# 関連動画など
 @app.get("/recommendations", response_model=List[dict])
 async def get_recommendations():
     global recommendations_cache, recommendations_cache_timestamp
@@ -413,20 +406,17 @@ async def get_recommendations():
         now = datetime.now()
         if recommendations_cache and recommendations_cache_timestamp:
             if now - recommendations_cache_timestamp < CACHE_DURATION:
-                # キャッシュデータを返す
                 return recommendations_cache
-        home = ytmusic.get_home(limit=5)  # limitを増やして多くのセクションを取得
+        home = ytmusic.get_home(limit=5)
         sections = []
         for section in home:
             section_title = section.get('title', 'おすすめ')
             contents = []
             for item in section.get('contents', []):
                 if item.get('videoId'):
-                    # 曲や動画の場合
                     video_url = f"https://music.youtube.com/watch?v={item['videoId']}"
                     thumbnail = item['thumbnails'][0]['url'] if 'thumbnails' in item and item['thumbnails'] else ""
                     artist_name = ', '.join([artist['name'] for artist in item.get('artists', [])]) or "Unknown Artist"
-                    # アーティストのIDを取得
                     artist_data = item.get('artists', [{}])[0]
                     artist_browseId = extract_artist_id(artist_data)
                     contents.append(
@@ -436,11 +426,10 @@ async def get_recommendations():
                             artist=artist_name,
                             thumbnail=adjust_thumbnail_size(thumbnail),
                             url=video_url,
-                            artistId=artist_browseId  # ここで追加
+                            artistId=artist_browseId
                         )
                     )
                 elif item.get('playlistId'):
-                    # プレイリスト
                     playlist_url = f"https://music.youtube.com/playlist?list={item['playlistId']}"
                     thumbnail = item['thumbnails'][0]['url'] if 'thumbnails' in item and item['thumbnails'] else ""
                     contents.append(
@@ -454,7 +443,6 @@ async def get_recommendations():
                         )
                     )
                 elif item.get('browseId'):
-                    # アルバムやアーティスト
                     browse_url = f"https://music.youtube.com/browse/{item['browseId']}"
                     thumbnail = item['thumbnails'][0]['url'] if 'thumbnails' in item and item['thumbnails'] else ""
                     contents.append(
@@ -473,7 +461,6 @@ async def get_recommendations():
                     "contents": contents
                 })
 
-        # キャッシュを更新
         recommendations_cache = sections
         recommendations_cache_timestamp = now
 
@@ -498,7 +485,7 @@ async def get_mood_playlists(params: str):
         search_items = []
         for playlist in playlists:
             playlist_url = f"https://music.youtube.com/playlist?list={playlist['playlistId']}"
-            thumbnail = playlist['thumbnails'][0]['url'] if 'thumbnails' in playlist and playlist['thumbnails'] else ""
+            thumbnail = playlist['thumbnails'][0]['url'] if playlist.get('thumbnails') else ""
             search_items.append(
                 SearchItem(
                     type='playlist',
@@ -516,7 +503,6 @@ async def get_mood_playlists(params: str):
 
 @app.get("/charts", response_model=SearchResult)
 async def get_charts(country: str = 'JP'):
-    """指定された国の音楽チャート上位20曲を取得"""
     try:
         charts = ytmusic.get_charts(country=country)
         search_items = []
@@ -524,7 +510,6 @@ async def get_charts(country: str = 'JP'):
             video_url = f"https://music.youtube.com/watch?v={song['videoId']}" if 'videoId' in song else ""
             thumbnail = song['thumbnails'][0]['url'] if 'thumbnails' in song and song['thumbnails'] else ""
             artist_name = ', '.join([artist['name'] for artist in song.get('artists', [])]) or "Unknown Artist"
-
             search_items.append(
                 SearchItem(
                     type='song',
@@ -535,7 +520,6 @@ async def get_charts(country: str = 'JP'):
                 )
             )
         return SearchResult(results=search_items)
-
     except Exception as e:
         print(f"チャートの取得中にエラーが発生しました: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -544,8 +528,6 @@ async def get_charts(country: str = 'JP'):
 async def get_artist_info(artist_id: str):
     try:
         artist = ytmusic.get_artist(artist_id)
-
-        # 安全にデータを取得
         artist_info = {
             "name": artist.get('name', 'Unknown Artist'),
             "description": artist.get('description', ''),
@@ -560,30 +542,26 @@ async def get_artist_info(artist_id: str):
             "videos": artist.get('videos', {}).get('results', []),
             "related": artist.get('related', {}).get('results', []),
         }
-        # サムネイルのサイズを調整
         for thumbnail in artist_info['thumbnails']:
             thumbnail['url'] = adjust_thumbnail_size(thumbnail.get('url', ''))
-
         return artist_info
     except Exception as e:
         print(f"アーティスト情報の取得中にエラーが発生しました: {e}")
         raise HTTPException(status_code=500, detail="アーティスト情報の取得に失敗しました。")
 
-
 @app.get("/related/{video_id}", response_model=SearchResult)
 async def get_related_songs(video_id: str):
-    """指定された楽曲IDに関連する動画を10件取得"""
     try:
         related = ytmusic.get_watch_playlist(videoId=video_id, limit=11)
         search_items = []
-        for track in related.get('tracks', [])[1:]:  # 最初の曲はリクエストした曲なのでスキップ
+        for track in related.get('tracks', [])[1:]:
             if track.get('videoId'):
                 video_url = f"https://music.youtube.com/watch?v={track['videoId']}"
                 thumbnail = track['thumbnail'][0]['url'] if 'thumbnail' in track and track['thumbnail'] else ""
                 artist_name = ', '.join([artist['name'] for artist in track.get('artists', [])]) or "Unknown Artist"
                 search_items.append(
                     SearchItem(
-                        type='song',  # 関連動画は基本的に曲なので 'song' とします
+                        type='song',
                         title=track['title'],
                         artist=artist_name,
                         thumbnail=adjust_thumbnail_size(thumbnail),
@@ -617,20 +595,17 @@ async def get_history(guild_id: str):
         return history_items
     return []
 
-
 @app.post("/remove-from-queue/{guild_id}")
 async def remove_from_queue(guild_id: str, position: int):
     player = music_players.get(guild_id)
     if player:
         try:
-            await player.remove_from_queue(position) # indexは0から始まるので、1を引く
+            await player.remove_from_queue(position)
             await notify_clients(guild_id)
             return {"message": "Track removed from queue"}
         except IndexError:
-            raise HTTPException(status_code=422, detail="Invalid position") # 無効なpositionの場合は422エラー
+            raise HTTPException(status_code=422, detail="Invalid position")
     raise HTTPException(status_code=404, detail="No active music player found")
-
-
 
 @app.get("/servers", response_model=List[Server])
 async def get_servers():
@@ -751,7 +726,6 @@ def adjust_thumbnail_size(thumbnail_url, width=400, height=400):
     """サムネイルURLのサイズを調整する"""
     if not thumbnail_url:
         return ''
-    # サイズ指定のパターンを正規表現で置換
     thumbnail_url = re.sub(r'w\d+-h\d+', f'w{width}-h{height}', thumbnail_url)
     return thumbnail_url
 
@@ -771,10 +745,7 @@ async def search(query: str, filter: str = None):
     
     if filter:
         results = await fetch_results(filter)
-        # 取得した結果をSearchItemに変換
         search_items = []
-        # 各タイプに応じた処理を追加
-        # 'artists'の場合の処理
         if filter == 'artists':
             for artist in results:
                 if 'browseId' not in artist:
@@ -785,8 +756,8 @@ async def search(query: str, filter: str = None):
                 search_items.append(
                     SearchItem(
                         type='artist',
-                        title=artist['artist'] if 'artist' in artist else artist['title'],
-                        artist=artist['artist'] if 'artist' in artist else artist['title'],
+                        title=artist.get('artist', artist.get('title', '')),
+                        artist=artist.get('artist', artist.get('title', '')),
                         thumbnail=adjust_thumbnail_size(thumbnail),
                         url=url,
                         browseId=browse_id
@@ -794,8 +765,6 @@ async def search(query: str, filter: str = None):
                 )
         return SearchResult(results=search_items)
     else:
-
-        # 並行して各カテゴリの検索を実行
         results = await asyncio.gather(
             fetch_results('songs'),
             fetch_results('videos'),
@@ -804,7 +773,6 @@ async def search(query: str, filter: str = None):
             fetch_results('playlists')
         )
 
-        # 結果を対応するカテゴリにマッピング
         search_tasks = {
             'songs': results[0],
             'videos': results[1],
@@ -814,15 +782,12 @@ async def search(query: str, filter: str = None):
         }
 
         search_items = []
-
-        # 曲の処理
         for song in search_tasks['songs']:
             if 'videoId' not in song:
                 continue
             video_url = f"https://music.youtube.com/watch?v={song['videoId']}"
             thumbnail = song['thumbnails'][0]['url'] if song.get('thumbnails') else ""
             artist_name = ', '.join([artist['name'] for artist in song.get('artists', [])]) or "Unknown Artist"
-            
             search_items.append(
                 SearchItem(
                     type='song',
@@ -832,15 +797,12 @@ async def search(query: str, filter: str = None):
                     url=video_url
                 )
             )
-
-        # 動画の処理
         for video in search_tasks['videos']:
             if 'videoId' not in video:
                 continue
             video_url = f"https://music.youtube.com/watch?v={video['videoId']}"
             thumbnail = video['thumbnails'][0]['url'] if video.get('thumbnails') else ""
             artist_name = ', '.join([artist['name'] for artist in video.get('artists', [])]) or "Unknown Artist"
-            
             search_items.append(
                 SearchItem(
                     type='video',
@@ -850,8 +812,6 @@ async def search(query: str, filter: str = None):
                     url=video_url
                 )
             )
-
-        # アルバムの処理
         for album in search_tasks['albums']:
             if 'browseId' not in album:
                 continue
@@ -859,10 +819,9 @@ async def search(query: str, filter: str = None):
             url = f"https://music.youtube.com/browse/{browse_id}"
             thumbnail = album['thumbnails'][0]['url'] if album.get('thumbnails') else ""
             artist_name = ', '.join([artist['name'] for artist in album.get('artists', [])]) or "Unknown Artist"
-            
             search_items.append(
                 SearchItem(
-                    type=album.get('type', 'album').lower(),  # album, single, ep
+                    type=album.get('type', 'album').lower(),
                     title=album['title'],
                     artist=artist_name,
                     thumbnail=adjust_thumbnail_size(thumbnail),
@@ -870,34 +829,28 @@ async def search(query: str, filter: str = None):
                     browseId=browse_id
                 )
             )
-
-        # アーティストの処理
         for artist in search_tasks['artists']:
             if 'browseId' not in artist:
                 continue
             browse_id = artist['browseId']
             url = f"https://music.youtube.com/browse/{browse_id}"
             thumbnail = artist['thumbnails'][0]['url'] if artist.get('thumbnails') else ""
-            
             search_items.append(
                 SearchItem(
                     type='artist',
-                    title=artist['artist'] if 'artist' in artist else artist['title'],
-                    artist=artist['artist'] if 'artist' in artist else artist['title'],
+                    title=artist.get('artist', artist.get('title', '')),
+                    artist=artist.get('artist', artist.get('title', '')),
                     thumbnail=adjust_thumbnail_size(thumbnail),
                     url=url,
                     browseId=browse_id
                 )
             )
-
-        # プレイリストの処理
         for playlist in search_tasks['playlists']:
             if 'browseId' not in playlist:
                 continue
             browse_id = playlist['browseId']
             url = f"https://music.youtube.com/playlist?list={browse_id.replace('VL', '')}"
             thumbnail = playlist['thumbnails'][0]['url'] if playlist.get('thumbnails') else ""
-            
             search_items.append(
                 SearchItem(
                     type='playlist',
@@ -908,7 +861,6 @@ async def search(query: str, filter: str = None):
                     browseId=browse_id.replace('VL', '')
                 )
             )
-
         return SearchResult(results=search_items)
 
 @app.get("/playlist/{browse_id}", response_model=List[Track])
@@ -921,7 +873,6 @@ async def get_playlist_items(browse_id: str):
             video_url = f"https://music.youtube.com/watch?v={video_id}" if video_id else ""
             thumbnail = item['thumbnails'][0]['url'] if 'thumbnails' in item and item['thumbnails'] else ""
             artist_name = item['artists'][0]['name'] if 'artists' in item and item['artists'] else "Unknown Artist"
-
             tracks.append(
                 Track(
                     title=item['title'],
@@ -945,7 +896,6 @@ async def get_album_items(browse_id: str):
             video_url = f"https://music.youtube.com/watch?v={video_id}" if video_id else ""
             thumbnail = item['thumbnails'][0]['url'] if 'thumbnails' in item and item['thumbnails'] else ""
             artist_name = item['artists'][0]['name'] if 'artists' in item and item['artists'] else "Unknown Artist"
-
             tracks.append(
                 Track(
                     title=item['title'],
@@ -965,7 +915,6 @@ async def add_url(guild_id: str, request: AddUrlRequest, background_tasks: Backg
     background_tasks.add_task(add_and_play_track, guild_id, track)
     return {"message": "URL is being processed and will be added to queue soon"}
 
-
 @app.post("/reorder-queue/{guild_id}")
 async def reorder_queue(guild_id: str, reorder_request: ReorderRequest):
     player = music_players.get(guild_id)
@@ -979,7 +928,7 @@ async def start_discord_bot():
     await client.start(DISCORD_TOKEN)
 
 async def start_web_server():
-    config = uvicorn.Config(app, host="::", port=8000, loop="asyncio")
+    config = uvicorn.Config(app, host="0.0.0.0", port=8001, loop="asyncio")
     server = uvicorn.Server(config)
     await server.serve()
 
@@ -989,16 +938,15 @@ async def start_both():
         start_web_server()
     )
 
-def shutdown():
-    tasks = asyncio.all_tasks()
+def shutdown(loop):
+    tasks = asyncio.all_tasks(loop=loop)
     for task in tasks:
         task.cancel()
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, shutdown)
-
+        loop.add_signal_handler(sig, shutdown, loop)
     try:
         loop.run_until_complete(start_both())
     except asyncio.CancelledError:

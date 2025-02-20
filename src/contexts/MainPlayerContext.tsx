@@ -1,15 +1,12 @@
-// src/contexts/MainPlayerContext.tsx
 'use client';
 
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
 import { Track } from '@/utils/api';
 import { api } from '@/utils/api';
 import { useToast } from '@/hooks/use-toast';
 import { useSession } from 'next-auth/react';
 import { User } from '@/utils/api';
 
-
-// コンテキストの型定義
 interface MainPlayerContextProps {
   currentTrack: Track | null;
   isPlaying: boolean;
@@ -44,15 +41,7 @@ export const MainPlayerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const { toast } = useToast();
   const [activeServerId, setActiveServerId] = useState<string | null>(null);
 
-  // 初期データの取得
-  useEffect(() => {
-    const savedServerId = localStorage.getItem('activeServerId');
-    if (savedServerId) {
-      setActiveServerId(savedServerId);
-      fetchInitialState(savedServerId);
-    }
-  }, []);
-
+  // ユーザ情報取得
   const getUserInfo = (): User | null => {
     if (session && session.user) {
       return {
@@ -62,10 +51,10 @@ export const MainPlayerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       };
     }
     return null;
-  };  
+  };
 
-  // 初期状態の取得関数
-  const fetchInitialState = async (guildId: string) => {
+  // 初期状態取得関数をuseCallback化
+  const fetchInitialState = useCallback(async (guildId: string) => {
     try {
       const [current, fetchedQueue, playing] = await Promise.all([
         api.getCurrentTrack(guildId),
@@ -83,7 +72,16 @@ export const MainPlayerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         variant: 'destructive',
       });
     }
-  };
+  }, [toast]);
+
+  // マウント時にサーバーIDを取得して初期化
+  useEffect(() => {
+    const savedServerId = localStorage.getItem('activeServerId');
+    if (savedServerId) {
+      setActiveServerId(savedServerId);
+      fetchInitialState(savedServerId);
+    }
+  }, [fetchInitialState]);
 
   // 楽曲の再生
   const playTrack = async (track: Track) => {

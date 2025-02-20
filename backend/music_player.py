@@ -1,5 +1,3 @@
-# music_player.py
-
 import asyncio
 import os
 import yt_dlp
@@ -18,29 +16,22 @@ ytdl_format_options = {
     'nocheckcertificate': True,
     'ignoreerrors': False,
     'quiet': True,
+    'cookiefile': 'cookies.txt',
+    'cookies' : 'cookies.txt',
+    
     'no_warnings': True,
     'default_search': 'auto',
     'source_address': '0.0.0.0',
-    'username': OAUTH2_USERNAME,
-    'password': OAUTH2_PASSWORD,
     'postprocessors': [{
         'key': 'FFmpegExtractAudio',
         'preferredcodec': 'mp3',
         'preferredquality': '192',
     }],
-    # 以下を追加
-    'extract_flat': False,
-    'forceduration': True,
-    'forcejson': True,
-    'noplaylist': True,
-    'ffmpeg_location': '/usr/bin/ffmpeg',  # FFmpegのパスを指定
-    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-    'options': '-vn'
 }
 
 ffmpeg_options = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -analyzeduration 0',
-    'options': '-vn'  # シンプルに音声のみ取得
+    'options': '-vn'
 }
 
 ytdl = yt_dlp.YoutubeDL(ytdl_format_options)
@@ -49,7 +40,7 @@ class Song:
     def __init__(self, source, title, url, thumbnail, artist, added_by=None):
         self.source = source   # 実際の再生に使うファイルパス
         self.title = title
-        self.url = url         # YouTube等のURL あるいは ローカル絶対パス
+        self.url = url         # YouTube等のURL、またはローカル絶対パス
         self.thumbnail = thumbnail
         self.artist = artist
         self.added_by = added_by
@@ -69,7 +60,7 @@ class MusicPlayer:
         self.voice_client = guild.voice_client
         self.executor = ThreadPoolExecutor(max_workers=3)
 
-        # 非同期で音楽ループを回す
+        # 非同期で音楽ループを開始
         self.bot.loop.create_task(self.player_loop())
 
     async def player_loop(self):
@@ -77,7 +68,7 @@ class MusicPlayer:
         while not self.bot.is_closed():
             self.next.clear()
             
-            # voice_clientの状態確認と再接続処理
+            # Voice client の状態確認と再接続処理
             if not self.voice_client or not self.voice_client.is_connected():
                 print("Voice clientが接続されていません")
                 await asyncio.sleep(1)
@@ -98,9 +89,8 @@ class MusicPlayer:
                     continue
 
             self.current = song
-            print(f"再生準備: {song.title} ({song.source})")  # デバッグ出力追加
+            print(f"再生準備: {song.title} ({song.source})")
 
-            # 再生状態のチェックを修正
             if self.voice_client.is_playing():
                 print("既に再生中です - 停止します")
                 self.voice_client.stop()
@@ -122,7 +112,7 @@ class MusicPlayer:
                 if self.current:
                     self.history.append(self.current)
                 
-                print(f"再生開始: {song.title}")  # デバッグ出力追加
+                print(f"再生開始: {song.title}")
                 self.voice_client.play(
                     transformed_source,
                     after=lambda e: self.bot.loop.call_soon_threadsafe(
@@ -130,7 +120,6 @@ class MusicPlayer:
                     )
                 )
                 await self.notify_clients(self.guild_id)
-                
             except Exception as e:
                 print(f"再生エラー: {e}")
                 import traceback
@@ -140,14 +129,18 @@ class MusicPlayer:
 
             await self.next.wait()
 
-    # インデントを修正 - クラスメソッドとして正しく配置
     def play_next_song(self, error):
         if error:
             print(f"再生中にエラーが発生: {error}")
-        # 再生が終了したら、キューから削除
         if self.queue:
             self.queue.popleft()
+        # 再生終了時に現在の曲をリセットする
+        self.current = None
+        self.bot.loop.create_task(self.notify_clients_wrapper())
         self.next.set()
+
+    async def notify_clients_wrapper(self):
+        await self.notify_clients(self.guild_id)
 
     def prepare_source(self, song: Song) -> Song:
         try:
@@ -156,12 +149,11 @@ class MusicPlayer:
                     raise FileNotFoundError(f"ファイルが存在しません: {song.url}")
                 song.source = song.url
             else:
-                info = ytdl.extract_info(song.url, download=True)  # Trueに変更
+                info = ytdl.extract_info(song.url, download=True)  # ダウンロード実行
                 if 'entries' in info:
                     info = info['entries'][0]
                 filename = ytdl.prepare_filename(info)
                 
-                # 拡張子の確認と変更
                 base, ext = os.path.splitext(filename)
                 if ext != '.mp3':
                     filename = base + '.mp3'
@@ -172,7 +164,7 @@ class MusicPlayer:
                     
                 song.source = filename
                 
-            print(f"準備完了: {song.source}")  # デバッグ用
+            print(f"準備完了: {song.source}")
             return song
             
         except Exception as e:
@@ -188,33 +180,45 @@ class MusicPlayer:
         for s in songs:
             self.queue.append(s)
         await self.notify_clients(self.guild_id)
-        if self.voice_client and not self.voice_client.is_playing() and self.current is None:
+        # 再生中でなければ必ず再生ループを再開する
+        if self.voice_client and not self.voice_client.is_playing():
             self.next.set()
 
     def get_song_info(self, url, added_by=None):
-        if self.is_local_path(url):
-            # 絶対パスの場合(アップロード済み)
-            filename = os.path.basename(url)
-            return [Song(
-                source=None,
-                title=filename,
-                url=url,
-                thumbnail="",
-                artist="LocalFile",
-                added_by=added_by
-            )]
-        else:
-            # YouTube等
-            info = ytdl.extract_info(url, download=False)
-            if 'entries' in info:
-                songs = []
-                for entry in info['entries']:
-                    if entry is None:
-                        continue
-                    songs.append(self.build_song(entry, added_by))
-                return songs
+        # 検索用URLの場合、"ytsearch:"スキームを"ytsearch1:"に置換する
+        if url.startswith("ytsearch:"):
+            # "ytsearch:"の場合、結果数が1件になるように変更
+            if not url.startswith("ytsearch1:"):
+                url = "ytsearch1:" + url[len("ytsearch:"):]
+            search_result = ytdl.extract_info(url, download=False)
+            if 'entries' in search_result and search_result['entries']:
+                info = search_result['entries'][0]
             else:
-                return [self.build_song(info, added_by)]
+                raise Exception("検索結果が見つかりません")
+            return [self.build_song(info, added_by)]
+        else:
+            # 通常の処理
+            if self.is_local_path(url):
+                filename = os.path.basename(url)
+                return [Song(
+                    source=None,
+                    title=filename,
+                    url=url,
+                    thumbnail="",
+                    artist="LocalFile",
+                    added_by=added_by
+                )]
+            else:
+                info = ytdl.extract_info(url, download=False)
+                if 'entries' in info:
+                    songs = []
+                    for entry in info['entries']:
+                        if entry is None:
+                            continue
+                        songs.append(self.build_song(entry, added_by))
+                    return songs
+                else:
+                    return [self.build_song(info, added_by)]
 
     def build_song(self, info, added_by=None):
         title = info.get('title', 'Unknown Title')
@@ -257,14 +261,11 @@ class MusicPlayer:
                 self.voice_client.stop()
             if self.current:
                 self.queue.appendleft(self.current)
-
             prev_song = self.history.pop()
             self.current = prev_song
-
             if prev_song.source is None:
                 prev_song = self.prepare_source(prev_song)
                 self.current = prev_song
-
             if self.voice_client:
                 self.voice_client.play(
                     discord.FFmpegPCMAudio(prev_song.source),

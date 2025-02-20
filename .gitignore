@@ -57,3 +57,4 @@ next-env.d.ts
 /backend/uploaded_music
 /backend/newbackend
 /backend/uploaded_songs.db
+/backend/cookies.txt

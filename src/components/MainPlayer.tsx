@@ -1,9 +1,8 @@
-// MainPlayer.tsx
 "use client"
 
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { PlayIcon, PauseIcon, SkipForwardIcon, SkipBackIcon, ChevronUpIcon, ChevronDownIcon, Volume2Icon, VolumeXIcon, RefreshCwIcon, PlusIcon } from 'lucide-react'
+import { PlayIcon, PauseIcon, SkipForwardIcon, SkipBackIcon, ChevronUpIcon, ChevronDownIcon, Volume2Icon, VolumeXIcon, RefreshCwIcon, PlusIcon, Loader2 } from 'lucide-react'
 import { Track, api } from '@/utils/api'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
@@ -12,14 +11,13 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { QueueList } from './QueueList'
 import { useToast } from '@/hooks/use-toast'
 import { useSwipeable } from 'react-swipeable'
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { useSession } from 'next-auth/react'
 import { User } from '@/utils/api'
-import { Loader2 } from 'lucide-react';
-import { usePlayback } from '@/contexts/PlaybackContext';
-import { useVolume } from '@/contexts/VolumeContext';
+import { usePlayback } from '@/contexts/PlaybackContext'
+import { useVolume } from '@/contexts/VolumeContext'
 import { Skeleton } from '@/components/ui/skeleton'
-import ArtistDialog from '@/components/ArtistDialog';
+import ArtistDialog from '@/components/ArtistDialog'
 
 interface MainPlayerProps {
   currentTrack: Track | null
@@ -34,10 +32,10 @@ interface MainPlayerProps {
   guildId: string | null
   onClose: () => void
   isVisible: boolean
-  isOnDeviceMode: boolean // 追加
-  audioRef?: React.RefObject<HTMLAudioElement> // 追加
-  handleDeviceAddToQueue: (track: Track) => Promise<void>;
-  isLoading: boolean;
+  isOnDeviceMode: boolean
+  audioRef?: React.RefObject<HTMLAudioElement>
+  handleDeviceAddToQueue: (track: Track) => Promise<void>
+  isLoading: boolean
 }
 
 export const MainPlayer: React.FC<MainPlayerProps> = ({
@@ -55,43 +53,43 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
   isVisible,
   isOnDeviceMode,
   handleDeviceAddToQueue,
-  isLoading
+  isLoading,
 }) => {
   const { data: session } = useSession()
-  const { currentTime, duration, setCurrentTime, setDuration, audioRef } = usePlayback();
+  const { currentTime, duration, setCurrentTime, setDuration, audioRef } = usePlayback()
   const [imageLoaded, setImageLoaded] = useState(false)
   const imageRef = useRef<HTMLImageElement>(null)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [relatedTracks, setRelatedTracks] = useState<Track[]>([])
-  const [isRelatedLoading, setIsRelatedLoading] = useState(false);
+  const [isRelatedLoading, setIsRelatedLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('queue')
-  const { volume, setVolume } = useVolume();
+  const { volume, setVolume } = useVolume()
   const { toast } = useToast()
-  const [isArtistDialogOpen, setIsArtistDialogOpen] = useState(false);
-  const [selectedArtistId, setSelectedArtistId] = useState<string | null>(null);
-  const [isArtistLoading, setIsArtistLoading] = useState(false);
+  const [isArtistDialogOpen, setIsArtistDialogOpen] = useState(false)
+  const [selectedArtistId, setSelectedArtistId] = useState<string | null>(null)
+  const [isArtistLoading, setIsArtistLoading] = useState(false)
 
+
+  // 画像が読み込まれたらフラグを立てる
   useEffect(() => {
     if (imageRef.current && imageRef.current.complete) {
       setImageLoaded(true)
     }
   }, [currentTrack])
 
+
   useEffect(() => {
     if ('mediaSession' in navigator && currentTrack) {
       navigator.mediaSession.metadata = new MediaMetadata({
         title: currentTrack.title,
         artist: currentTrack.artist,
-        album: 'Album Name', // 必要に応じて
-        artwork: [
-          { src: currentTrack.thumbnail, sizes: '512x512', type: 'image/png' },
-        ],
-      });
-  
-      navigator.mediaSession.setActionHandler('play', onPlay);
-      navigator.mediaSession.setActionHandler('pause', onPause);
-      navigator.mediaSession.setActionHandler('previoustrack', onPrevious);
-      navigator.mediaSession.setActionHandler('nexttrack', onSkip);
+        album: 'Album Name',
+        artwork: [{ src: currentTrack.thumbnail, sizes: '512x512', type: 'image/png' }],
+      })
+      navigator.mediaSession.setActionHandler('play', onPlay)
+      navigator.mediaSession.setActionHandler('pause', onPause)
+      navigator.mediaSession.setActionHandler('previoustrack', onPrevious)
+      navigator.mediaSession.setActionHandler('nexttrack', onSkip)
     }
   }, [currentTrack, onPlay, onPause, onPrevious, onSkip]);
 
@@ -118,7 +116,7 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
     if (currentTrack) {
       fetchRelatedTracks()
     }
-  }, [currentTrack?.url, toast])
+  }, [currentTrack, toast])
 
   const handleArtistClick = async (artistName: string) => {
     setIsArtistLoading(true);
@@ -378,21 +376,21 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
 
   useEffect(() => {
     if (isOnDeviceMode && audioRef?.current) {
-      const audio = audioRef.current;
+      const audio = audioRef.current
       const updateTime = () => {
-        setCurrentTime(audio.currentTime);
-      };
+        setCurrentTime(audio.currentTime)
+      }
       const updateDuration = () => {
-        setDuration(audio.duration);
-      };
-      audio.addEventListener('timeupdate', updateTime);
-      audio.addEventListener('durationchange', updateDuration);
+        setDuration(audio.duration)
+      }
+      audio.addEventListener('timeupdate', updateTime)
+      audio.addEventListener('durationchange', updateDuration)
       return () => {
-        audio.removeEventListener('timeupdate', updateTime);
-        audio.removeEventListener('durationchange', updateDuration);
-      };
+        audio.removeEventListener('timeupdate', updateTime)
+        audio.removeEventListener('durationchange', updateDuration)
+      }
     }
-  }, [isOnDeviceMode, audioRef]);
+  }, [isOnDeviceMode, audioRef, setCurrentTime, setDuration])
 
   return (
     <motion.div
