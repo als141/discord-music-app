@@ -1,36 +1,129 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Discord Music App
 
-## Getting Started
+Discord Music Appは、Discordサーバー内で音楽再生やキュー管理、アップロード、楽曲検索、さらにはValorant連携やAIチャット、リアルタイムボイスチャットといった多彩な機能を実現するWebアプリケーションです。以下では、各機能の内部実装やユーザーがどのように操作するかを、具体的かつ詳細に解説します。
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## アプリ全体の概要
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+このアプリは、FastAPIをバックエンドとしてDiscordボットを介し、音楽の再生や管理を実現します。Next.js/Reactを用いたフロントエンドにより、ユーザーはWebブラウザから直感的な操作が可能です。内部では、YouTube Music API、ytmusicapi、youtube-dlによる音源取得、SQLiteデータベースでのアップロード楽曲管理、Valorant API連携、さらにOpenAI APIを用いたAIチャットやリアルタイム音声生成など、多様な外部サービスと連携しながら機能を提供しています。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 主な機能とその操作
 
-## Learn More
+### 1. 音楽再生とキュー管理
 
-To learn more about Next.js, take a look at the following resources:
+- **再生操作**  
+  ユーザーはDiscordのスラッシュコマンド（例：`/join`、`/play`、`/pause`、`/skip`、`/previous` など）やWeb UI上の操作ボタンを使用して、音楽の再生、停止、一時停止、スキップ、前の曲への戻しを行います。  
+  バックエンドの `api.py` では、各操作に対応するエンドポイントが用意され、WebSocketを介して再生状況やキューがリアルタイムに更新されます。
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **音楽再生エンジン**  
+  `music_player.py` に実装された MusicPlayer クラスは、YouTubeなどから音源をダウンロード（yt-dlpの利用）し、Discordの音声チャンネルで再生する仕組みを提供します。キューは deque により管理され、再生済みの曲は履歴として保存され、ユーザーはいつでも再生状況を確認できます。
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- **キューの表示・編集**  
+  フロントエンドの `QueueList.tsx` では、現在再生中の曲と次に再生される曲、さらには再生履歴が視覚的に表示されます。ユーザーは各曲の順番を変更したり、不要な曲を削除する操作が可能です。
 
-## Deploy on Vercel
+### 2. 楽曲アップロードとライブラリ管理
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **アップロード機能**  
+  ユーザーは自分の楽曲ファイルをアップロードし、サーバー内に保存できます。`api.py` の `/upload-audio/{guild_id}` エンドポイントがファイルのアップロード・保存と、SQLiteデータベース（`db.py` による管理）への登録を行います。  
+  アップロード時には、音声ファイルの拡張子チェックやサムネイルの保存が自動的に行われ、ファイル名はユニークなIDで管理されます。
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **ライブラリ表示**  
+  `UploadedMusicScreen.tsx` では、アップロード済み楽曲の一覧がグリッドまたはリスト形式で表示され、ユーザーは再生、編集、削除ができます。楽曲情報（タイトル、アーティスト、アップローダー情報、サムネイル画像など）が確認でき、各楽曲をキューに追加する操作も可能です。
+
+### 3. 楽曲検索とおすすめ機能
+
+- **検索機能**  
+  ユーザーは楽曲名、アーティスト名、アルバム名などのキーワードで検索を行い、YouTube Music API経由で関連する楽曲や動画、アルバム、プレイリスト、アーティスト情報を取得します。  
+  `api.py` の `/search` エンドポイントにより、各種フィルター（songs、videos、albums、artists、playlists）に基づいた検索結果が返され、フロントエンドでは `SearchResults.tsx` にて分類・表示されます。
+
+- **おすすめコンテンツ**  
+  アプリは、YouTube Music APIからおすすめコンテンツ（ホーム画面のおすすめ、チャート情報、ムードカテゴリなど）を取得し、`HomeScreen.tsx` 上で表示します。ユーザーはここから新たな楽曲を発見し、再生キューに追加できます。
+
+- **アーティスト詳細表示**  
+  アーティスト名をクリックすると、`ArtistDialog.tsx` が表示され、アーティストのプロフィール、トップソング、アルバム、関連アーティスト情報が確認可能です。ここから、各楽曲を個別にキューへ追加する操作も行えます。
+
+### 4. Discordボットとの連携
+
+- **ボットコマンド**  
+  Discordサーバー上では、ボットがユーザーからのスラッシュコマンドに応答し、音楽再生の各操作を実行します。`bot.py` では、ボットの起動、状態管理、チャットへの返答、音楽再生キューの管理が行われ、ボイスチャンネルへの自動参加やユーザーの参加に合わせた自動切断処理も実装されています。
+
+- **チャット連携**  
+  また、チャットでは OpenAI API を利用した AI アシスタントが、ユーザーの入力に対してユーモアあふれる返答を生成します。`chat.py` の実装により、システムプロンプトに基づいた対話が実現されています。
+
+### 5. Valorant連携
+
+- **ゲーム情報の取得**  
+  アプリは Valorant API を利用し、プレイヤー情報やストア情報、ランク情報などのデータを取得します。これにより、Valorantプレイヤーは自分のゲームデータと連動したエンターテイメント体験を得られます。
+
+### 6. AIチャット・リアルタイム音声チャット
+
+- **AIチャット**  
+  チャット画面（`ChatScreen.tsx`）では、ユーザーがテキストメッセージを送信すると、OpenAI API を利用して AI アシスタントがリアルタイムに応答します。応答はストリーミング形式で返され、段階的にチャットウィンドウに表示されます。
+
+- **リアルタイム音声チャット**  
+  リアルタイム音声チャット機能は、OpenAI Realtime API と NijiVoice API を用いて、ユーザーの音声入力に対し AI が音声で回答する仕組みを提供します。
+
+### 7. モバイル最適化
+
+- **モバイル向け案内**  
+  `MobileOptimizedMessage.tsx` は、スマートフォンでの利用に最適化されていない場合に、モバイル専用のQRコード表示やホーム画面への追加を促す案内メッセージを表示します。これにより、ユーザーはより快適な操作環境を選択できます。
+
+### 8. リアルタイム更新とユーザー体験
+
+- **WebSocketによるリアルタイム更新**  
+  メイン画面（`MainApp.tsx`、`MainPlayer.tsx`）では、WebSocket接続により、音楽再生状態、キュー、履歴情報がリアルタイムで更新されます。これにより、複数ユーザーが同一のDiscordサーバーで操作している場合も、常に最新の状態が共有され、シームレスな体験を提供します。
+
+- **直感的なUIとアニメーション**  
+  Framer Motion を活用したアニメーションにより、各画面遷移やコンポーネントの表示・非表示、ドラッグ＆ドロップ操作がスムーズに行えます。サイドメニュー（`SideMenu.tsx`）やタブ切替なども、視覚的に分かりやすく設計されています。
+
+---
+
+## 操作例：ユーザー視点での流れ
+
+1. **Discord上での操作**  
+   - ユーザーはDiscordチャットからスラッシュコマンド（例：`/join` でボイスチャンネルに参加、`/play <URL>` で楽曲をキューに追加）を実行し、ボットが音楽再生を開始します。  
+   - ボットは自動的に音楽プレイヤーを起動し、再生中の曲とキュー情報をリアルタイムで更新します。
+
+2. **Webアプリ上での操作**  
+   - ホーム画面では、再生履歴やおすすめ楽曲が表示され、各セクションから楽曲を選択して再生キューに追加できます。  
+   - 検索機能により、楽曲名やアーティスト名で検索し、表示された結果から個別の楽曲をキューに追加することができます。  
+   - 音楽プレイヤー画面は、再生中の曲の詳細、再生/一時停止、スキップ、前の曲への戻し、ボリューム調整が可能な直感的なUIで提供されます。  
+   - サイドメニューからは、接続しているサーバーやボイスチャンネルの選択、ボットの接続状況確認などが行えます。  
+   - アップロード画面では、自分でアップロードした楽曲の一覧が表示され、編集・削除・キュー追加が簡単にできます。  
+   - チャット画面では、AIアシスタントとの対話がリアルタイムで行われ、テキストおよびコードブロックの表示にも対応しています。  
+   - リアルタイム音声チャット画面では、ユーザーが音声入力を行うと、AIが音声で回答し、会話が成立します。
+
+---
+
+## スクリーンショット
+
+
+![ホーム画面](./screenshot/Screenshot%20(1).jpg)
+*ホーム画面：おすすめ楽曲、再生履歴、各セクションが表示され、ユーザーは直感的に操作可能*
+
+![音楽プレイヤー](./screenshot/Screenshot%20(2).jpg)
+*音楽プレイヤー：再生中の曲の詳細、再生/一時停止ボタン、スキップ、ボリューム調整が確認できる画面*
+
+![キュー管理](./screenshot/Screenshot%20(4).jpg)
+*キュー管理画面：再生順の変更や不要な楽曲の削除が可能なインターフェース*
+
+![アップロード画面](./screenshot/Screenshot%20(6).jpg)
+*アップロード画面：ユーザーが楽曲をアップロードし、自分のライブラリに楽曲を追加できる画面*
+
+![アップロードダイアログ](./screenshot/Screenshot%20(7).jpg)
+*アップロードダイアログ：ユーザーがタイトルとアーティスト名、音声ファイルとサムネイルを指定してデータベースにアップロードできる画面*
+
+![関連動画](./screenshot/Screenshot%20(3).jpg)
+*関連動画：現在再生中の音楽の関連動画を表示し、ワンボタンでキューに追加できる画面*
+
+![検索画面](./screenshot/Screenshot%20(5).jpg)
+*検索画面：ユーザーはキーワードを指定し、音楽やアーティスト・アルバムなどを検索できる。さらに楽曲をキューに追加して再生することもできる画面*
+
+![アーティストダイアログ](./screenshot/Screenshot%20(8).jpg)
+*アーティストダイアログ：検索したアーティスト・アルバムなどを表示し、キューに追加できる画面*
+
+
+---
