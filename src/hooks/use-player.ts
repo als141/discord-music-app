@@ -213,9 +213,20 @@ export function usePlayer({
       }
     }
   }, [isOnDeviceMode, guildId, toast]);
-  
-  // キューに追加
-  const addToQueue = useCallback(async (item: PlayableItem) => {
+  // ユーザー情報取得
+  const getUserInfo = useCallback((): User | null => {
+    if (session && session.user) {
+      return {
+        id: session.user.id,
+        name: session.user.name || '',
+        image: session.user.image || '',
+      };
+    }
+    return null;
+  }, [session]);
+
+// キューに追加
+const addToQueue = useCallback(async (item: PlayableItem) => {
     if (isOnDeviceMode) {
       if (!currentTrack) {
         setCurrentTrack(item as Track);
@@ -271,7 +282,7 @@ export function usePlayer({
         setIsLoading(false);
       }
     }
-  }, [isOnDeviceMode, currentTrack, guildId, session, toast]);
+  }, [isOnDeviceMode, currentTrack, guildId, toast, setCurrentTrack, setQueue, setIsLoading, getUserInfo]);
   
   // キューの並べ替え
   const reorderQueue = useCallback(async (startIndex: number, endIndex: number) => {
@@ -431,18 +442,6 @@ export function usePlayer({
       setIsArtistLoading(false);
     }
   }, [toast]);
-  
-  // ユーザー情報取得
-  const getUserInfo = useCallback((): User | null => {
-    if (session && session.user) {
-      return {
-        id: session.user.id,
-        name: session.user.name || '',
-        image: session.user.image || '',
-      };
-    }
-    return null;
-  }, [session]);
   
   // URLからビデオIDを抽出するヘルパー関数
   const extractVideoId = (url: string) => {

@@ -1,10 +1,9 @@
 // MainApp.tsx
-'use client';
+// 'use client';
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { api, PlayableItem, SearchItem } from '@/utils/api';
-import { createWebSocketConnection } from '@/utils/websocket';
 import { MainPlayer } from './MainPlayer';
 import { Header } from './Header';
 import { SideMenu } from './SideMenu';
@@ -149,6 +148,18 @@ export const MainApp: React.FC = () => {
     trackMouse: false
   });
 
+  // ユーザー情報を取得する関数
+  const getUserInfo = useCallback((): User | null => {
+    if (session && session.user) {
+      return {
+        id: session.user.id,
+        name: session.user.name || '',
+        image: session.user.image || '',
+      };
+    }
+    return null;
+  }, [session]);
+  
   // URLを追加
   const handleAddUrl = useCallback(async (url: string) => {
     if (isOnDeviceMode) {
@@ -186,19 +197,7 @@ export const MainApp: React.FC = () => {
         variant: "destructive",
       });
     }
-  }, [activeServerId, isOnDeviceMode, toast]);
-
-  // ユーザー情報を取得する関数
-  const getUserInfo = useCallback((): User | null => {
-    if (session && session.user) {
-      return {
-        id: session.user.id,
-        name: session.user.name || '',
-        image: session.user.image || '',
-      };
-    }
-    return null;
-  }, [session]);
+  }, [activeServerId, isOnDeviceMode, toast, getUserInfo]);
 
   // 検索
   const handleSearch = useCallback(async (query: string) => {
@@ -292,6 +291,7 @@ export const MainApp: React.FC = () => {
             <SearchResults
               results={searchResults}
               onAddToQueue={(item) => addToQueue(item, getUserInfo())}
+              onAddTrackToQueue={(track) => addToQueue(track, getUserInfo())}
               onClose={() => setIsSearchActive(false)}
               onSearch={handleSearch}
               isOnDeviceMode={isOnDeviceMode}

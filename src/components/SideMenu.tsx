@@ -288,9 +288,11 @@ export const SideMenu: React.FC<SideMenuProps> = ({
         description: "サーバー一覧を更新しました。",
       });
     } catch (error) {
+      // Using the error variable
+      const errorMessage = error instanceof Error ? error.message : "不明なエラーが発生しました";
       toast({
         title: "エラー",
-        description: "サーバー一覧の取得に失敗しました。",
+        description: `サーバー一覧の取得に失敗しました: ${errorMessage}`,
         variant: "destructive",
       });
     }

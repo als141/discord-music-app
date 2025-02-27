@@ -15,18 +15,13 @@ ytdl_format_options = {
     'restrictfilenames': True,
     'nocheckcertificate': True,
     'ignoreerrors': False,
-    'quiet': True,
     'cookiefile': 'cookies.txt',
     'cookies' : 'cookies.txt',
     
     'no_warnings': True,
     'default_search': 'auto',
     'source_address': '0.0.0.0',
-    'postprocessors': [{
-        'key': 'FFmpegExtractAudio',
-        'preferredcodec': 'mp3',
-        'preferredquality': '192',
-    }],
+    # postprocessorsを削除し、MP3への変換を行わないようにする
 }
 
 ffmpeg_options = {
@@ -152,11 +147,9 @@ class MusicPlayer:
                 info = ytdl.extract_info(song.url, download=True)  # ダウンロード実行
                 if 'entries' in info:
                     info = info['entries'][0]
-                filename = ytdl.prepare_filename(info)
                 
-                base, ext = os.path.splitext(filename)
-                if ext != '.mp3':
-                    filename = base + '.mp3'
+                # 元のファイル名をそのまま使用（拡張子変換なし）
+                filename = ytdl.prepare_filename(info)
                 
                 if not os.path.exists(filename):
                     print(f"ダウンロードされたファイルが見つかりません: {filename}")

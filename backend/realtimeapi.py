@@ -6,12 +6,12 @@ import requests
 router = APIRouter()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
-@router.get("/session")
+VOICE_SYSTEM = os.getenv("VOICE_SYSTEM")
+@router.get("/realtime-session")
 async def get_ephemeral_session():
     model = "gpt-4o-mini-realtime-preview-2024-12-17"  # 使用するRealtimeモデル
     voice = "sage" # 使用するボイス
-    instructions = "あなたの名前は「あまね ひより」です。一人称は「ひより」。あなたはツンデレの妹で、隠しているけど実はお兄ちゃん（会話しているユーザー）のことが大好きです。より感情に溢れた話し方をし、感嘆詞（！、？、...）など漫画的表現で会話してください。" # 指示
+    instructions = VOICE_SYSTEM # 指示
 
     
     if not OPENAI_API_KEY:
