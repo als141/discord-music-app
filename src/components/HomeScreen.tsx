@@ -1,10 +1,9 @@
-"use client";
-
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, memo, useRef } from 'react';
+import { motion, AnimatePresence, Variants } from 'framer-motion';
 import { PlayableItem, SearchItem, api, Section, QueueItem } from '@/utils/api';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Loading } from '@/components/ui/loading';
 import Image from 'next/image';
 import {
   Play,
@@ -20,9 +19,9 @@ import {
   Info,
   Music2,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useInView } from 'react-intersection-observer';
 import { UploadedMusicScreen } from './UploadedMusicScreen';
 import { ChatScreen } from './ChatScreen';
 import { AIRecommendScreen } from './AIRecommendScreen';
@@ -44,194 +43,105 @@ interface VersionInfo {
   buildDate: string;
 }
 
-export const HomeScreen: React.FC<HomeScreenProps> = ({
-  onSelectTrack,
-  guildId,
-  activeTab,
-  onTabChange,
-  history = [],
-  isOnDeviceMode,
+// Framer Motionのアニメーション設定
+const animations = {
+  container: {
+    hidden: { opacity: 0 },
+    visible: { 
+      opacity: 1,
+      transition: { staggerChildren: 0.05 }
+    },
+    exit: { opacity: 0 }
+  } as Variants,
+  
+  item: {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0 },
+    exit: { opacity: 0, y: -20 }
+  } as Variants,
+  
+  tabItem: {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0 },
+    exit: { opacity: 0, y: -20 },
+  } as Variants
+};
+
+// メモ化したトラックカードコンポーネント
+const TrackCard = memo(({ 
+  item, 
+  onSelectTrack, 
+  onArtistClick 
+}: { 
+  item: SearchItem, 
+  onSelectTrack: (item: PlayableItem) => void,
+  onArtistClick: (artistId: string) => void
 }) => {
-  const { toast } = useToast();
-
-  // -------------------------------
-  // 既存のステート
-  // -------------------------------
-  const [sections, setSections] = useState<Section[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  // アーティスト情報モーダル関連
-  const [isArtistDialogOpen, setIsArtistDialogOpen] = useState(false);
-  const [selectedArtistId, setSelectedArtistId] = useState<string | null>(null);
-
-  // -------------------------------
-  // バージョン情報（元コードに含まれる）
-  // -------------------------------
-  const [versionInfo] = useState<VersionInfo>({
-    version: 'Ver. 0.8.5β',
-    buildDate: '2025.2.20',
+  // カード表示のインタラクション検知
+  const [ref, inView] = useInView({
+    triggerOnce: true,
+    threshold: 0.1
   });
-
-  // -------------------------------
-  // バージョン表示コンポーネント
-  // -------------------------------
-  const VersionDisplay = () => (
+  
+  return (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="flex items-center justify-center text-xs text-muted-foreground hover:text-foreground transition-colors duration-200 py-2">
-            <Info className="w-3 h-3 mr-1" />
-            <span>{versionInfo.version}</span>
-          </div>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>Version: {versionInfo.version}</p>
-          <p>Build Date: {versionInfo.buildDate}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-
-  // -------------------------------
-  // 元々の「selectTrack」などの処理
-  // -------------------------------
-  const handleSelectTrackCallback = useCallback(async (item: PlayableItem) => {
-    await onSelectTrack(item);
-  }, [onSelectTrack]);
-
-  const handleArtistClick = useCallback((artistId: string) => {
-    setSelectedArtistId(artistId);
-    setIsArtistDialogOpen(true);
-  }, []);
-
-  const closeArtistDialog = useCallback(() => {
-    setIsArtistDialogOpen(false);
-    setSelectedArtistId(null);
-  }, []);
-
-  // -------------------------------
-  // タブ定義
-  // -------------------------------
-  const tabs = [
-    { 
-      id: 'home', 
-      label: { full: 'ホーム', short: '' }, 
-      icon: <Home className="w-5 h-5" />,
-      gradient: 'from-blue-500 to-purple-500'
-    },
-    { 
-      id: 'uploaded-music', 
-      label: { full: 'ライブラリ', short: '' }, 
-      icon: <Music2 className="w-5 h-5" />,
-      gradient: 'from-violet-500 to-indigo-500'
-    },
-    { 
-      id: 'chat', 
-      label: { full: 'チャット', short: '' }, 
-      icon: <MessageSquare className="w-5 h-5" />,
-      gradient: 'from-green-500 to-teal-500'
-    },
-    { 
-      id: 'ai-recommend', 
-      label: { full: 'AIリコメンド', short: '' }, 
-      icon: <Brain className="w-5 h-5" />,
-      gradient: 'from-purple-500 to-pink-500'
-    },
-    { 
-      id: 'valorant', 
-      label: { full: 'VALORANT', short: '' }, 
-      icon: <Target className="w-5 h-5" />,
-      gradient: 'from-red-500 to-orange-500'
-    },
-    { 
-      id: 'realtime', 
-      label: { full: 'ボイスチャット', short: '' }, 
-      icon: <Mic className="w-5 h-5" />,
-      gradient: 'from-orange-500 to-yellow-500'
-    }
-  ];
-
-  // -------------------------------
-  // データ取得（おすすめセクション）: 元コード
-  // -------------------------------
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true)
-        const homeSections = await api.getRecommendations()
-        setSections(homeSections)
-      } catch (error: unknown) {
-        const errorMsg = error instanceof Error ? error.message : '未知のエラーが発生しました。'
-        console.error('データの取得に失敗しました:', errorMsg)
-        toast({
-          title: 'エラー',
-          description: 'データの取得に失敗しました。',
-          variant: 'destructive',
-        })
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchData()
-  }, [toast])
-
-  // -------------------------------
-  // 再生履歴の取得
-  // -------------------------------
-  // 'history' は props から受け取るため、state には保持しない
-  // 直接 props を使用して表示する
-  // 'isOnDeviceMode' を使用して何らかの表示や機能を追加
-
-  // -------------------------------
-  // レンダリング用のヘルパー
-  // -------------------------------
-  const renderItem = useCallback((item: SearchItem, index: number) => (
-    <TooltipProvider key={`item-${index}`}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Card className="overflow-hidden cursor-pointer h-full bg-card hover:bg-card/80 transition-colors duration-200">
-            <CardContent className="p-0 h-full flex flex-col">
-              <motion.div
-                className="relative w-full pt-[100%] group"
-                whileHover={{ scale: 1.05 }}
-                transition={{ duration: 0.2 }}
-              >
-                <Image
-                  src={item.thumbnail}
-                  alt={item.title}
-                  fill
-                  style={{ objectFit: 'cover' }}
-                  className="rounded-t-lg"
-                  unoptimized
-                />
-                <motion.div
-                  className="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center"
-                  initial={{ opacity: 0 }}
-                  whileHover={{ opacity: 1 }}
-                >
-                  <Play className="text-white w-12 h-12" onClick={() => onSelectTrack(item)} />
-                </motion.div>
-              </motion.div>
-              <div className="p-3 flex-grow flex flex-col justify-between bg-card/50 backdrop-blur-sm">
-                <h3 className="font-bold text-sm mb-1 line-clamp-2">{item.title}</h3>
-                <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
-                  {item.artistId ? (
-                    <motion.button
-                      onClick={() => handleArtistClick(item.artistId!)}
-                      className="text-primary hover:text-primary/80 flex items-center gap-1 rounded px-1.5 py-0.5 bg-primary/10 hover:bg-primary/20 transition-colors duration-200"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      {item.artist}
-                      <ExternalLink className="w-3 h-3" />
-                    </motion.button>
-                  ) : (
-                    <span>{item.artist}</span>
+          <motion.div
+            ref={ref}
+            variants={animations.item}
+            className="overflow-hidden cursor-pointer h-full bg-card hover:bg-card/80 transition-colors duration-200"
+          >
+            <Card className="h-full border-0 overflow-hidden">
+              <CardContent className="p-0 h-full flex flex-col">
+                <div className="relative w-full pt-[100%] group">
+                  {inView && (
+                    <>
+                      <Image
+                        src={item.thumbnail}
+                        alt={item.title}
+                        fill
+                        style={{ objectFit: 'cover' }}
+                        className="rounded-t-lg"
+                        unoptimized
+                      />
+                      <motion.div
+                        className="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center"
+                        initial={{ opacity: 0 }}
+                        whileHover={{ opacity: 1 }}
+                      >
+                        <Play 
+                          className="text-white w-12 h-12" 
+                          onClick={() => onSelectTrack(item)} 
+                          role="button"
+                          aria-label={`${item.title}を再生`}
+                        />
+                      </motion.div>
+                    </>
                   )}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+                </div>
+                <div className="p-3 flex-grow flex flex-col justify-between bg-card/50 backdrop-blur-sm">
+                  <h3 className="font-bold text-sm mb-1 line-clamp-2">{item.title}</h3>
+                  <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                    {item.artistId ? (
+                      <motion.button
+                        onClick={() => onArtistClick(item.artistId!)}
+                        className="text-primary hover:text-primary/80 flex items-center gap-1 rounded px-1.5 py-0.5 bg-primary/10 hover:bg-primary/20 transition-colors duration-200"
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        aria-label={`${item.artist}の詳細を表示`}
+                      >
+                        {item.artist}
+                        <ExternalLink className="w-3 h-3" />
+                      </motion.button>
+                    ) : (
+                      <span>{item.artist}</span>
+                    )}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
         </TooltipTrigger>
         <TooltipContent>
           <p>{item.title}</p>
@@ -239,53 +149,80 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
-  ), [onSelectTrack, handleArtistClick]);
+  );
+});
 
-  const renderHistoryItem = useCallback((item: QueueItem, index: number) => (
-    <TooltipProvider key={`history-${index}`}>
+TrackCard.displayName = 'TrackCard';
+
+// メモ化した履歴カードコンポーネント
+const HistoryCard = memo(({ 
+  item, 
+  onSelectTrack 
+}: { 
+  item: QueueItem, 
+  onSelectTrack: (item: PlayableItem) => void 
+}) => {
+  const [ref, inView] = useInView({
+    triggerOnce: true,
+    threshold: 0.1
+  });
+  
+  return (
+    <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Card className="overflow-hidden cursor-pointer h-full bg-card hover:bg-card/80 transition-colors duration-200">
-            <CardContent className="p-0 h-full flex flex-col">
-              <motion.div
-                className="relative w-full pt-[100%] group"
-                whileHover={{ scale: 1.05 }}
-                transition={{ duration: 0.2 }}
-              >
-                <Image
-                  src={item.track.thumbnail}
-                  alt={item.track.title}
-                  fill
-                  style={{ objectFit: 'cover' }}
-                  className="rounded-t-lg"
-                  unoptimized
-                />
-                <motion.div
-                  className="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center"
-                  initial={{ opacity: 0 }}
-                  whileHover={{ opacity: 1 }}
-                >
-                  <Play className="text-white w-12 h-12" onClick={() => onSelectTrack(item.track)} />
-                </motion.div>
-                {item.track.added_by?.image && (
-                  <div className="absolute top-2 right-2 w-8 h-8">
-                    <Image
-                      src={item.track.added_by.image}
-                      alt={item.track.added_by.name || 'User'}
-                      width={32}
-                      height={32}
-                      className="rounded-full border-2 border-white"
-                      unoptimized
-                    />
-                  </div>
-                )}
-              </motion.div>
-              <div className="p-3 flex-grow flex flex-col justify-between bg-card/50 backdrop-blur-sm">
-                <h3 className="font-bold text-sm mb-1 line-clamp-2">{item.track.title}</h3>
-                <p className="text-xs text-muted-foreground truncate">{item.track.artist}</p>
-              </div>
-            </CardContent>
-          </Card>
+          <motion.div
+            ref={ref}
+            variants={animations.item}
+            className="overflow-hidden cursor-pointer h-full bg-card hover:bg-card/80 transition-colors duration-200"
+          >
+            <Card className="h-full border-0 overflow-hidden">
+              <CardContent className="p-0 h-full flex flex-col">
+                <div className="relative w-full pt-[100%] group">
+                  {inView && (
+                    <>
+                      <Image
+                        src={item.track.thumbnail}
+                        alt={item.track.title}
+                        fill
+                        style={{ objectFit: 'cover' }}
+                        className="rounded-t-lg"
+                        unoptimized
+                      />
+                      <motion.div
+                        className="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center"
+                        initial={{ opacity: 0 }}
+                        whileHover={{ opacity: 1 }}
+                      >
+                        <Play 
+                          className="text-white w-12 h-12" 
+                          onClick={() => onSelectTrack(item.track)} 
+                          role="button"
+                          aria-label={`${item.track.title}を再生`}
+                        />
+                      </motion.div>
+                      {item.track.added_by?.image && (
+                        <div className="absolute top-2 right-2 w-8 h-8">
+                          <Image
+                            src={item.track.added_by.image}
+                            alt={item.track.added_by.name || 'User'}
+                            width={32}
+                            height={32}
+                            className="rounded-full border-2 border-white"
+                            unoptimized
+                          />
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+                <div className="p-3 flex-grow flex flex-col justify-between bg-card/50 backdrop-blur-sm">
+                  <h3 className="font-bold text-sm mb-1 line-clamp-2">{item.track.title}</h3>
+                  <p className="text-xs text-muted-foreground truncate">{item.track.artist}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
         </TooltipTrigger>
         <TooltipContent>
           <p>{item.track.title}</p>
@@ -299,79 +236,242 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
-  ), [onSelectTrack]);
+  );
+});
 
-  // -------------------------------
-  // ホーム画面の描画(履歴 + おすすめ + アップロード一覧)
-  // -------------------------------
-  const renderHomeContent = () => {
+HistoryCard.displayName = 'HistoryCard';
+
+// バージョン表示コンポーネント
+const VersionDisplay = memo(({ versionInfo }: { versionInfo: VersionInfo }) => (
+  <TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="flex items-center justify-center text-xs text-muted-foreground hover:text-foreground transition-colors duration-200 py-2">
+          <Info className="w-3 h-3 mr-1" />
+          <span>{versionInfo.version}</span>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p>Version: {versionInfo.version}</p>
+        <p>Build Date: {versionInfo.buildDate}</p>
+      </TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
+));
+
+VersionDisplay.displayName = 'VersionDisplay';
+
+export const HomeScreen: React.FC<HomeScreenProps> = ({
+  onSelectTrack,
+  guildId,
+  activeTab,
+  onTabChange,
+  history = [],
+  isOnDeviceMode,
+}) => {
+  const { toast } = useToast();
+  const cacheTime = useRef<number | null>(null);
+  const cachedSections = useRef<Section[] | null>(null);
+
+  // 状態管理
+  const [sections, setSections] = useState<Section[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isArtistDialogOpen, setIsArtistDialogOpen] = useState(false);
+  const [selectedArtistId, setSelectedArtistId] = useState<string | null>(null);
+
+  // バージョン情報
+  const [versionInfo] = useState<VersionInfo>({
+    version: 'Ver. 0.9.0',
+    buildDate: '2025.2.28',
+  });
+  
+  // 曲の選択処理
+  const handleSelectTrackCallback = useCallback(async (item: PlayableItem) => {
+    await onSelectTrack(item);
+  }, [onSelectTrack]);
+
+  // アーティスト詳細表示
+  const handleArtistClick = useCallback((artistId: string) => {
+    setSelectedArtistId(artistId);
+    setIsArtistDialogOpen(true);
+  }, []);
+
+  // アーティストダイアログ閉じる
+  const closeArtistDialog = useCallback(() => {
+    setIsArtistDialogOpen(false);
+    setSelectedArtistId(null);
+  }, []);
+
+  // おすすめデータの取得
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        
+        // キャッシュチェック - 10分間有効
+        const now = Date.now();
+        if (
+          cachedSections.current && 
+          cacheTime.current && 
+          now - cacheTime.current < 10 * 60 * 1000
+        ) {
+          setSections(cachedSections.current);
+          setLoading(false);
+          return;
+        }
+        
+        const homeSections = await api.getRecommendations();
+        
+        // キャッシュ更新
+        cachedSections.current = homeSections;
+        cacheTime.current = now;
+        
+        setSections(homeSections);
+      } catch (error: unknown) {
+        const errorMsg = error instanceof Error 
+          ? error.message 
+          : '未知のエラーが発生しました。';
+        
+        console.error('データの取得に失敗しました:', errorMsg);
+        
+        toast({
+          title: 'エラー',
+          description: 'おすすめデータの取得に失敗しました。',
+          variant: 'destructive',
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchData();
+  }, [toast]);
+
+  // タブ定義
+  const tabs = useMemo(() => [
+    { 
+      id: 'home', 
+      label: { full: 'ホーム', short: '' }, 
+      icon: <Home className="w-5 h-5" />,
+      gradient: 'from-blue-500 to-purple-500',
+      ariaLabel: 'ホーム画面を表示'
+    },
+    { 
+      id: 'uploaded-music', 
+      label: { full: 'ライブラリ', short: '' }, 
+      icon: <Music2 className="w-5 h-5" />,
+      gradient: 'from-violet-500 to-indigo-500',
+      ariaLabel: 'ライブラリ画面を表示'
+    },
+    { 
+      id: 'chat', 
+      label: { full: 'チャット', short: '' }, 
+      icon: <MessageSquare className="w-5 h-5" />,
+      gradient: 'from-green-500 to-teal-500',
+      ariaLabel: 'チャット画面を表示'
+    },
+    { 
+      id: 'ai-recommend', 
+      label: { full: 'AIリコメンド', short: '' }, 
+      icon: <Brain className="w-5 h-5" />,
+      gradient: 'from-purple-500 to-pink-500',
+      ariaLabel: 'AIリコメンド画面を表示'
+    },
+    { 
+      id: 'valorant', 
+      label: { full: 'VALORANT', short: '' }, 
+      icon: <Target className="w-5 h-5" />,
+      gradient: 'from-red-500 to-orange-500',
+      ariaLabel: 'VALORANT画面を表示'
+    },
+    { 
+      id: 'realtime', 
+      label: { full: 'ボイスチャット', short: '' }, 
+      icon: <Mic className="w-5 h-5" />,
+      gradient: 'from-orange-500 to-yellow-500',
+      ariaLabel: 'ボイスチャット画面を表示'
+    }
+  ], []);
+
+  // ホーム画面の描画(履歴 + おすすめ)
+  const renderHomeContent = useCallback(() => {
+    const reversedHistory = [...history].reverse();
+    
     return (
       <ScrollArea className="h-full">
-        <div className="p-4">
+        <div className="p-4 space-y-10">
           {/* 再生履歴 */}
-          {history.length > 0 && guildId && (
-            <div key="section-history" className="mb-8 w-full">
+          {reversedHistory.length > 0 && guildId && (
+            <section key="section-history" className="w-full" aria-labelledby="history-heading">
               <div className="flex items-center mb-4">
                 <div className="mr-2 p-2 bg-primary/10 rounded-full">
                   <History className="w-6 h-6 text-primary" />
                 </div>
-                <h2 className="text-2xl font-bold">再生履歴</h2>
+                <h2 id="history-heading" className="text-2xl font-bold">再生履歴</h2>
               </div>
               <ScrollArea className="w-full whitespace-nowrap rounded-md border">
-                <div className="flex space-x-4 p-4">
-                  {history.slice().reverse().map((item, idx) => (
-                    <div key={idx} className="w-[200px] h-[280px]">
-                      {renderHistoryItem(item, idx)}
-                    </div>
+                <motion.div 
+                  className="flex space-x-4 p-4" 
+                  variants={animations.container}
+                  initial="hidden"
+                  animate="visible"
+                >
+                  {reversedHistory.map((item, idx) => (
+                    <motion.div key={`history-${idx}`} className="w-[200px] h-[280px]" variants={animations.item}>
+                      <HistoryCard item={item} onSelectTrack={handleSelectTrackCallback} />
+                    </motion.div>
                   ))}
-                </div>
+                </motion.div>
                 <ScrollBar orientation="horizontal" />
               </ScrollArea>
-            </div>
+            </section>
           )}
 
           {/* おすすめセクション */}
           {sections.map((section, index) => (
-            <div key={`section-${index}`} className="mb-8 w-full">
+            <section key={`section-${index}`} className="w-full" aria-labelledby={`section-heading-${index}`}>
               <div className="flex items-center mb-4">
                 <div className="mr-2 p-2 bg-primary/10 rounded-full">
                   <Sparkles className="w-6 h-6 text-primary" />
                 </div>
-                <h2 className="text-2xl font-bold">{section.title}</h2>
+                <h2 id={`section-heading-${index}`} className="text-2xl font-bold">{section.title}</h2>
               </div>
               <ScrollArea className="w-full whitespace-nowrap rounded-md border">
-                <div className="flex space-x-4 p-4">
+                <motion.div 
+                  className="flex space-x-4 p-4"
+                  variants={animations.container}
+                  initial="hidden"
+                  animate="visible"
+                >
                   {section.contents.map((item, idx) => (
-                    <div key={idx} className="w-[200px] h-[280px]">
-                      {renderItem(item, idx)}
-                    </div>
+                    <motion.div key={`item-${idx}`} className="w-[200px] h-[280px]" variants={animations.item}>
+                      <TrackCard 
+                        item={item} 
+                        onSelectTrack={handleSelectTrackCallback} 
+                        onArtistClick={handleArtistClick} 
+                      />
+                    </motion.div>
                   ))}
-                </div>
+                </motion.div>
                 <ScrollBar orientation="horizontal" />
               </ScrollArea>
-            </div>
+            </section>
           ))}
         </div>
       </ScrollArea>
     );
-
-  };
-
-  // -------------------------------
-  // フリクションアニメーション設定
-  // -------------------------------
-  const tabVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0 },
-    exit: { opacity: 0, y: -20 },
-  };
+  }, [history, guildId, sections, handleSelectTrackCallback, handleArtistClick]);
 
   return (
     <div className="flex flex-col h-full">
       {/* ヘッダー部 */}
       <div className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-25 flex flex-col items-center py-4 sticky top-0">
         {/* タブ一覧 */}
-        <nav className="flex space-x-1 p-1 rounded-full bg-muted">
+        <nav 
+          className="flex space-x-1 p-1 rounded-full bg-muted"
+          aria-label="メインナビゲーション"
+          role="tablist"
+        >
           {tabs.map((tab) => (
             <motion.button
               key={tab.id}
@@ -383,6 +483,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               onClick={() => onTabChange(tab.id)}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              aria-controls={`panel-${tab.id}`}
+              id={`tab-${tab.id}`}
+              aria-label={tab.ariaLabel}
             >
               {tab.icon}
               <span className="ml-2 hidden sm:inline">{tab.label.full}</span>
@@ -392,12 +497,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </nav>
 
         {/* バージョン表示 */}
-        <VersionDisplay />
+        <VersionDisplay versionInfo={versionInfo} />
 
         {/* デバイスモードの表示 */}
         {isOnDeviceMode && (
-          <div className="mt-2">
-            <p className="text-sm text-muted-foreground">デバイスモードで動作中です。</p>
+          <div 
+            className="mt-2 text-sm text-muted-foreground px-3 py-1 rounded-full bg-primary/5"
+            role="status"
+            aria-live="polite"
+          >
+            デバイスモードで動作中
           </div>
         )}
       </div>
@@ -413,12 +522,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               exit={{ opacity: 0 }}
               className="h-full overflow-auto p-4"
             >
-              {/* ローディング時のスケルトン */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {Array.from({ length: 8 }).map((_, index) => (
-                  <Skeleton key={index} className="w-full aspect-square rounded-lg" />
-                ))}
-              </div>
+              <Loading size="large" text="コンテンツを読み込み中..." />
             </motion.div>
           ) : (
             <motion.div
@@ -426,9 +530,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               initial="hidden"
               animate="visible"
               exit="exit"
-              variants={tabVariants}
+              variants={animations.tabItem}
               transition={{ duration: 0.3 }}
               className="h-full overflow-auto"
+              role="tabpanel"
+              id={`panel-${activeTab}`}
+              aria-labelledby={`tab-${activeTab}`}
             >
               {activeTab === 'home' && renderHomeContent()}
 

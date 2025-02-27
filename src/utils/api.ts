@@ -1,10 +1,66 @@
-import axios from 'axios';
+import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from 'axios';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 if (!API_URL) {
   throw new Error('API URL is not defined. Please set NEXT_PUBLIC_API_URL environment variable.');
 }
+
+// API timeout in milliseconds
+const REQUEST_TIMEOUT = 30000;
+
+// Maximum retry attempts
+const MAX_RETRIES = 3;
+
+// Create an API client with interceptors for better error handling
+const createApiClient = (): AxiosInstance => {
+  const client = axios.create({
+    baseURL: API_URL,
+    timeout: REQUEST_TIMEOUT,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  // Request interceptor
+  client.interceptors.request.use(
+    (config) => {
+      // You can add auth tokens or other common headers here
+      return config;
+    },
+    (error) => Promise.reject(error)
+  );
+
+  // Response interceptor with retry logic
+  client.interceptors.response.use(
+    (response) => response,
+    async (error: AxiosError) => {
+      const config = error.config as AxiosRequestConfig & { _retry?: number };
+      
+      // Give up if max retries reached or no config available
+      if (!config || !config.url || config._retry === MAX_RETRIES) {
+        return Promise.reject(error);
+      }
+      
+      // Retry on network errors or server errors (5xx)
+      if (!error.response || (error.response.status >= 500 && error.response.status < 600)) {
+        config._retry = (config._retry || 0) + 1;
+        
+        // Exponential backoff for retries
+        const delay = Math.pow(2, config._retry) * 1000;
+        await new Promise(resolve => setTimeout(resolve, delay));
+        
+        return client(config);
+      }
+      
+      return Promise.reject(error);
+    }
+  );
+
+  return client;
+};
+
+const apiClient = createApiClient();
 
 export interface User {
   id: string;
@@ -116,10 +172,10 @@ export interface ValorantAgent {
     bust: string;
     killfeed: string;
   };
-  stats?: Record<string, string>;
+  stats?: Record<string, unknown>;
 }
 
-// ArtistData内のanyをunknownなどにして @typescript-eslint/no-explicit-any を回避
+// Types for artist data avoiding any type
 export interface ArtistData {
   name: string;
   subscribers?: string;
@@ -128,220 +184,448 @@ export interface ArtistData {
     width?: number;
     height?: number;
   }[];
-  songs: unknown[];    // 必要に応じてSong[]に修正
+  songs: unknown[];
   albums: unknown[];
   related: unknown[];
 }
 
-// WebSocket受信時のデータ型例
+// Type for WebSocket data
 interface WebSocketData {
   queue: QueueItem[];
   is_playing: boolean;
   history: QueueItem[];
 }
 
-// Realtime Sessionレスポンス
+// Type for realtime session response
 interface RealtimeSessionData {
   client_secret: {
     value: string;
   };
 }
 
+// Improved error handling utility
+const handleApiError = (error: unknown): never => {
+  if (axios.isAxiosError(error)) {
+    if (error.response) {
+      throw new Error(`API error: ${error.response.status} - ${error.response.data?.message || error.message}`);
+    } else if (error.request) {
+      throw new Error('No response from server. Please check your connection.');
+    } else {
+      throw new Error(`Request error: ${error.message}`);
+    }
+  }
+  throw error instanceof Error ? error : new Error(String(error));
+};
+
 export const api = {
   getServers: async (): Promise<Server[]> => {
-    const response = await axios.get(`${API_URL}/servers`);
-    return response.data;
+    try {
+      const response = await apiClient.get('/bot-guilds');
+      return response.data;
+    } catch (error) {
+      handleApiError(error);
+    }
+    return []; // エラーハンドリング後の空の戻り値
   },
 
   getUserGuilds: async (): Promise<Server[]> => {
-    const response = await axios.get('/api/discord/guilds');
-    return response.data;
+    try {
+      const response = await fetch('/api/discord/userGuilds');
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+      return await response.json();
+    } catch (error) {
+      handleApiError(error);
+    }
+    return []; // エラーハンドリング後の空の戻り値
   },
+  
   getBotGuilds: async (): Promise<Server[]> => {
-    const response = await axios.get(`${API_URL}/servers`);
-    return response.data;
+    try {
+      const response = await apiClient.get('/bot-guilds');
+      return response.data;
+    } catch (error) {
+      handleApiError(error);
+    }
+    return []; // エラーハンドリング後の空の戻り値
   },
 
   getVoiceChannels: async (serverId: string): Promise<VoiceChannel[]> => {
-    const response = await axios.get(`${API_URL}/voice-channels/${serverId}`);
-    return response.data;
+    try {
+      const response = await apiClient.get(`/voice-channels/${serverId}`);
+      return response.data;
+    } catch (error) {
+      handleApiError(error);
+    }
+    return []; // エラーハンドリング後の空の戻り値
   },
 
   joinVoiceChannel: async (serverId: string, channelId: string): Promise<void> => {
-    await axios.post(`${API_URL}/join-voice-channel/${serverId}/${channelId}`);
+    try {
+      await apiClient.post(`/join-voice-channel/${serverId}/${channelId}`);
+    } catch (error) {
+      handleApiError(error);
+    }
   },
 
   disconnectVoiceChannel: async (guildId: string): Promise<void> => {
-    await axios.post(`${API_URL}/disconnect-voice-channel/${guildId}`);
+    try {
+      await apiClient.post(`/disconnect-voice-channel/${guildId}`);
+    } catch (error) {
+      handleApiError(error);
+    }
   },
 
   getCurrentTrack: async (guildId: string): Promise<Track | null> => {
-    const response = await axios.get(`${API_URL}/current-track/${guildId}`);
-    return response.data;
+    try {
+      const response = await apiClient.get(`/current-track/${guildId}`);
+      return response.data;
+    } catch (error) {
+      handleApiError(error);
+    }
+    return null; // エラーハンドリング後の空の戻り値
   },
 
   getQueue: async (guildId: string): Promise<QueueItem[]> => {
-    const response = await axios.get(`${API_URL}/queue/${guildId}`);
-    return response.data;
+    try {
+      const response = await apiClient.get(`/queue/${guildId}`);
+      return response.data;
+    } catch (error) {
+      handleApiError(error);
+    }
+    return []; // エラーハンドリング後の空の戻り値
   },
 
   isPlaying: async (guildId: string): Promise<boolean> => {
-    const response = await axios.get(`${API_URL}/is-playing/${guildId}`);
-    return response.data;
+    try {
+      const response = await apiClient.get(`/is-playing/${guildId}`);
+      return response.data;
+    } catch (error) {
+      handleApiError(error);
+    }
+    return false; // エラーハンドリング後の空の戻り値
   },
 
   playTrack: async (guildId: string, track: Track, user: User): Promise<void> => {
-    await axios.post(`${API_URL}/play/${guildId}`, { track, user });
+    try {
+      await apiClient.post(`/play/${guildId}`, { track, user });
+    } catch (error) {
+      handleApiError(error);
+    }
   },
 
   pausePlayback: async (guildId: string): Promise<void> => {
-    await axios.post(`${API_URL}/pause/${guildId}`);
+    try {
+      await apiClient.post(`/pause/${guildId}`);
+    } catch (error) {
+      handleApiError(error);
+    }
   },
 
   resumePlayback: async (guildId: string): Promise<void> => {
-    await axios.post(`${API_URL}/resume/${guildId}`);
+    try {
+      await apiClient.post(`/resume/${guildId}`);
+    } catch (error) {
+      handleApiError(error);
+    }
   },
 
   skipTrack: async (guildId: string): Promise<void> => {
-    await axios.post(`${API_URL}/skip/${guildId}`);
+    try {
+      await apiClient.post(`/skip/${guildId}`);
+    } catch (error) {
+      handleApiError(error);
+    }
   },
 
   previousTrack: async (guildId: string): Promise<void> => {
-    await axios.post(`${API_URL}/previous/${guildId}`);
+    try {
+      await apiClient.post(`/previous/${guildId}`);
+    } catch (error) {
+      handleApiError(error);
+    }
   },
 
   search: async (query: string, filter?: string): Promise<SearchItem[]> => {
-    const response = await axios.get(`${API_URL}/search`, { params: { query, filter } });
-    return response.data.results;
+    try {
+      const response = await apiClient.get('/search', {
+        params: { query, filter }
+      });
+      return response.data.results;
+    } catch (error) {
+      handleApiError(error);
+    }
+    return []; // エラーハンドリング後の空の戻り値
   },
 
   getPlaylistItems: async (browseId: string): Promise<Track[]> => {
-    const response = await axios.get(`${API_URL}/playlist/${browseId}`);
-    return response.data;
+    try {
+      const response = await apiClient.get(`/playlist/${browseId}`);
+      return response.data;
+    } catch (error) {
+      handleApiError(error);
+    }
+    return []; // エラーハンドリング後の空の戻り値
   },
 
   getArtistInfo: async (artistId: string): Promise<ArtistData> => {
-    const response = await axios.get(`${API_URL}/artist/${artistId}`);
-    return response.data as ArtistData;
+    try {
+      const response = await apiClient.get(`/artist/${artistId}`);
+      return response.data as ArtistData;
+    } catch (error) {
+      handleApiError(error);
+    }
+    // エラーハンドリング後のデフォルト値を用意
+    return {
+      name: 'Unknown',
+      thumbnails: [],
+      songs: [],
+      albums: [],
+      related: []
+    };
   },
 
   getAlbumItems: async (albumId: string): Promise<Track[]> => {
-    const response = await axios.get(`${API_URL}/album/${albumId}`);
-    return response.data;
+    try {
+      const response = await apiClient.get(`/album/${albumId}`);
+      return response.data;
+    } catch (error) {
+      handleApiError(error);
+    }
+    return []; // エラーハンドリング後の空の戻り値
   },
 
-  addUrl: async (guildId: string, url: string, user: User): Promise<void> => {
-    await axios.post(`${API_URL}/add-url/${guildId}`, { url, user });
+  addUrl: async (guildId: string, url: string, user: User | null): Promise<void> => {
+    try {
+      await apiClient.post(`/add-url/${guildId}`, { url, user });
+    } catch (error) {
+      handleApiError(error);
+    }
   },
 
   reorderQueue: async (guildId: string, startIndex: number, endIndex: number): Promise<void> => {
-    await axios.post(`${API_URL}/reorder-queue/${guildId}`, {
-      start_index: startIndex,
-      end_index: endIndex,
-    });
+    try {
+      await apiClient.post(`/reorder-queue/${guildId}`, {
+        start_index: startIndex,
+        end_index: endIndex,
+      });
+    } catch (error) {
+      handleApiError(error);
+    }
   },
 
   setVolume: async (guildId: string, volume: number): Promise<void> => {
-    await axios.post(`${API_URL}/set-volume/${guildId}`, { volume });
+    try {
+      await apiClient.post(`/set-volume/${guildId}`, { volume });
+    } catch (error) {
+      handleApiError(error);
+    }
   },
 
   seek: async (guildId: string, position: number): Promise<void> => {
-    await axios.post(`${API_URL}/seek/${guildId}`, { position });
+    try {
+      await apiClient.post(`/seek/${guildId}`, { position });
+    } catch (error) {
+      handleApiError(error);
+    }
   },
 
   getBotVoiceStatus: async (serverId: string): Promise<string | null> => {
-    const response = await axios.get(`${API_URL}/bot-voice-status/${serverId}`);
-    return response.data.channel_id;
+    try {
+      const response = await apiClient.get(`/bot-voice-status/${serverId}`);
+      return response.data.channel_id;
+    } catch (error) {
+      handleApiError(error);
+    }
+    return null; // エラーハンドリング後の空の戻り値
   },
 
   getRecommendations: async (): Promise<Section[]> => {
-    const response = await axios.get(`${API_URL}/recommendations`);
-    return response.data;
+    try {
+      const response = await apiClient.get('/recommendations');
+      return response.data;
+    } catch (error) {
+      handleApiError(error);
+    }
+    return []; // エラーハンドリング後の空の戻り値
   },
 
   getCharts: async (): Promise<SearchItem[]> => {
-    const response = await axios.get(`${API_URL}/charts`);
-    return response.data.results;
+    try {
+      const response = await apiClient.get('/charts');
+      return response.data.results;
+    } catch (error) {
+      handleApiError(error);
+    }
+    return []; // エラーハンドリング後の空の戻り値
   },
 
   getRelatedSongs: async (videoId: string): Promise<SearchItem[]> => {
-    const response = await axios.get(`${API_URL}/related/${videoId}`);
-    return response.data.results;
+    try {
+      const response = await apiClient.get(`/related/${videoId}`);
+      return response.data.results;
+    } catch (error) {
+      handleApiError(error);
+    }
+    return []; // エラーハンドリング後の空の戻り値
   },
 
   getHistory: async (guildId: string): Promise<QueueItem[]> => {
-    const response = await axios.get(`${API_URL}/history/${guildId}`);
-    return response.data;
+    try {
+      const response = await apiClient.get(`/history/${guildId}`);
+      return response.data;
+    } catch (error) {
+      handleApiError(error);
+    }
+    return []; // エラーハンドリング後の空の戻り値
   },
 
   removeFromQueue: async (guildId: string, position: number): Promise<void> => {
-    await axios.post(`${API_URL}/remove-from-queue/${guildId}?position=${position}`);
+    try {
+      await apiClient.post(`/remove-from-queue/${guildId}`, undefined, { 
+        params: { position } 
+      });
+    } catch (error) {
+      handleApiError(error);
+    }
   },
 
   getRealtimeSession: async (): Promise<RealtimeSessionData> => {
-    const response = await axios.post(`${API_URL}/realtime-session`, {
-      modalities: ["text"]
-    });
-    return response.data;
+    try {
+      const response = await apiClient.post('/realtime-session', {
+        modalities: ["text"]
+      });
+      return response.data;
+    } catch (error) {
+      handleApiError(error);
+    }
+    return { client_secret: { value: '' } }; // エラーハンドリング後のデフォルト値
   },
 
-  // VALORANT関連のメソッドを追加
+  // VALORANT related methods
   valorant: {
-    // プレイヤー情報の取得
     getPlayerInfo: async (name: string, tag: string): Promise<ValorantPlayer> => {
-      const response = await axios.get(`${API_URL}/valorant/player/${name}/${tag}`);
-      return response.data;
+      try {
+        const response = await apiClient.get(`/valorant/player/${name}/${tag}`);
+        return response.data;
+      } catch (error) {
+        handleApiError(error);
+      }
+      // エラーハンドリング後のデフォルト値
+      return {
+        puuid: '',
+        game_name: '',
+        tag_line: '',
+        region: '',
+        account_level: 0,
+        card: { small: '', large: '', wide: '', id: '', assets: {} },
+        last_updated: '',
+        is_authenticated: false
+      };
     },
 
-    // ストア情報の取得
     getStore: async (puuid: string): Promise<ValorantStore> => {
-      const response = await axios.get(`${API_URL}/valorant/store/${puuid}`);
-      return response.data;
+      try {
+        const response = await apiClient.get(`/valorant/store/${puuid}`);
+        return response.data;
+      } catch (error) {
+        handleApiError(error);
+      }
+      // エラーハンドリング後のデフォルト値
+      return {
+        daily_offers: [],
+        remaining_duration: { daily: 0, featured: 0 }
+      };
     },
 
-    // エージェント情報の取得
     getAgents: async (): Promise<ValorantAgent[]> => {
-      const response = await axios.get(`${API_URL}/valorant/agents`);
-      return response.data;
+      try {
+        const response = await apiClient.get('/valorant/agents');
+        return response.data;
+      } catch (error) {
+        handleApiError(error);
+      }
+      return []; // エラーハンドリング後の空の戻り値
     },
   },
 };
 
+// Improved WebSocket connection with reconnection logic
 export function setupWebSocket(guildId: string, onMessage: (data: WebSocketData) => void): WebSocket {
-  if (!process.env.NEXT_PUBLIC_API_URL) {
+  if (!API_URL) {
     throw new Error('API URL is not defined. Please set NEXT_PUBLIC_API_URL environment variable.');
   }
-  const wsUrl = `${process.env.NEXT_PUBLIC_API_URL.replace(/^http/, 'ws')}/ws/${guildId}`;
-  const ws = new WebSocket(wsUrl);
+  
+  const wsUrl = `${API_URL.replace(/^http/, 'ws')}/ws/${guildId}`;
+  let ws: WebSocket | null = new WebSocket(wsUrl);
+  let reconnectTimer: NodeJS.Timeout | null = null;
+  let reconnectAttempts = 0;
+  const MAX_RECONNECT_ATTEMPTS = 5;
+  const RECONNECT_DELAY = 3000;
 
-  ws.onopen = () => {
-    console.log("WebSocket 接続成功");
+  const connect = () => {
+    ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      console.log("WebSocket connected");
+      reconnectAttempts = 0; // Reset counter on successful connection
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === "update") {
+          onMessage(data.data);
+        }
+      } catch (error) {
+        console.error("WebSocket message parse error:", error);
+      }
+    };
+
+    ws.onclose = (event) => {
+      console.log(`WebSocket closed. Code: ${event.code}, Reason: ${event.reason}`);
+      
+      // Don't reconnect if it was a clean closure
+      if (event.wasClean) {
+        return;
+      }
+      
+      // Try to reconnect with exponential backoff
+      if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+        reconnectAttempts++;
+        const delay = RECONNECT_DELAY * Math.pow(1.5, reconnectAttempts - 1);
+        console.log(`Attempting to reconnect (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}) in ${delay}ms...`);
+        
+        reconnectTimer = setTimeout(connect, delay);
+      } else {
+        console.error(`WebSocket reconnection failed after ${MAX_RECONNECT_ATTEMPTS} attempts`);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
   };
 
-  ws.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      if (data.type === "update") {
-        onMessage(data.data);
+  // Initial connection
+  connect();
+
+  // Return an extended WebSocket with proper cleanup methods
+  const extendedWs = {
+    send: (data: string) => ws?.send(data),
+    close: () => {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
       }
-    } catch (error) {
-      console.error("WebSocket メッセージ解析エラー:", error);
+      if (ws) {
+        ws.close();
+        ws = null;
+      }
     }
   };
 
-  ws.onclose = () => {
-    console.log("WebSocket 接続切断。再接続を試みます...");
-    // 数秒後に再接続
-    setTimeout(() => {
-      setupWebSocket(guildId, onMessage);
-    }, 3000);
-  };
-
-  ws.onerror = (error) => {
-    console.error("WebSocket エラー:", error);
-    ws.close();
-  };
-
-  return ws;
+  // We need to cast this to WebSocket as we're extending the interface
+  return extendedWs as unknown as WebSocket;
 }
-
