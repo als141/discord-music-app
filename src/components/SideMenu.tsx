@@ -217,7 +217,7 @@ const InfoPanel = memo(() => (
       <div className="space-y-2">
         <h3 className="font-medium">サービス情報</h3>
         <p className="text-sm text-muted-foreground">
-          ボットが応答しない場合は、サーバーセレクターで再接続するか、ボットを再招待してみてください。
+          ボットが応答しない場合は、サーバーセレクターで再接続するか、再ログインしてみてください。
         </p>
       </div>
     </div>
@@ -383,7 +383,7 @@ export const SideMenu: React.FC<SideMenuProps> = ({
                         {mutualServers.length === 0 ? (
                           <div className="text-center p-4 bg-muted rounded-lg">
                             <p className="text-muted-foreground text-sm">
-                              利用可能なサーバーがありません
+                              利用可能なサーバーがありません。再ログインしてみてください。
                             </p>
                             <Button 
                               variant="outline" 
