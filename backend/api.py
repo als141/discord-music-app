@@ -928,7 +928,7 @@ async def start_discord_bot():
     await client.start(DISCORD_TOKEN)
 
 async def start_web_server():
-    config = uvicorn.Config(app, host="0.0.0.0", port=8001, loop="asyncio")
+    config = uvicorn.Config(app, host="0.0.0.0", port=8000, loop="asyncio")
     server = uvicorn.Server(config)
     await server.serve()
 
@@ -938,19 +938,52 @@ async def start_both():
         start_web_server()
     )
 
+async def shutdown_async(loop):
+    """非同期でのシャットダウン処理"""
+    print("シャットダウン処理を開始します...")
+    
+    # Discordクライアントを切断
+    if client.is_ready():
+        await client.close()
+        print("Discordクライアントを切断しました")
+    
+    # すべてのタスクをキャンセル (自分自身のタスクは除く)
+    tasks = [t for t in asyncio.all_tasks(loop=loop) if t is not asyncio.current_task()]
+    if tasks:
+        print(f"{len(tasks)}個のタスクをキャンセル中...")
+        for task in tasks:
+            task.cancel()
+        
+        # キャンセルされたタスクが完了するのを待つ (タイムアウト付き)
+        try:
+            await asyncio.wait(tasks, timeout=5)
+            print("タスクのキャンセルが完了しました")
+        except asyncio.TimeoutError:
+            print("一部のタスクがタイムアウトしました")
+    
+    # ループを停止
+    loop.stop()
+    print("シャットダウン完了")
+
 def shutdown(loop):
-    tasks = asyncio.all_tasks(loop=loop)
-    for task in tasks:
-        task.cancel()
+    """シグナルハンドラから呼び出されるシャットダウン関数"""
+    # 非同期のシャットダウン処理をスケジュール
+    asyncio.create_task(shutdown_async(loop))
+    
+    # ループが次のイテレーションで停止するように設定
+    loop.stop()
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, shutdown, loop)
+        loop.add_signal_handler(sig, lambda: shutdown(loop))
     try:
         loop.run_until_complete(start_both())
     except asyncio.CancelledError:
         pass
     finally:
-        loop.run_until_complete(loop.shutdown_asyncgens())
-        loop.close()
+        # ここでのシャットダウン処理が正しく実行されるように調整
+        if not loop.is_closed():
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            loop.close()
+        print("プログラムを終了します")
