@@ -3,20 +3,23 @@ import discord
 from discord import app_commands
 import asyncio
 from music_player import MusicPlayer
-from openai import OpenAI
+from openai import OpenAI # OpenAIライブラリをインポート
 import os
 from dotenv import load_dotenv
-from google import genai
-from google.genai import types
+# google.genai は不要になったためコメントアウトまたは削除
+# from google import genai
+# from google.genai import types
 from PIL import Image
 from io import BytesIO
 import base64
 from typing import Optional, Dict, List, Any, Union
 import json
-import urllib.request
+# urllib.request は不要になったためコメントアウトまたは削除
+# import urllib.request
 from datetime import datetime
 import aiohttp
 import uuid
+import traceback # トレースバック出力用に追加
 
 # 画像保存ディレクトリ
 IMAGE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_images")
@@ -24,18 +27,30 @@ IMAGE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_imag
 os.makedirs(IMAGE_DIR, exist_ok=True)
 
 load_dotenv()
+# x.ai (Grok) 用のクライアント設定
 XAI_API_KEY = os.getenv("XAI_API_KEY")
-client_openai = OpenAI(
+client_openai_chat = OpenAI( # 変数名を変更して区別
     api_key=XAI_API_KEY,
     base_url="https://api.x.ai/v1",
 )
 PROMPT = os.getenv("PROMPT")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+
+# OpenAI Image Generation 用のクライアント設定
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") # OpenAIのAPIキーを環境変数から取得
+if not OPENAI_API_KEY:
+    print("警告: OPENAI_API_KEY が設定されていません。画像生成機能は利用できません。")
+    openai_image_client = None
+else:
+    # 標準のOpenAI APIエンドポイントを使用
+    openai_image_client = OpenAI(api_key=OPENAI_API_KEY)
+
+# Gemini関連のクライアント設定は不要になったためコメントアウトまたは削除
+# GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+# gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 
 ALLOWED_CHANNELS = [
     1080511818658762755,
-    1156255909446680676,    
+    1156255909446680676,
 ]
 
 SYSTEM_PROMPTS: Dict[str, str] = {
@@ -43,7 +58,7 @@ SYSTEM_PROMPTS: Dict[str, str] = {
 }
 
 # スレッド会話履歴を保存する辞書
-thread_histories = {}
+thread_histories: Dict[int, List[Dict[str, Any]]] = {} # 型ヒントを明確化
 
 chat_histories: Dict[int, List[dict]] = {}
 
@@ -58,313 +73,285 @@ tree = app_commands.CommandTree(client)
 music_players = {}
 active_connections = {}
 
-# 画像をローカルに保存するヘルパー関数
+# 画像をローカルに保存するヘルパー関数 (変更なし)
 async def save_image(image_data, prefix="img"):
     """
     画像データをローカルに保存する
-    
+
     Parameters:
     image_data (bytes): 保存する画像データ
     prefix (str): ファイル名のプレフィックス
-    
+
     Returns:
     str: 保存されたファイルのパス
     """
     if not image_data:
         return None
-        
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     random_id = uuid.uuid4().hex[:6]  # 衝突を避けるためのランダムID
-    
+
     filename = f"{prefix}_{timestamp}_{random_id}.png"
     filepath = os.path.join(IMAGE_DIR, filename)
-    
-    with open(filepath, "wb") as f:
-        f.write(image_data)
-    
-    print(f"画像を保存しました: {filepath}")
-    return filepath
 
-# URLから画像データを取得する関数
+    try:
+        with open(filepath, "wb") as f:
+            f.write(image_data)
+        print(f"画像を保存しました: {filepath}")
+        return filepath
+    except Exception as e:
+        print(f"画像保存エラー: {e}")
+        traceback.print_exc()
+        return None
+
+
+# URLから画像データを取得する関数 (変更なし)
 async def download_image_from_url(url):
     """
     URLから画像データをダウンロードする
-    
+
     Parameters:
     url (str): 画像のURL
-    
+
     Returns:
-    bytes: 画像データ
+    bytes: 画像データ or None
     """
+    if not url: # URLがNoneや空文字列の場合に対処
+        return None
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
+            # User-Agentを設定してみる (ブロック対策)
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
+            async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=15)) as response: # タイムアウト設定
                 if response.status == 200:
+                    print(f"画像ダウンロード成功: ステータス {response.status}, URL: {url}")
                     return await response.read()
                 else:
-                    print(f"画像ダウンロードエラー: HTTP {response.status}")
-                    return None
-    except Exception as e:
-        print(f"画像ダウンロードエラー: {e}")
-        return None
-
-# URLから画像をBase64エンコードして取得する関数
-async def get_base64_image_from_url(url):
-    """
-    URLから画像を取得してBase64エンコードする
-    
-    Parameters:
-    url (str): 画像のURL
-    
-    Returns:
-    str: Base64エンコードされた画像データ
-    """
-    try:
-        # ダウンロードした画像データをBase64エンコード
-        image_data = await download_image_from_url(url)
-        if image_data:
-            return base64.b64encode(image_data).decode('utf-8')
-        return None
-    except Exception as e:
-        print(f"画像のBase64エンコードエラー: {e}")
-        return None
-
-# 会話履歴を使ってイメージ生成を行うヘルパー関数
-async def generate_image_with_conversation(prompt: str, image_url=None, conversation=None):
-    """
-    会話履歴を使ってGemini APIで画像を生成する
-    
-    Parameters:
-    prompt (str): 生成する画像の説明テキスト
-    image_url (str, optional): 編集元の画像のURL
-    conversation (list, optional): 会話履歴
-    
-    Returns:
-    dict: 生成結果を含む辞書
-    """
-    try:
-        # REST APIを直接使用するためのデータ準備
-        request_data = {
-            "contents": [],
-            "generationConfig": {
-                "temperature": 1.0,
-                "topP": 0.95,
-                "topK": 40,
-                "responseModalities": ["TEXT", "IMAGE"],
-                "maxOutputTokens": 8192
-            }
-        }
-        
-        # 会話履歴があれば追加
-        if conversation:
-            for message in conversation:
-                msg_content = {
-                    "role": "user" if message["role"] == "user" else "model",
-                    "parts": []
-                }
-                
-                # テキストコンテンツ
-                if message.get("content"):
-                    msg_content["parts"].append({"text": message["content"]})
-                
-                # 画像データ
-                if message.get("image_url"):
-                    base64_image = await get_base64_image_from_url(message["image_url"])
-                    if base64_image:
-                        msg_content["parts"].append({
-                            "inlineData": {
-                                "mimeType": "image/jpeg",
-                                "data": base64_image
-                            }
-                        })
-                
-                # 内容があれば追加
-                if msg_content["parts"]:
-                    request_data["contents"].append(msg_content)
-                    print(f"会話履歴に追加: {message['role']} - {'画像あり' if message.get('image_url') else '画像なし'}")
-        
-        # 新しいリクエストを追加
-        user_content = {
-            "role": "user",
-            "parts": []
-        }
-        
-        # 画像がある場合は追加
-        if image_url:
-            base64_image = await get_base64_image_from_url(image_url)
-            if base64_image:
-                user_content["parts"].append({
-                    "inlineData": {
-                        "mimeType": "image/jpeg",
-                        "data": base64_image
-                    }
-                })
-        
-        # プロンプトを追加
-        user_content["parts"].append({"text": prompt})
-        request_data["contents"].append(user_content)
-        
-        # デバッグ出力
-        print(f"リクエスト内容: {len(request_data['contents'])}つの会話ターン")
-        
-        # 直接REST APIを呼び出す
-        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent"
-        headers = {
-            "Content-Type": "application/json",
-            "x-goog-api-key": GEMINI_API_KEY
-        }
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=headers, json=request_data) as response:
-                if response.status != 200:
                     error_text = await response.text()
-                    print(f"Gemini API エラー: HTTP {response.status}")
-                    print(f"レスポンス: {error_text}")
-                    return {
-                        "success": False,
-                        "error": f"APIエラー: HTTP {response.status} - {error_text}"
-                    }
-                
-                # レスポンスをJSONとして解析
-                response_data = await response.json()
-                
-                # レスポンスからテキストと画像を抽出
-                text_response = ""
-                image_data = None
-                
-                if (
-                    "candidates" in response_data and 
-                    response_data["candidates"] and 
-                    "content" in response_data["candidates"][0] and
-                    "parts" in response_data["candidates"][0]["content"]
-                ):
-                    parts = response_data["candidates"][0]["content"]["parts"]
-                    
-                    for part in parts:
-                        if "text" in part:
-                            text_response = part["text"]
-                        elif "inlineData" in part:
-                            # Base64でエンコードされた画像データをデコード
-                            image_data = base64.b64decode(part["inlineData"]["data"])
-                            
-                            # 生成された画像を保存
-                            if image_data:
-                                await save_image(image_data, "generated")
-                
-                return {
-                    "success": True,
-                    "text": text_response,
-                    "image_data": image_data
-                }
+                    print(f"画像ダウンロードエラー: HTTP {response.status}, URL: {url}, Response: {error_text[:200]}")
+                    return None
+    except asyncio.TimeoutError:
+        print(f"画像ダウンロードタイムアウト: URL: {url}")
+        return None
+    except aiohttp.ClientError as e:
+        print(f"画像ダウンロードクライアントエラー: {e}, URL: {url}")
+        return None
     except Exception as e:
-        print(f"Gemini API エラー: {e}")
+        print(f"画像ダウンロード一般エラー: {e}, URL: {url}")
+        traceback.print_exc()
+        return None
+
+# --- OpenAI 画像生成関数 (複数枚生成対応) ---
+async def generate_openai_image(prompt: str, image_url: Optional[str] = None, n: int = 1):
+    """
+    OpenAI API (gpt-image-1) を使用して画像を生成または編集する (size/quality自動, 複数枚対応)
+
+    Parameters:
+    prompt (str): 生成または編集の指示テキスト
+    image_url (str, optional): 編集の元となる画像のURL
+    n (int): 生成する画像の枚数 (デフォルト1)
+
+    Returns:
+    dict: 生成結果を含む辞書 {"success": bool, "image_data_list": List[bytes] | None, "error": str | None}
+    """
+    if not openai_image_client:
+        return {"success": False, "image_data_list": None, "error": "OpenAI Image Clientが初期化されていません。"}
+    if not (1 <= n <= 4): # 枚数制限 (APIの制限に合わせて調整が必要な場合あり)
+        print(f"警告: 要求された画像枚数({n})が範囲外です。1枚生成します。")
+        n = 1
+
+    try:
+        image_bytes = None
+        if image_url:
+            # 元画像がある場合はダウンロード
+            print(f"元画像をダウンロードします: {image_url}")
+            image_bytes = await download_image_from_url(image_url)
+            if not image_bytes:
+                # ダウンロード失敗時はエラーとする
+                return {"success": False, "image_data_list": None, "error": "元画像のダウンロードに失敗しました。"}
+            else:
+                print("元画像のダウンロード成功")
+
+        if image_bytes:
+            # 元画像がある場合 -> images.edit を使用
+            # 注意: edit エンドポイントが n > 1 をサポートしているか要確認。
+            #       サポートしていない場合、n=1 として動作する可能性がある。
+            print(f"OpenAI images.edit を呼び出します (n={n})。プロンプト: {prompt[:50]}...")
+            image_file = BytesIO(image_bytes)
+            image_file.name = f"input_{uuid.uuid4().hex[:6]}.png"
+
+            response = await asyncio.to_thread(
+                openai_image_client.images.edit,
+                model="gpt-image-1",
+                image=image_file,
+                prompt=prompt,
+                n=n # 生成枚数を指定
+            )
+        else:
+            # 元画像がない場合 -> images.generate を使用
+            print(f"OpenAI images.generate を呼び出します (n={n})。プロンプト: {prompt[:50]}...")
+            response = await asyncio.to_thread(
+                openai_image_client.images.generate,
+                model="gpt-image-1",
+                prompt=prompt,
+                n=n # 生成枚数を指定
+            )
+
+        # レスポンスから画像データを取得
+        generated_image_data_list = []
+        if response.data:
+            print(f"APIから {len(response.data)} 枚の画像データを受信しました。")
+            for image_object in response.data:
+                if image_object.b64_json:
+                    b64_data = image_object.b64_json
+                    generated_image_data = base64.b64decode(b64_data)
+                    generated_image_data_list.append(generated_image_data)
+                    # 生成された画像を保存 (デバッグや確認用)
+                    await save_image(generated_image_data, f"generated_openai_n{n}")
+                else:
+                    print("警告: レスポンス内の画像オブジェクトにb64_jsonが含まれていません。")
+        else:
+             print("警告: APIからの応答に画像データが含まれていません。")
+
+
+        if generated_image_data_list:
+            return {
+                "success": True,
+                "image_data_list": generated_image_data_list,
+                "error": None
+            }
+        else:
+            # レスポンス構造が予期しないものだったか、データが空だった場合
+            print(f"予期しないAPIレスポンスまたは空のデータ: {response}")
+            return {"success": False, "image_data_list": None, "error": "APIからの応答に有効な画像データが含まれていません。"}
+
+    except Exception as e:
+        print(f"OpenAI API エラー: {e}")
+        traceback.print_exc() # 詳細なトレースバックを出力
+        error_message = str(e)
+        if hasattr(e, 'response') and e.response:
+             try:
+                 error_details = e.response.json()
+                 error_message = f"{error_message} - Details: {error_details}"
+             except:
+                 pass
         return {
             "success": False,
-            "error": str(e)
+            "image_data_list": None,
+            "error": error_message
         }
 
-# スレッド内メッセージを処理するハンドラー
+# --- スレッド内メッセージ処理 (複数枚生成対応) ---
 async def handle_thread_message(message):
     """
-    スレッド内のメッセージを処理するハンドラー関数
+    スレッド内のメッセージを処理するハンドラー関数 (OpenAI対応・履歴考慮・複数枚生成対応版)
     """
     thread_id = message.channel.id
-    
-    # スレッドが追跡されているか確認
+
     if thread_id not in thread_histories:
-        # 履歴がない場合は新規作成
         thread_histories[thread_id] = []
-    
+
     try:
         async with message.channel.typing():
-            # スレッドに添付画像があるかチェック
-            image_attachment = None
+            current_message_image_url = None
             if message.attachments:
                 for attachment in message.attachments:
                     if attachment.content_type and attachment.content_type.startswith('image/'):
-                        image_attachment = attachment
+                        current_message_image_url = attachment.url
+                        print(f"現在のメッセージから添付画像URLを取得: {current_message_image_url}")
                         break
-            
-            # 画像URLを取得
-            image_url = None
-            if image_attachment:
-                image_url = image_attachment.url
-                print(f"添付画像のURLを取得しました: {image_url}")
-            
-            # 会話履歴を取得（最大5ターン分）
-            conversation_history = thread_histories[thread_id][-10:] if thread_histories[thread_id] else None
-            
-            # 画像生成を実行
-            result = await generate_image_with_conversation(
-                message.content, 
-                image_url,
-                conversation_history
+
+            base_image_url = None
+            if current_message_image_url:
+                base_image_url = current_message_image_url
+                print("ユーザー添付画像を元画像として使用します。")
+            else:
+                history = thread_histories.get(thread_id, [])
+                for i in range(len(history) - 1, -1, -1):
+                    prev_msg = history[i]
+                    if prev_msg.get("image_url"):
+                        base_image_url = prev_msg["image_url"]
+                        print(f"履歴から元画像URLを発見: {base_image_url} (履歴インデックス: {i})")
+                        break
+                if base_image_url:
+                     print("履歴の画像を元画像として使用します。")
+                else:
+                     print("元画像は見つかりませんでした。新規生成を行います。")
+
+            # --- OpenAI 画像生成を実行 (n=1 で固定、コマンドでのみ複数枚指定可能とする) ---
+            # スレッド内の会話では、煩雑さを避けるため常に1枚生成とする
+            # もしスレッド内でも複数枚生成したい場合は、n を変更する
+            result = await generate_openai_image(
+                message.content,
+                base_image_url,
+                n=3 # スレッド内では常に1枚生成
             )
-            
+            # --- ---
+
             if not result["success"]:
                 await message.reply(f"画像生成に失敗しました: {result['error']}")
                 return
-            
-            # 会話履歴にユーザーメッセージを追加
+
+            # --- 会話履歴にユーザーメッセージを追加 ---
             thread_histories[thread_id].append({
-                "role": "user", 
+                "role": "user",
                 "content": message.content,
-                "image_url": image_url
+                "image_url": current_message_image_url
             })
-            
-            # 埋め込みを作成
+
+            # --- 埋め込みを作成 ---
             embed = discord.Embed(
-                title="画像生成結果",
+                title="画像生成結果 (OpenAI)",
                 description=f"**プロンプト:** {message.content}",
-                color=0x00AAFF
+                color=0x10A37F
             )
-            
-            # テキスト応答があれば追加
-            if result["text"] and result["text"].strip():
-                embed.add_field(name="Geminiからの応答", value=result["text"], inline=False)
-            else:
-                embed.add_field(name="Geminiからの応答", value="(テキスト応答はありません)", inline=False)
-            
-            # 元の画像があれば、サムネイルとして表示
-            if image_attachment:
-                embed.set_thumbnail(url=image_attachment.url)
-                embed.add_field(name="元画像", value=f"[{image_attachment.filename}]({image_attachment.url})", inline=True)
-            
+
+            if base_image_url:
+                embed.set_thumbnail(url=base_image_url)
+                embed.add_field(name="元画像", value=f"[表示]({base_image_url})", inline=True)
+
             reply_message = None
-            
+            generated_image_urls = [] # 生成された画像のURLリスト
+
             # 画像データがある場合
-            if result["image_data"]:
-                # Discord用の画像ファイルを作成
-                image_file = discord.File(BytesIO(result["image_data"]), filename="generated_image.png")
-                
-                # 応答を送信
-                reply_message = await message.reply(embed=embed, file=image_file)
-                
-                # 生成された画像の添付ファイルURLを取得
-                generated_image_url = None
-                if reply_message and reply_message.attachments:
-                    generated_image_url = reply_message.attachments[0].url
-                    print(f"生成画像のURLを保存: {generated_image_url}")
+            if result["image_data_list"]:
+                files_to_send = []
+                for i, img_data in enumerate(result["image_data_list"]):
+                    files_to_send.append(discord.File(BytesIO(img_data), filename=f"generated_openai_{i+1}.png"))
+
+                # 応答を送信 (複数のファイルを添付)
+                if files_to_send:
+                    reply_message = await message.reply(embed=embed, files=files_to_send)
+
+                    # 生成された画像の添付ファイルURLを取得
+                    if reply_message and reply_message.attachments:
+                        generated_image_urls = [att.url for att in reply_message.attachments]
+                        print(f"生成画像のURLを保存: {generated_image_urls}")
+                else:
+                     # 画像データリストはあるがファイル作成に失敗した場合など
+                     embed.description += "\n\n(画像の送信に失敗しました)"
+                     reply_message = await message.reply(embed=embed)
+
             else:
-                # 画像データがない場合はテキストのみ
+                # 画像データがない場合はテキストのみ (通常はエラー時)
+                embed.description += "\n\n(画像は生成されませんでした)"
                 reply_message = await message.reply(embed=embed)
-                generated_image_url = None
-            
-            # 応答を会話履歴に追加（画像URLを含む）
+
+            # --- 応答を会話履歴に追加 (最初の画像のURLのみ保存) ---
+            first_generated_url = generated_image_urls[0] if generated_image_urls else None
             thread_histories[thread_id].append({
                 "role": "model",
-                "content": result["text"] if result["text"] else "画像を生成しました。",
-                "image_url": generated_image_url
+                "content": f"{len(generated_image_urls)}枚の画像を生成しました。" if generated_image_urls else "画像を生成しました。",
+                "image_url": first_generated_url # 最初の画像のURLのみ履歴に保存
             })
-            
-            # 会話履歴の内容をデバッグ出力
+
             print(f"スレッド {thread_id} の会話履歴: {len(thread_histories[thread_id])} メッセージ")
-            for idx, msg in enumerate(thread_histories[thread_id]):
-                print(f"  [{idx}] {msg['role']} - {'画像あり' if msg.get('image_url') else '画像なし'} - {msg['content'][:30]}...")
-    
+
     except Exception as e:
         print(f"スレッド内メッセージ処理エラー: {e}")
-        await message.reply("申し訳ありません。エラーが発生しました。")
+        traceback.print_exc() # 詳細なトレースバックを出力
+        await message.reply("申し訳ありません。スレッド処理中にエラーが発生しました。")
+
 
 @client.event
 async def on_ready():
@@ -377,16 +364,16 @@ async def on_message(message: discord.Message):
     # ボットのメッセージは無視
     if message.author.bot:
         return
-    
-    # システムチャネルの場合は既存のチャット処理を行う
+
+    # システムチャネルの場合は既存のチャット処理を行う (x.ai/Grokを使用)
     if message.channel.id in ALLOWED_CHANNELS:
         channel_id = message.channel.id
         if channel_id not in chat_histories:
             chat_histories[channel_id] = []
-        
+
         guild_id = str(message.guild.id)
         system_prompt = SYSTEM_PROMPTS.get(guild_id, SYSTEM_PROMPTS["default"])
-        
+
         try:
             async with message.channel.typing():
                 messages = [
@@ -394,29 +381,34 @@ async def on_message(message: discord.Message):
                     *chat_histories[channel_id],
                     {"role": "user", "content": message.content}
                 ]
-                
-                response = client_openai.chat.completions.create(
-                    model="grok-2-1212",
-                    messages=messages,
+
+                # x.ai (Grok) クライアントを使用
+                response = await asyncio.to_thread(
+                     client_openai_chat.chat.completions.create,
+                     model="grok-3-mini-latest",
+                     messages=messages,
                 )
-                
+
                 reply = response.choices[0].message.content
-                
+
                 chat_histories[channel_id].append({"role": "user", "content": message.content})
                 chat_histories[channel_id].append({"role": "assistant", "content": reply})
-                
+
                 if len(chat_histories[channel_id]) > 20:
                     chat_histories[channel_id] = chat_histories[channel_id][-10:]
-                
+
                 await message.reply(reply)
-                
+
         except Exception as e:
-            print(f"Error in chat: {e}")
-            await message.channel.send("申し訳ありません。エラーが発生しました。")
+            print(f"Error in chat (Grok): {e}")
+            await message.channel.send("申し訳ありません。チャット応答でエラーが発生しました。")
         return
-    
-    # スレッド内のメッセージかどうかをチェック
+
+    # スレッド内のメッセージかどうかをチェック -> OpenAI画像生成へ
     if isinstance(message.channel, discord.Thread):
+        # スレッドの親チャンネルが画像生成を許可されたチャンネルか、
+        # または特定の画像生成用チャンネルのスレッドかをチェックするロジックを追加可能
+        # ここでは単純にスレッドなら画像生成ハンドラを呼ぶ
         await handle_thread_message(message)
 
 @client.event
@@ -433,8 +425,14 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
     # ボットがまだどのボイスチャンネルにも接続していなければ、自動的に参加する
     if after.channel is not None and guild.voice_client is None:
         try:
+            # api.py から notify_clients をインポート
+            try:
+                from api import notify_clients
+            except ImportError:
+                print("警告: api.notify_clients のインポートに失敗しました。循環参照の可能性があります。")
+                async def notify_clients(gid): pass # ダミー関数
+
             await after.channel.connect()
-            from api import notify_clients  # 既存の通知関数を利用
             music_players[guild_id] = MusicPlayer(client, guild, guild_id, notify_clients)
             await notify_clients(guild_id)
             print(f"Auto-joined voice channel {after.channel.name} in guild {guild.name} because user {member.display_name} joined.")
@@ -443,9 +441,11 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
 
     # 既存の退室処理：ボイスチャンネル内のユーザーが全員退出した場合、ボットも切断する
     if before.channel is not None and guild.voice_client is not None and before.channel.id == guild.voice_client.channel.id:
+        # ボット以外のメンバー数をカウント
         remaining_members = sum(1 for m in before.channel.members if not m.bot)
         if remaining_members == 0:
-            await asyncio.sleep(5)
+            await asyncio.sleep(5) # 5秒待って再確認
+            # 再度メンバー数をカウント
             current_members = sum(1 for m in before.channel.members if not m.bot)
             if current_members == 0:
                 await guild.voice_client.disconnect()
@@ -474,137 +474,187 @@ async def join_channel(interaction: discord.Interaction, channel: discord.VoiceC
         await interaction.response.send_message("このコマンドはギルド内でのみ使用可能です。", ephemeral=True)
         return
     guild_id = str(guild.id)
+
+    try:
+        from api import notify_clients
+    except ImportError:
+        print("警告: api.notify_clients のインポートに失敗しました。")
+        async def notify_clients(gid): pass # ダミー関数
+
     if guild.voice_client is None:
         await channel.connect()
     else:
         await guild.voice_client.move_to(channel)
-    from api import notify_clients
+
     music_players[guild_id] = MusicPlayer(client, guild, guild_id, notify_clients)
     await notify_clients(guild_id)
     await interaction.response.send_message(f"ボイスチャンネル {channel.name} に参加しました。")
 
-@tree.command(name="generate_image", description="テキストから画像を生成します。オプションで元となる画像を添付できます。")
+# --- 画像生成コマンド (複数枚生成対応) ---
+@tree.command(name="generate_image", description="テキストから画像を生成します。(OpenAI, 複数枚可)")
 @app_commands.describe(
     prompt="生成したい画像の説明テキスト",
-    image="オプション: 生成の元となる画像"
+    image="オプション: 生成の元となる画像",
+    num_images="生成する画像の枚数 (1-4)"
 )
-async def generate_image_command(interaction: discord.Interaction, prompt: str, image: Optional[discord.Attachment] = None):
+async def generate_image_command(
+    interaction: discord.Interaction,
+    prompt: str,
+    image: Optional[discord.Attachment] = None,
+    num_images: app_commands.Range[int, 1, 4] = 1 # 枚数オプション追加 (デフォルト1, 範囲1-4)
+):
     """
-    テキストプロンプトと任意の画像から新しい画像を生成し、スレッドを作成するスラッシュコマンド
+    テキストプロンプトと任意の画像から新しい画像を生成し、スレッドを作成するスラッシュコマンド (OpenAI対応・複数枚生成版)
     """
-    await interaction.response.defer(thinking=True)  # 生成には時間がかかるため、応答を遅延します
-    
+    await interaction.response.defer(thinking=True) # 生成には時間がかかるため、応答を遅延します
+
     try:
-        # ギルド情報の検証
         if not interaction.guild:
             await interaction.followup.send("このコマンドはサーバー内でのみ使用できます。")
             return
-        
+
         image_url = None
         if image:
-            # 添付された画像のURLを取得
+            if not image.content_type or not image.content_type.startswith('image/'):
+                 await interaction.followup.send("画像ファイルではないようです。画像ファイルを添付してください。")
+                 return
             image_url = image.url
             print(f"コマンドから画像URLを取得しました: {image_url}")
-        
-        # 画像生成
-        result = await generate_image_with_conversation(prompt, image_url)
-        
+
+        # --- OpenAI 画像生成を実行 (枚数指定) ---
+        result = await generate_openai_image(prompt, image_url, n=num_images)
+        # --- ---
+
         if not result["success"]:
             await interaction.followup.send(f"画像生成に失敗しました: {result['error']}")
             return
-        
-        # 埋め込みを作成
+
+        # --- 埋め込みを作成 ---
         embed = discord.Embed(
-            title="画像生成結果",
-            description=f"**プロンプト:** {prompt}",
-            color=0x00AAFF  # 水色
+            title="画像生成結果 (OpenAI)",
+            description=f"**プロンプト:** {prompt}\n**生成枚数:** {len(result.get('image_data_list', []))}", # 実際に生成された枚数を表示
+            color=0x10A37F
         )
-        
-        # テキスト応答があれば追加（常に表示）
-        if result["text"] and result["text"].strip():
-            embed.add_field(name="Geminiからの応答", value=result["text"], inline=False)
-        else:
-            embed.add_field(name="Geminiからの応答", value="(テキスト応答はありません)", inline=False)
-        
-        # 元の画像があれば、サムネイルとして表示
+
         if image:
             embed.set_thumbnail(url=image.url)
             embed.add_field(name="元画像", value=f"[{image.filename}]({image.url})", inline=True)
-        
+
         response_message = None
-        generated_image_url = None
-        
+        generated_image_urls = [] # 生成された画像のURLリスト
+
         # 生成された画像があるかどうかで処理を分岐
-        if result["image_data"]:
-            # 生成された画像をファイルとして準備
-            image_file = discord.File(BytesIO(result["image_data"]), filename="generated_image.png")
-            
-            # 画像付きメッセージを送信
-            response_message = await interaction.followup.send(embed=embed, file=image_file)
-            
-            # 生成された画像の添付ファイルURLを取得
-            if hasattr(response_message, 'attachments') and response_message.attachments:
-                generated_image_url = response_message.attachments[0].url
-                print(f"生成画像のURLを保存: {generated_image_url}")
+        if result["image_data_list"]:
+            files_to_send = []
+            for i, img_data in enumerate(result["image_data_list"]):
+                 files_to_send.append(discord.File(BytesIO(img_data), filename=f"generated_openai_{i+1}.png"))
+
+            # 画像付きメッセージを送信 (複数のファイルを添付)
+            if files_to_send:
+                response_message = await interaction.followup.send(embed=embed, files=files_to_send)
+
+                # 生成された画像の添付ファイルURLを取得
+                if response_message and response_message.attachments:
+                    generated_image_urls = [att.url for att in response_message.attachments]
+                    print(f"生成画像のURLを保存: {generated_image_urls}")
+                else:
+                    print("警告: followup.send の応答から添付ファイルを取得できませんでした。")
+            else:
+                # 画像データリストはあるがファイル作成に失敗した場合など
+                embed.description += "\n\n(画像の送信に失敗しました)"
+                response_message = await interaction.followup.send(embed=embed)
+
         else:
-            # 画像が生成されなかった場合はテキストのみ
+            # 画像が生成されなかった場合はテキストのみ (通常エラー時)
+            embed.description += "\n\n(画像は生成されませんでした)"
             response_message = await interaction.followup.send(embed=embed)
-        
+
+        # --- スレッド作成処理 ---
         try:
-            # チャンネルからスレッドを作成
-            channel = interaction.channel
+            if response_message:
+                channel = response_message.channel
+            else:
+                 channel = interaction.channel
+
+            if not isinstance(channel, (discord.TextChannel, discord.ForumChannel)):
+                 print(f"スレッドを作成できないチャンネルタイプです: {type(channel)}")
+                 return
+
             thread_name = f"画像生成: {prompt[:50]}..." if len(prompt) > 50 else f"画像生成: {prompt}"
-            
-            # チャンネルからスレッドを作成
-            try:
+
+            if response_message:
                 thread = await channel.create_thread(
                     name=thread_name,
                     message=response_message,
-                    auto_archive_duration=60,  # 60分後に自動アーカイブ
-                    reason="画像生成スレッド"
+                    auto_archive_duration=60,
+                    reason="画像生成スレッド (OpenAI)"
                 )
-            except Exception as thread_error:
-                print(f"スレッド作成エラー: {thread_error}")
-                await interaction.followup.send("スレッドの作成に失敗しましたが、画像生成は成功しました。")
-                return
-            
-            # スレッド内に応答を送信
-            thread_message = f"画像生成を続けるには、このスレッドにメッセージを送信してください。"
-            if result["text"] and result["text"].strip():
-                thread_message = f"{result['text']}\n\n画像生成を続けるには、このスレッドにメッセージを送信してください。"
-            
-            thread_message_obj = await thread.send(thread_message)
-            
-            # スレッドの会話履歴を初期化
+            else:
+                 thread = await channel.create_thread(
+                    name=thread_name,
+                    type=discord.ChannelType.public_thread,
+                    auto_archive_duration=60,
+                    reason="画像生成スレッド (OpenAI)"
+                )
+                 await thread.send(embed=embed)
+
+
+            thread_message = f"画像生成を続けるには、このスレッドにメッセージを送信してください。\n（元画像を指定する場合は、メッセージに画像を添付してください）"
+            await thread.send(thread_message)
+
+            # --- スレッドの会話履歴を初期化 (最初の画像のURLのみ保存) ---
+            first_generated_url = generated_image_urls[0] if generated_image_urls else None
             thread_histories[thread.id] = [
                 {
-                    "role": "user", 
-                    "content": prompt, 
+                    "role": "user",
+                    "content": prompt,
                     "image_url": image_url
                 },
                 {
-                    "role": "model", 
-                    "content": result["text"] if result["text"] and result["text"].strip() else "画像を生成しました。", 
-                    "image_url": generated_image_url
+                    "role": "model",
+                    "content": f"{len(generated_image_urls)}枚の画像を生成しました。" if generated_image_urls else "画像を生成しました。",
+                    "image_url": first_generated_url # 最初の画像のURLのみ履歴に保存
                 }
             ]
-            
-            # 会話履歴の内容をデバッグ出力
+
             print(f"スレッド {thread.id} の会話履歴を初期化しました: {len(thread_histories[thread.id])} メッセージ")
-            for idx, msg in enumerate(thread_histories[thread.id]):
-                print(f"  [{idx}] {msg['role']} - {'画像あり' if msg.get('image_url') else '画像なし'} - {msg['content'][:30]}...")
-            
+
+        except discord.Forbidden:
+             print("エラー: スレッド作成権限がありません。")
+             await interaction.edit_original_response(content="スレッドの作成権限がないため、スレッドを開始できませんでした。画像は生成されています。")
         except Exception as thread_error:
-            print(f"スレッド作成エラー: {thread_error}")
-            await interaction.followup.send("スレッドの作成に失敗しましたが、画像生成は成功しました。")
-    
+            print(f"スレッド作成またはメッセージ送信エラー: {thread_error}")
+            traceback.print_exc()
+            try:
+                 await interaction.edit_original_response(content="スレッドの作成中にエラーが発生しましたが、画像生成は完了しています。")
+            except discord.NotFound:
+                 await interaction.channel.send("スレッドの作成中にエラーが発生しましたが、画像生成は完了しています。")
+
+
     except Exception as e:
         print(f"画像生成コマンドエラー: {e}")
-        await interaction.followup.send(f"エラーが発生しました: {str(e)}")
+        traceback.print_exc()
+        try:
+            # followup.sendは一度しか使えないのでedit_original_responseを試す
+            await interaction.edit_original_response(content=f"画像生成コマンドの実行中にエラーが発生しました: {str(e)}")
+        except discord.NotFound:
+             print("Interaction not found, cannot send error message.")
+        except discord.InteractionResponded:
+             # 既に編集などで応答済みの場合
+             await interaction.channel.send(f"画像生成コマンドの実行中にエラーが発生しました: {str(e)}")
+        except Exception as followup_error:
+             print(f"Error sending error message: {followup_error}")
+
+# --- 他のスラッシュコマンド (変更なし、ただしapi.pyからのインポートに注意) ---
 
 @tree.command(name="disconnect", description="現在参加中のボイスチャンネルから切断します。")
 async def disconnect_channel(interaction: discord.Interaction):
-    from api import notify_clients
+    try:
+        from api import notify_clients
+    except ImportError:
+        print("警告: api.notify_clients のインポートに失敗しました。")
+        async def notify_clients(gid): pass # ダミー関数
+
     guild = interaction.guild
     if guild is None:
         await interaction.response.send_message("このコマンドはギルド内でのみ実行可能です。", ephemeral=True)
@@ -622,34 +672,103 @@ async def disconnect_channel(interaction: discord.Interaction):
 @tree.command(name="play", description="指定した楽曲を再生キューに追加して再生します。")
 @app_commands.describe(url="再生する楽曲のURL・もしくはキーワード")
 async def play_track(interaction: discord.Interaction, url: str):
-    from api import add_and_play_track, notify_clients, Track
+    try:
+        # api.pyの関数をインポート
+        from api import add_and_play_track, notify_clients, Track, User
+    except ImportError:
+        print("警告: api モジュールのインポートに失敗しました。")
+        await interaction.response.send_message("機能の準備中にエラーが発生しました。", ephemeral=True)
+        return
+
     guild = interaction.guild
     if guild is None:
         await interaction.response.send_message("ギルド内でのみ実行可能です。", ephemeral=True)
         return
     guild_id = str(guild.id)
     player = music_players.get(guild_id)
+
+    # 応答済みかどうかのフラグ
+    responded = False
+    initial_response_method = interaction.response # 初回応答に使うメソッド
+
     if not player:
-        await interaction.response.send_message("ボットはまだボイスチャネルに参加していません。/joinで参加してください。", ephemeral=True)
-        return
-    
-    # まず処理中であることを通知
-    await interaction.response.send_message("🎵 トラックを追加中です...")
-    
-    # 処理を非同期で実行
-    track = Track(title="Loading...", artist="Unknown", thumbnail="", url=url)
+        # ボイスチャンネルに接続していない場合、ユーザーがいるチャンネルに接続を試みる
+        if interaction.user.voice and interaction.user.voice.channel:
+             try:
+                  # join_channelを直接呼び出すのではなく、接続処理を行う
+                  if guild.voice_client is None:
+                       await interaction.user.voice.channel.connect()
+                  else:
+                       await guild.voice_client.move_to(interaction.user.voice.channel)
+
+                  # MusicPlayerインスタンスを作成
+                  try:
+                       from api import notify_clients
+                  except ImportError:
+                       async def notify_clients(gid): pass # ダミー関数
+                  music_players[guild_id] = MusicPlayer(client, guild, guild_id, notify_clients)
+                  await notify_clients(guild_id)
+
+                  player = music_players.get(guild_id) # 再度playerを取得
+                  await initial_response_method.send_message(f"{interaction.user.voice.channel.name} に接続しました。トラックを追加します...")
+                  responded = True # 応答済みフラグを立てる
+                  initial_response_method = interaction.edit_original_response # 次回以降は編集メソッドを使う
+
+             except Exception as join_error:
+                  print(f"自動接続エラー: {join_error}")
+                  await initial_response_method.send_message("ボットをボイスチャンネルに参加させる際にエラーが発生しました。", ephemeral=True)
+                  return
+        else:
+             await initial_response_method.send_message("ボットはまだボイスチャネルに参加していません。`/join`で参加させるか、あなたがボイスチャンネルに参加してください。", ephemeral=True)
+             return
+
+    # playerが取得できたか再確認
+    if not player:
+         await initial_response_method.send_message("プレイヤーの準備ができませんでした。", ephemeral=True)
+         return
+
+
+    # まだ応答していない場合、処理中メッセージを送る
+    if not responded:
+        await initial_response_method.send_message("🎵 トラックを追加中です...")
+        initial_response_method = interaction.edit_original_response # 次回以降は編集メソッドを使う
+
+
+    # ユーザー情報を取得
+    user_info = User(
+        id=str(interaction.user.id),
+        name=interaction.user.display_name,
+        image=str(interaction.user.display_avatar.url) if interaction.user.display_avatar else ""
+    )
+
+    # Trackモデルを作成
+    track_to_add = Track(
+        title="Loading...",
+        artist="Unknown",
+        thumbnail="",
+        url=url,
+        added_by=user_info
+    )
+
     try:
-        await add_and_play_track(guild_id, track)
-        await notify_clients(guild_id)
+        # api.py の add_and_play_track を呼び出す
+        await add_and_play_track(guild_id, track_to_add)
         # メッセージを編集
-        await interaction.edit_original_response(content="✅ トラックをキューに追加しました。まもなく再生されます。")
+        await initial_response_method(content="✅ トラックをキューに追加しました。")
     except Exception as e:
         # エラーが発生した場合はエラーメッセージを表示
-        await interaction.edit_original_response(content=f"❌ エラーが発生しました: {str(e)}")
+        print(f"Error adding track: {e}")
+        await initial_response_method(content=f"❌ トラックの追加中にエラーが発生しました: {str(e)}")
+
 
 @tree.command(name="pause", description="現在再生中のトラックを一時停止します。")
 async def pause_track(interaction: discord.Interaction):
-    from api import notify_clients
+    try:
+        from api import notify_clients
+    except ImportError:
+        print("警告: api.notify_clients のインポートに失敗しました。")
+        async def notify_clients(gid): pass # ダミー関数
+
     guild = interaction.guild
     if guild is None:
         await interaction.response.send_message("ギルド内でのみ実行可能です。", ephemeral=True)
@@ -661,11 +780,16 @@ async def pause_track(interaction: discord.Interaction):
         await notify_clients(guild_id)
         await interaction.response.send_message("再生を一時停止しました。")
     else:
-        await interaction.response.send_message("再生中のトラックがありません。", ephemeral=True)
+        await interaction.response.send_message("再生中のトラックがないか、既に一時停止中です。", ephemeral=True)
 
 @tree.command(name="resume", description="一時停止中のトラックを再開します。")
 async def resume_track(interaction: discord.Interaction):
-    from api import notify_clients
+    try:
+        from api import notify_clients
+    except ImportError:
+        print("警告: api.notify_clients のインポートに失敗しました。")
+        async def notify_clients(gid): pass # ダミー関数
+
     guild = interaction.guild
     if guild is None:
         await interaction.response.send_message("ギルド内でのみ実行可能です。", ephemeral=True)
@@ -681,23 +805,33 @@ async def resume_track(interaction: discord.Interaction):
 
 @tree.command(name="skip", description="現在のトラックをスキップします。")
 async def skip_track(interaction: discord.Interaction):
-    from api import notify_clients
+    try:
+        from api import notify_clients
+    except ImportError:
+        print("警告: api.notify_clients のインポートに失敗しました。")
+        async def notify_clients(gid): pass # ダミー関数
+
     guild = interaction.guild
     if guild is None:
         await interaction.response.send_message("ギルド内でのみ実行可能です。", ephemeral=True)
         return
     guild_id = str(guild.id)
     player = music_players.get(guild_id)
-    if player and player.is_playing():
+    if player and (player.is_playing() or (player.voice_client and player.voice_client.is_paused())): # 再生中または一時停止中ならスキップ可能
         await player.skip()
-        await notify_clients(guild_id)
+        # await notify_clients(guild_id) # skip内で呼ばれるはず
         await interaction.response.send_message("次のトラックへスキップしました。")
     else:
         await interaction.response.send_message("スキップするトラックがありません。", ephemeral=True)
 
 @tree.command(name="previous", description="前のトラックに戻ります。")
 async def previous_track(interaction: discord.Interaction):
-    from api import notify_clients
+    try:
+        from api import notify_clients
+    except ImportError:
+        print("警告: api.notify_clients のインポートに失敗しました。")
+        async def notify_clients(gid): pass # ダミー関数
+
     guild = interaction.guild
     if guild is None:
         await interaction.response.send_message("ギルド内でのみ実行可能です。", ephemeral=True)
@@ -705,70 +839,139 @@ async def previous_track(interaction: discord.Interaction):
     guild_id = str(guild.id)
     player = music_players.get(guild_id)
     if player:
-        await player.previous()
-        await notify_clients(guild_id)
-        await interaction.response.send_message("前のトラックに戻りました。")
+        success = await player.previous()
+        if success:
+            # await notify_clients(guild_id) # previous内で呼ばれるはず
+            await interaction.response.send_message("前のトラックに戻りました。")
+        else:
+            await interaction.response.send_message("再生履歴がないため、前のトラックに戻れません。", ephemeral=True)
     else:
-        await interaction.response.send_message("戻れるトラックがありま��ん。", ephemeral=True)
+        await interaction.response.send_message("プレイヤーが存在しません。", ephemeral=True)
+
 
 @tree.command(name="queue", description="現在の再生キューを表示します。")
 async def show_queue(interaction: discord.Interaction):
-    from api import get_queue
+    try:
+        from api import get_queue # api.pyから取得関数をインポート
+    except ImportError:
+        print("警告: api.get_queue のインポートに失敗しました。")
+        await interaction.response.send_message("機能の準備中にエラーが発生しました。", ephemeral=True)
+        return
+
     guild = interaction.guild
     if guild is None:
         await interaction.response.send_message("ギルド内でのみ実行可能です。", ephemeral=True)
         return
     guild_id = str(guild.id)
-    queue = await get_queue(guild_id)
+    queue = await get_queue(guild_id) # API経由でキューを取得
     if not queue:
         await interaction.response.send_message("キューは空です。", ephemeral=True)
         return
-    description = "\n".join([f"{idx+1}. {item.track.title} by {item.track.artist}" for idx, item in enumerate(queue)])
-    await interaction.response.send_message(f"現在のキュー:\n{description}")
+
+    embed = discord.Embed(title="現在の再生キュー", color=discord.Color.blue())
+    description = ""
+    for item in queue:
+        # isCurrent フラグは QueueItem モデルに含まれている想定
+        prefix = "▶️ " if item.isCurrent else f"{item.position + 1}. "
+        # URLが長すぎる場合があるので、タイトルのみ表示するなど調整も検討
+        track_info = f"[{item.track.title}]({item.track.url})" if item.track.url else item.track.title
+        description += f"{prefix}{track_info} by {item.track.artist}\n"
+        if len(description) > 3900: # Embed Descriptionの上限近くになったら省略
+             description += "\n... (以下省略)"
+             break
+
+    embed.description = description if description else "キューは空です。"
+    await interaction.response.send_message(embed=embed)
+
 
 @tree.command(name="nowplaying", description="現在再生中のトラックを表示します。")
 async def now_playing(interaction: discord.Interaction):
-    from api import get_current_track
+    try:
+        from api import get_current_track # api.pyから取得関数をインポート
+    except ImportError:
+        print("警告: api.get_current_track のインポートに失敗しました。")
+        await interaction.response.send_message("機能の準備中にエラーが発生しました。", ephemeral=True)
+        return
+
     guild = interaction.guild
     if guild is None:
         await interaction.response.send_message("ギルド内でのみ実行可能です。", ephemeral=True)
         return
     guild_id = str(guild.id)
-    current = await get_current_track(guild_id)
+    current = await get_current_track(guild_id) # API経由で現在のトラックを取得
     if current:
-        await interaction.response.send_message(f"現在再生中: {current.title} by {current.artist}")
+         embed = discord.Embed(
+              title="🎵 現在再生中",
+              description=f"[{current.title}]({current.url})" if current.url else current.title,
+              color=discord.Color.green()
+         )
+         embed.add_field(name="アーティスト", value=current.artist, inline=True)
+         if current.added_by:
+              embed.add_field(name="追加したユーザー", value=current.added_by.name, inline=True)
+         if current.thumbnail:
+              embed.set_thumbnail(url=current.thumbnail)
+         await interaction.response.send_message(embed=embed)
     else:
         await interaction.response.send_message("現在再生中のトラックはありません。", ephemeral=True)
 
-@tree.command(name="volume", description="音量を変更します(0.0～1.0)")
-@app_commands.describe(value="設定する音量(0.0～1.0)")
-async def set_volume(interaction: discord.Interaction, value: float):
+@tree.command(name="volume", description="音量を変更します(0%～100%)")
+@app_commands.describe(value="設定する音量 (0-100の整数)")
+async def set_volume(interaction: discord.Interaction, value: app_commands.Range[int, 0, 100]):
     guild = interaction.guild
     if guild is None:
         await interaction.response.send_message("ギルド内でのみ実行可能です。", ephemeral=True)
         return
-    if not (0.0 <= value <= 1.0):
-        await interaction.response.send_message("音量は0.0～1.0の範囲で指定してください。", ephemeral=True)
-        return
+
+    # パーセンテージを0.0～1.0のfloatに変換
+    volume_float = float(value) / 100.0
+
     guild_id = str(guild.id)
     player = music_players.get(guild_id)
     if player:
-        await player.set_volume(value)
-        await interaction.response.send_message(f"音量を{value}に設定しました。")
+        await player.set_volume(volume_float)
+        await interaction.response.send_message(f"音量を{value}%に設定しました。")
+        # notify_clients は set_volume 内で呼ばれるか確認、必要なら呼ぶ
+        try:
+             from api import notify_clients
+             await notify_clients(guild_id)
+        except ImportError:
+             pass
     else:
-        await interaction.response.send_message("再生中のトラックがありません。", ephemeral=True)
+        await interaction.response.send_message("ボイスチャンネルに接続していないか、再生中のトラックがありません。", ephemeral=True)
+
 
 @tree.command(name="history", description="再生履歴を表示します。")
 async def show_history(interaction: discord.Interaction):
-    from api import get_history
+    try:
+        from api import get_history # api.pyから取得関数をインポート
+    except ImportError:
+        print("警告: api.get_history のインポートに失敗しました。")
+        await interaction.response.send_message("機能の準備中にエラーが発生しました。", ephemeral=True)
+        return
+
     guild = interaction.guild
     if guild is None:
         await interaction.response.send_message("ギルド内でのみ実行可能です。", ephemeral=True)
         return
     guild_id = str(guild.id)
-    history = await get_history(guild_id)
+    history = await get_history(guild_id) # API経由で履歴を取得
     if not history:
         await interaction.response.send_message("再生履歴はありません。", ephemeral=True)
         return
-    description = "\n".join([f"{item.position+1}. {item.track.title} by {item.track.artist}" for item in history])
-    await interaction.response.send_message(f"再生履歴:\n{description}")
+
+    embed = discord.Embed(title="再生履歴", color=discord.Color.orange())
+    description = ""
+    # 履歴は通常、新しいものがリストの最後に来るため逆順で表示
+    for item in reversed(history):
+         # position は QueueItem モデルに含まれる想定
+         track_info = f"[{item.track.title}]({item.track.url})" if item.track.url else item.track.title
+         description += f"{item.position + 1}. {track_info} by {item.track.artist}\n"
+         if len(description) > 3900:
+              description += "\n... (以下省略)"
+              break
+
+    embed.description = description if description else "再生履歴はありません。"
+    await interaction.response.send_message(embed=embed)
+
+# --- メイン処理 ---
+# api.pyから起動されることを前提とする
