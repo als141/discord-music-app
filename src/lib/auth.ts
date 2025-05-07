@@ -6,6 +6,7 @@ import { Session } from 'next-auth';
 import { JWT } from 'next-auth/jwt';
 
 export const authOptions: NextAuthOptions = {
+  secret: process.env.NEXTAUTH_SECRET,
   providers: [
     DiscordProvider({
       clientId: process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID as string,

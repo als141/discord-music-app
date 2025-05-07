@@ -4,9 +4,25 @@ import type { Config } from "tailwindcss";
 const config: Config = {
   darkMode: ["class"],
   content: [
-    "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+  ],
+  safelist: [
+    {
+      pattern: /^(bg|text|border|from|to|via)-(red|orange|yellow|green|teal|blue|indigo|purple|pink|gray|white|black|slate|zinc|neutral|stone|amber|lime|emerald|cyan|sky|violet|fuchsia|rose)-([1-9]00|50)$/,
+      variants: ['hover', 'focus', 'group-hover'],
+    },
+    {
+      pattern: /bg-opacity-(0|5|10|20|25|30|40|50|60|70|75|80|90|95|100)/,
+    },
+    'border-white/20',
+    // icon animation
+    'animate-ping',
+    'animate-pulse',
+    // gift interaction related specific classes that might be constructed dynamically or are critical
+    'opacity-100', 'scale-100', 'y-0',
+    'opacity-0', 'scale-0', 'y-100',
+    'scale-0.5', 'y-50',
   ],
   theme: {
   	extend: {
