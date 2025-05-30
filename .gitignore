@@ -62,3 +62,6 @@ next-env.d.ts
 /backend/cookies.txt
 
 saved_images
+
+.claude
+.venv
