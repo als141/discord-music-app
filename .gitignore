@@ -65,3 +65,7 @@ saved_images
 
 .claude
 .venv
+
+cookies.txt
+
+backend/backend.egg-info

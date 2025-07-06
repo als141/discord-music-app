@@ -4,68 +4,101 @@ import yt_dlp
 import discord
 from concurrent.futures import ThreadPoolExecutor
 from collections import deque
+from typing import Optional, List, Callable, Any
+from dataclasses import dataclass
 
-MUSIC_DIR = "music"
-OAUTH2_USERNAME = "oauth2"
-OAUTH2_PASSWORD = ""
+from settings import get_settings
+from simple_logger import get_logger
 
-ytdl_format_options = {
-    'format': 'bestaudio',
-    'outtmpl': f'{MUSIC_DIR}/%(title)s-%(id)s.%(ext)s',
-    'restrictfilenames': True,
-    'nocheckcertificate': True,
-    'ignoreerrors': False,
-    'cookiefile': 'cookies.txt',
-    'cookies' : 'cookies.txt',
-    
-    'no_warnings': True,
-    'default_search': 'auto',
-    'source_address': '0.0.0.0',
-    # postprocessorsを削除し、MP3への変換を行わないようにする
-}
+# 設定を取得
+settings = get_settings()
 
-ffmpeg_options = {
-    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -analyzeduration 0',
-    'options': '-vn'
-}
+# ロガーを設定
+logger = get_logger(__name__)
 
-ytdl = yt_dlp.YoutubeDL(ytdl_format_options)
+def get_ytdl_format_options() -> dict:
+    """yt-dlp の設定オプションを取得"""
+    return {
+        'format': settings.music.ytdl_format,
+        'outtmpl': f'{settings.music.directory}/%(title)s-%(id)s.%(ext)s',
+        'restrictfilenames': True,
+        'nocheckcertificate': True,
+        'ignoreerrors': False,
+        'cookiefile': '/home/als0028/work/irina/discord-music-app/backend/cookies.txt',  # YouTubeクッキーファイル
+        'no_warnings': True,
+        'default_search': 'auto',
+        'source_address': '0.0.0.0',
+        # postprocessorsを削除し、MP3への変換を行わないようにする
+    }
 
+def get_ffmpeg_options() -> dict:
+    """FFmpeg の設定オプションを取得"""
+    return {
+        'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -analyzeduration 0',
+        'options': '-vn'
+    }
+
+# yt-dlp インスタンスを作成
+ytdl = yt_dlp.YoutubeDL(get_ytdl_format_options())
+
+# 後方互換性のための定数
+MUSIC_DIR = settings.music.directory
+OAUTH2_USERNAME = settings.music.oauth2_username
+OAUTH2_PASSWORD = settings.music.oauth2_password
+
+@dataclass
 class Song:
-    def __init__(self, source, title, url, thumbnail, artist, added_by=None):
-        self.source = source   # 実際の再生に使うファイルパス
-        self.title = title
-        self.url = url         # YouTube等のURL、またはローカル絶対パス
-        self.thumbnail = thumbnail
-        self.artist = artist
-        self.added_by = added_by
+    """音楽トラックを表すデータクラス"""
+    source: Optional[str]  # 実際の再生に使うファイルパス
+    title: str
+    url: str  # YouTube等のURL、またはローカル絶対パス
+    thumbnail: str
+    artist: str
+    added_by: Optional[Any] = None  # User オブジェクトまたは None
+    
+    def __post_init__(self):
+        # デフォルト値の設定
+        if not self.title:
+            self.title = "Unknown Title"
+        if not self.artist:
+            self.artist = "Unknown Artist"
+        if not self.thumbnail:
+            self.thumbnail = ""
 
 class MusicPlayer:
-    def __init__(self, bot, guild, guild_id, notify_clients):
+    """音楽プレイヤークラス"""
+    
+    def __init__(self, bot, guild, guild_id: str, notify_clients: Callable):
         self.bot = bot
         self.guild = guild
         self.guild_id = guild_id
         self.notify_clients = notify_clients
 
-        self.queue = deque()
-        self.history = deque()
+        self.queue: deque[Song] = deque()
+        self.history: deque[Song] = deque()
         self.next = asyncio.Event()
-        self.current = None
+        self.current: Optional[Song] = None
+        self.volume: float = 1.0  # ボリューム（0.0 - 1.0）
 
         self.voice_client = guild.voice_client
         self.executor = ThreadPoolExecutor(max_workers=3)
 
+        logger.info(f"音楽プレイヤーを初期化 (Guild: {guild.name}, ID: {guild_id})")
+        
         # 非同期で音楽ループを開始
         self.bot.loop.create_task(self.player_loop())
 
     async def player_loop(self):
+        """メインの音楽再生ループ"""
         await self.bot.wait_until_ready()
+        logger.info(f"音楽プレイヤーループを開始 (Guild: {self.guild_id})")
+        
         while not self.bot.is_closed():
             self.next.clear()
             
             # Voice client の状態確認と再接続処理
             if not self.voice_client or not self.voice_client.is_connected():
-                print("Voice clientが接続されていません")
+                logger.warning("Voice clientが接続されていません")
                 await asyncio.sleep(1)
                 continue
 
@@ -76,38 +109,40 @@ class MusicPlayer:
             song = self.queue[0]
             if song.source is None:
                 try:
+                    logger.debug(f"音源を準備中: {song.title}")
                     song = await self.bot.loop.run_in_executor(self.executor, self.prepare_source, song)
                     self.queue[0] = song
                 except Exception as e:
-                    print(f"音源準備中にエラー: {e}")
+                    logger.error(f"音源準備中にエラー: {e}", exc_info=True)
                     self.queue.popleft()
                     continue
 
             self.current = song
-            print(f"再生準備: {song.title} ({song.source})")
+            logger.info(f"再生準備: {song.title} ({song.source})")
 
             if self.voice_client.is_playing():
-                print("既に再生中です - 停止します")
+                logger.debug("既に再生中 - 停止します")
                 self.voice_client.stop()
 
             try:
                 if not os.path.exists(song.source):
-                    print(f"ファイルが見つかりません: {song.source}")
+                    logger.error(f"ファイルが見つかりません: {song.source}")
                     self.queue.popleft()
                     continue
 
+                ffmpeg_opts = get_ffmpeg_options()
                 audio_source = discord.FFmpegPCMAudio(
                     song.source,
-                    before_options='-analyzeduration 0',
-                    options='-vn'
+                    before_options=ffmpeg_opts['before_options'],
+                    options=ffmpeg_opts['options']
                 )
                 
-                transformed_source = discord.PCMVolumeTransformer(audio_source, volume=1.0)
+                transformed_source = discord.PCMVolumeTransformer(audio_source, volume=self.volume)
                 
                 if self.current:
                     self.history.append(self.current)
                 
-                print(f"再生開始: {song.title}")
+                logger.info(f"再生開始: {song.title}")
                 self.voice_client.play(
                     transformed_source,
                     after=lambda e: self.bot.loop.call_soon_threadsafe(
@@ -116,17 +151,18 @@ class MusicPlayer:
                 )
                 await self.notify_clients(self.guild_id)
             except Exception as e:
-                print(f"再生エラー: {e}")
-                import traceback
-                traceback.print_exc()
+                logger.error(f"再生エラー: {e}", exc_info=True)
                 self.queue.popleft()
                 continue
 
             await self.next.wait()
 
+        logger.info(f"音楽プレイヤーループを終了 (Guild: {self.guild_id})")
+
     def play_next_song(self, error):
+        """次の曲を再生する"""
         if error:
-            print(f"再生中にエラーが発生: {error}")
+            logger.error(f"再生中にエラーが発生: {error}")
         if self.queue:
             self.queue.popleft()
         # 再生終了時に現在の曲をリセットする
@@ -135,15 +171,37 @@ class MusicPlayer:
         self.next.set()
 
     async def notify_clients_wrapper(self):
+        """クライアント通知のラッパー"""
         await self.notify_clients(self.guild_id)
 
+    async def set_volume(self, volume: float):
+        """ボリュームを設定する（0.0 - 1.0）"""
+        if not 0.0 <= volume <= 1.0:
+            raise ValueError("Volume must be between 0.0 and 1.0")
+        
+        self.volume = volume
+        
+        # 現在再生中の場合はボリュームを即座に適用
+        if self.voice_client and hasattr(self.voice_client.source, 'volume'):
+            self.voice_client.source.volume = volume
+        
+        await self.notify_clients(self.guild_id)
+        logger.info(f"ボリュームを{int(volume * 100)}%に設定しました (Guild: {self.guild_id})")
+
+    def get_volume(self) -> float:
+        """現在のボリュームを取得する"""
+        return self.volume
+
     def prepare_source(self, song: Song) -> Song:
+        """音楽ソースを準備する"""
         try:
             if self.is_local_path(song.url):
                 if not os.path.exists(song.url):
                     raise FileNotFoundError(f"ファイルが存在しません: {song.url}")
                 song.source = song.url
+                logger.debug(f"ローカルファイルを使用: {song.url}")
             else:
+                logger.debug(f"音楽をダウンロード中: {song.title} ({song.url})")
                 info = ytdl.extract_info(song.url, download=True)  # ダウンロード実行
                 if 'entries' in info:
                     info = info['entries'][0]
@@ -152,22 +210,24 @@ class MusicPlayer:
                 filename = ytdl.prepare_filename(info)
                 
                 if not os.path.exists(filename):
-                    print(f"ダウンロードされたファイルが見つかりません: {filename}")
+                    logger.error(f"ダウンロードされたファイルが見つかりません: {filename}")
                     raise FileNotFoundError
                     
                 song.source = filename
                 
-            print(f"準備完了: {song.source}")
+            logger.debug(f"音源準備完了: {song.source}")
             return song
             
         except Exception as e:
-            print(f"ソース準備エラー: {e}")
+            logger.error(f"ソース準備エラー: {e}", exc_info=True)
             raise
 
     def is_local_path(self, path: str) -> bool:
+        """パスがローカルファイルパスかどうか判定する"""
         return os.path.isabs(path)
 
-    async def add_to_queue(self, url, added_by=None):
+    async def add_to_queue(self, url: str, added_by=None) -> None:
+        """楽曲をキューに追加する"""
         loop = asyncio.get_event_loop()
         songs = await loop.run_in_executor(self.executor, self.get_song_info, url, added_by)
         for s in songs:
@@ -177,7 +237,8 @@ class MusicPlayer:
         if self.voice_client and not self.voice_client.is_playing():
             self.next.set()
 
-    def get_song_info(self, url, added_by=None):
+    def get_song_info(self, url: str, added_by=None) -> List[Song]:
+        """URLから楽曲情報を取得する"""
         # 検索用URLの場合、"ytsearch:"スキームを"ytsearch1:"に置換する
         if url.startswith("ytsearch:"):
             # "ytsearch:"の場合、結果数が1件になるように変更
@@ -213,7 +274,8 @@ class MusicPlayer:
                 else:
                     return [self.build_song(info, added_by)]
 
-    def build_song(self, info, added_by=None):
+    def build_song(self, info: dict, added_by=None) -> Song:
+        """yt-dlp の情報から Song オブジェクトを構築する"""
         title = info.get('title', 'Unknown Title')
         webpage_url = info.get('webpage_url', '')
         thumbnail = info.get('thumbnail', '')
@@ -227,28 +289,33 @@ class MusicPlayer:
             added_by=added_by
         )
 
-    async def remove_from_queue(self, position: int):
+    async def remove_from_queue(self, position: int) -> None:
+        """指定した位置のトラックをキューから削除する"""
         if 0 <= position < len(self.queue):
             queue_list = list(self.queue)
             del queue_list[position]
             self.queue = deque(queue_list)
 
-    async def pause(self):
+    async def pause(self) -> None:
+        """再生を一時停止する"""
         if self.voice_client and self.voice_client.is_playing():
             self.voice_client.pause()
             await self.notify_clients(self.guild_id)
 
-    async def resume(self):
+    async def resume(self) -> None:
+        """再生を再開する"""
         if self.voice_client and self.voice_client.is_paused():
             self.voice_client.resume()
             await self.notify_clients(self.guild_id)
 
-    async def skip(self):
+    async def skip(self) -> None:
+        """現在の曲をスキップする"""
         if self.voice_client and self.voice_client.is_playing():
             self.voice_client.stop()
         await self.notify_clients(self.guild_id)
 
-    async def previous(self):
+    async def previous(self) -> bool:
+        """前の曲に戻る"""
         if self.history:
             if self.voice_client and self.voice_client.is_playing():
                 self.voice_client.stop()
@@ -257,25 +324,39 @@ class MusicPlayer:
             prev_song = self.history.pop()
             self.current = prev_song
             if prev_song.source is None:
-                prev_song = self.prepare_source(prev_song)
+                prev_song = await self.bot.loop.run_in_executor(
+                    self.executor, self.prepare_source, prev_song
+                )
                 self.current = prev_song
             if self.voice_client:
+                ffmpeg_opts = get_ffmpeg_options()
+                audio_source = discord.FFmpegPCMAudio(
+                    prev_song.source,
+                    before_options=ffmpeg_opts['before_options'],
+                    options=ffmpeg_opts['options']
+                )
+                transformed_source = discord.PCMVolumeTransformer(audio_source, volume=self.volume)
                 self.voice_client.play(
-                    discord.FFmpegPCMAudio(prev_song.source),
+                    transformed_source,
                     after=lambda _: self.bot.loop.call_soon_threadsafe(self.next.set)
                 )
             await self.notify_clients(self.guild_id)
+            return True
+        return False
 
-    async def reorder_queue(self, start_index: int, end_index: int):
+    async def reorder_queue(self, start_index: int, end_index: int) -> None:
+        """キューの順序を変更する"""
         if 0 <= start_index < len(self.queue) and 0 <= end_index < len(self.queue):
             queue_list = list(self.queue)
             item = queue_list.pop(start_index)
             queue_list.insert(end_index, item)
             self.queue = deque(queue_list)
 
-    def is_playing(self):
+    def is_playing(self) -> bool:
+        """現在再生中かどうかを返す"""
         return bool(self.voice_client and self.voice_client.is_playing())
 
     def destroy(self):
+        """プレイヤーを破棄し、ボイスクライアントを切断する"""
         if self.voice_client:
             return self.bot.loop.create_task(self.voice_client.disconnect())
