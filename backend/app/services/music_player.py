@@ -7,8 +7,8 @@ from collections import deque
 from typing import Optional, List, Callable, Any
 from dataclasses import dataclass
 
-from settings import get_settings
-from simple_logger import get_logger
+from ..config import get_settings
+from ..logging import get_logger
 
 # 設定を取得
 settings = get_settings()
@@ -31,12 +31,20 @@ def get_ytdl_format_options() -> dict:
         # postprocessorsを削除し、MP3への変換を行わないようにする
     }
 
-def get_ffmpeg_options() -> dict:
+def get_ffmpeg_options(is_local_file: bool = False) -> dict:
     """FFmpeg の設定オプションを取得"""
-    return {
-        'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -analyzeduration 0',
-        'options': '-vn'
-    }
+    if is_local_file:
+        # ローカルファイル用のオプション（reconnectオプションは不要）
+        return {
+            'before_options': '-analyzeduration 0',
+            'options': '-vn'
+        }
+    else:
+        # ストリーミング用のオプション
+        return {
+            'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -analyzeduration 0',
+            'options': '-vn'
+        }
 
 # yt-dlp インスタンスを作成
 ytdl = yt_dlp.YoutubeDL(get_ytdl_format_options())
@@ -82,6 +90,7 @@ class MusicPlayer:
 
         self.voice_client = guild.voice_client
         self.executor = ThreadPoolExecutor(max_workers=3)
+        self.shutdown_flag = False  # シャットダウンフラグ
 
         logger.info(f"音楽プレイヤーを初期化 (Guild: {guild.name}, ID: {guild_id})")
         
@@ -93,7 +102,7 @@ class MusicPlayer:
         await self.bot.wait_until_ready()
         logger.info(f"音楽プレイヤーループを開始 (Guild: {self.guild_id})")
         
-        while not self.bot.is_closed():
+        while not self.bot.is_closed() and not self.shutdown_flag:
             self.next.clear()
             
             # Voice client の状態確認と再接続処理
@@ -125,14 +134,22 @@ class MusicPlayer:
                 self.voice_client.stop()
 
             try:
-                if not os.path.exists(song.source):
-                    logger.error(f"ファイルが見つかりません: {song.source}")
+                # ファイルパスの絶対パス化
+                source_path = song.source
+                if not source_path.startswith(('http://', 'https://')) and not os.path.isabs(source_path):
+                    source_path = os.path.abspath(source_path)
+                
+                # ローカルファイルの存在確認
+                if not source_path.startswith(('http://', 'https://')) and not os.path.exists(source_path):
+                    logger.error(f"ファイルが見つかりません: {source_path}")
                     self.queue.popleft()
                     continue
 
-                ffmpeg_opts = get_ffmpeg_options()
+                # ローカルファイルかどうかを判定
+                is_local = not source_path.startswith(('http://', 'https://'))
+                ffmpeg_opts = get_ffmpeg_options(is_local_file=is_local)
                 audio_source = discord.FFmpegPCMAudio(
-                    song.source,
+                    source_path,
                     before_options=ffmpeg_opts['before_options'],
                     options=ffmpeg_opts['options']
                 )
@@ -329,9 +346,16 @@ class MusicPlayer:
                 )
                 self.current = prev_song
             if self.voice_client:
-                ffmpeg_opts = get_ffmpeg_options()
+                # ファイルパスの絶対パス化
+                source_path = prev_song.source
+                if not source_path.startswith(('http://', 'https://')) and not os.path.isabs(source_path):
+                    source_path = os.path.abspath(source_path)
+                
+                # ローカルファイルかどうかを判定
+                is_local = not source_path.startswith(('http://', 'https://'))
+                ffmpeg_opts = get_ffmpeg_options(is_local_file=is_local)
                 audio_source = discord.FFmpegPCMAudio(
-                    prev_song.source,
+                    source_path,
                     before_options=ffmpeg_opts['before_options'],
                     options=ffmpeg_opts['options']
                 )
@@ -355,6 +379,32 @@ class MusicPlayer:
     def is_playing(self) -> bool:
         """現在再生中かどうかを返す"""
         return bool(self.voice_client and self.voice_client.is_playing())
+
+    async def shutdown(self):
+        """プレイヤーを適切にシャットダウンする"""
+        try:
+            logger.info(f"音楽プレイヤーをシャットダウン中 (Guild: {self.guild_id})")
+            
+            # 再生停止
+            if self.voice_client and self.voice_client.is_playing():
+                self.voice_client.stop()
+            
+            # プレイヤーループを停止
+            self.shutdown_flag = True
+            self.next.set()  # ループを終了させる
+            
+            # Executor をシャットダウン
+            if self.executor:
+                self.executor.shutdown(wait=False)
+            
+            # ボイスクライアントを切断
+            if self.voice_client:
+                await self.voice_client.disconnect()
+            
+            logger.info(f"音楽プレイヤーのシャットダウン完了 (Guild: {self.guild_id})")
+            
+        except Exception as e:
+            logger.error(f"音楽プレイヤーのシャットダウン中にエラー (Guild: {self.guild_id}): {e}")
 
     def destroy(self):
         """プレイヤーを破棄し、ボイスクライアントを切断する"""

@@ -69,3 +69,4 @@ saved_images
 cookies.txt
 
 backend/backend.egg-info
+__pycache__

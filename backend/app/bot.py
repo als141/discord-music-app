@@ -2,7 +2,7 @@
 import discord
 from discord import app_commands
 import asyncio
-from music_player import MusicPlayer
+from .services.music_player import MusicPlayer
 from openai import OpenAI # OpenAIライブラリをインポート
 import os
 from dotenv import load_dotenv
@@ -25,6 +25,67 @@ import traceback # トレースバック出力用に追加
 IMAGE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_images")
 # 画像保存ディレクトリが存在しない場合は作成
 os.makedirs(IMAGE_DIR, exist_ok=True)
+
+# ローカルヘルパー関数
+async def get_current_track_local(guild_id: str):
+    player = music_players.get(guild_id)
+    if player and player.current:
+        return {
+            "title": player.current.title,
+            "artist": player.current.artist,
+            "thumbnail": player.current.thumbnail,
+            "url": player.current.url,
+            "added_by": player.current.added_by.__dict__ if player.current.added_by else None
+        }
+    return None
+
+async def get_queue_local(guild_id: str):
+    player = music_players.get(guild_id)
+    if player:
+        queue_items = []
+        for i, item in enumerate(list(player.queue)):
+            queue_items.append({
+                "track": {
+                    "title": item.title,
+                    "artist": item.artist,
+                    "thumbnail": item.thumbnail,
+                    "url": item.url,
+                    "added_by": item.added_by.__dict__ if item.added_by else None
+                },
+                "position": i,
+                "isCurrent": (i == 0)
+            })
+        return queue_items
+    return []
+
+async def get_history_local(guild_id: str):
+    player = music_players.get(guild_id)
+    if player:
+        history_items = []
+        for i, item in enumerate(list(player.history)):
+            history_items.append({
+                "track": {
+                    "title": item.title,
+                    "artist": item.artist,
+                    "thumbnail": item.thumbnail,
+                    "url": item.url,
+                    "added_by": item.added_by.__dict__ if item.added_by else None
+                },
+                "position": i,
+                "isCurrent": False
+            })
+        return history_items
+    return []
+
+async def is_playing_local(guild_id: str):
+    player = music_players.get(guild_id)
+    return player.is_playing() if player else False
+
+# 簡易通知関数（循環参照を避けるため）
+async def notify_clients_local(guild_id: str):
+    """music_player.pyが独自に通知機能を持っているため、ここでは何もしない"""
+    # WebSocket通知は MusicPlayer の notify_clients コールバックで処理される
+    pass
 
 load_dotenv()
 # x.ai (Grok) 用のクライアント設定
@@ -425,16 +486,9 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
     # ボットがまだどのボイスチャンネルにも接続していなければ、自動的に参加する
     if after.channel is not None and guild.voice_client is None:
         try:
-            # api.py から notify_clients をインポート
-            try:
-                from api import notify_clients
-            except ImportError:
-                print("警告: api.notify_clients のインポートに失敗しました。循環参照の可能性があります。")
-                async def notify_clients(gid): pass # ダミー関数
-
             await after.channel.connect()
-            music_players[guild_id] = MusicPlayer(client, guild, guild_id, notify_clients)
-            await notify_clients(guild_id)
+            music_players[guild_id] = MusicPlayer(client, guild, guild_id, notify_clients_local)
+            await notify_clients_local(guild_id)
             print(f"Auto-joined voice channel {after.channel.name} in guild {guild.name} because user {member.display_name} joined.")
         except Exception as e:
             print(f"Error auto-joining voice channel: {e}")
@@ -475,19 +529,13 @@ async def join_channel(interaction: discord.Interaction, channel: discord.VoiceC
         return
     guild_id = str(guild.id)
 
-    try:
-        from api import notify_clients
-    except ImportError:
-        print("警告: api.notify_clients のインポートに失敗しました。")
-        async def notify_clients(gid): pass # ダミー関数
-
     if guild.voice_client is None:
         await channel.connect()
     else:
         await guild.voice_client.move_to(channel)
 
-    music_players[guild_id] = MusicPlayer(client, guild, guild_id, notify_clients)
-    await notify_clients(guild_id)
+    music_players[guild_id] = MusicPlayer(client, guild, guild_id, notify_clients_local)
+    await notify_clients_local(guild_id)
     await interaction.response.send_message(f"ボイスチャンネル {channel.name} に参加しました。")
 
 # --- 画像生成コマンド (複数枚生成対応) ---
@@ -649,12 +697,6 @@ async def generate_image_command(
 
 @tree.command(name="disconnect", description="現在参加中のボイスチャンネルから切断します。")
 async def disconnect_channel(interaction: discord.Interaction):
-    try:
-        from api import notify_clients
-    except ImportError:
-        print("警告: api.notify_clients のインポートに失敗しました。")
-        async def notify_clients(gid): pass # ダミー関数
-
     guild = interaction.guild
     if guild is None:
         await interaction.response.send_message("このコマンドはギルド内でのみ実行可能です。", ephemeral=True)
@@ -664,7 +706,7 @@ async def disconnect_channel(interaction: discord.Interaction):
         await guild.voice_client.disconnect()
         if guild_id in music_players:
             del music_players[guild_id]
-        await notify_clients(guild_id)
+        await notify_clients_local(guild_id)
         await interaction.response.send_message("ボイスチャネルから切断しました。")
     else:
         await interaction.response.send_message("ボイスチャネルに接続していません。", ephemeral=True)
@@ -672,13 +714,8 @@ async def disconnect_channel(interaction: discord.Interaction):
 @tree.command(name="play", description="指定した楽曲を再生キューに追加して再生します。")
 @app_commands.describe(url="再生する楽曲のURL・もしくはキーワード")
 async def play_track(interaction: discord.Interaction, url: str):
-    try:
-        # api.pyの関数をインポート
-        from api import add_and_play_track, notify_clients, Track, User
-    except ImportError:
-        print("警告: api モジュールのインポートに失敗しました。")
-        await interaction.response.send_message("機能の準備中にエラーが発生しました。", ephemeral=True)
-        return
+    # schemasからモデルをインポート
+    from ..schemas import User, Track
 
     guild = interaction.guild
     if guild is None:
@@ -702,12 +739,8 @@ async def play_track(interaction: discord.Interaction, url: str):
                        await guild.voice_client.move_to(interaction.user.voice.channel)
 
                   # MusicPlayerインスタンスを作成
-                  try:
-                       from api import notify_clients
-                  except ImportError:
-                       async def notify_clients(gid): pass # ダミー関数
-                  music_players[guild_id] = MusicPlayer(client, guild, guild_id, notify_clients)
-                  await notify_clients(guild_id)
+                  music_players[guild_id] = MusicPlayer(client, guild, guild_id, notify_clients_local)
+                  await notify_clients_local(guild_id)
 
                   player = music_players.get(guild_id) # 再度playerを取得
                   await initial_response_method.send_message(f"{interaction.user.voice.channel.name} に接続しました。トラックを追加します...")
@@ -751,8 +784,8 @@ async def play_track(interaction: discord.Interaction, url: str):
     )
 
     try:
-        # api.py の add_and_play_track を呼び出す
-        await add_and_play_track(guild_id, track_to_add)
+        # music_playerインスタンスのメソッドを直接呼び出す
+        await player.add_to_queue(url, added_by=user_info)
         # メッセージを編集
         await initial_response_method(content="✅ トラックをキューに追加しました。")
     except Exception as e:
@@ -763,12 +796,6 @@ async def play_track(interaction: discord.Interaction, url: str):
 
 @tree.command(name="pause", description="現在再生中のトラックを一時停止します。")
 async def pause_track(interaction: discord.Interaction):
-    try:
-        from api import notify_clients
-    except ImportError:
-        print("警告: api.notify_clients のインポートに失敗しました。")
-        async def notify_clients(gid): pass # ダミー関数
-
     guild = interaction.guild
     if guild is None:
         await interaction.response.send_message("ギルド内でのみ実行可能です。", ephemeral=True)
@@ -777,19 +804,13 @@ async def pause_track(interaction: discord.Interaction):
     player = music_players.get(guild_id)
     if player and player.is_playing():
         await player.pause()
-        await notify_clients(guild_id)
+        await notify_clients_local(guild_id)
         await interaction.response.send_message("再生を一時停止しました。")
     else:
         await interaction.response.send_message("再生中のトラックがないか、既に一時停止中です。", ephemeral=True)
 
 @tree.command(name="resume", description="一時停止中のトラックを再開します。")
 async def resume_track(interaction: discord.Interaction):
-    try:
-        from api import notify_clients
-    except ImportError:
-        print("警告: api.notify_clients のインポートに失敗しました。")
-        async def notify_clients(gid): pass # ダミー関数
-
     guild = interaction.guild
     if guild is None:
         await interaction.response.send_message("ギルド内でのみ実行可能です。", ephemeral=True)
@@ -798,19 +819,13 @@ async def resume_track(interaction: discord.Interaction):
     player = music_players.get(guild_id)
     if player and player.voice_client and player.voice_client.is_paused():
         await player.resume()
-        await notify_clients(guild_id)
+        await notify_clients_local(guild_id)
         await interaction.response.send_message("再生を再開しました。")
     else:
         await interaction.response.send_message("一時停止中のトラックがありません。", ephemeral=True)
 
 @tree.command(name="skip", description="現在のトラックをスキップします。")
 async def skip_track(interaction: discord.Interaction):
-    try:
-        from api import notify_clients
-    except ImportError:
-        print("警告: api.notify_clients のインポートに失敗しました。")
-        async def notify_clients(gid): pass # ダミー関数
-
     guild = interaction.guild
     if guild is None:
         await interaction.response.send_message("ギルド内でのみ実行可能です。", ephemeral=True)
@@ -819,19 +834,13 @@ async def skip_track(interaction: discord.Interaction):
     player = music_players.get(guild_id)
     if player and (player.is_playing() or (player.voice_client and player.voice_client.is_paused())): # 再生中または一時停止中ならスキップ可能
         await player.skip()
-        # await notify_clients(guild_id) # skip内で呼ばれるはず
+        # await notify_clients_local(guild_id) # skip内で呼ばれるはず
         await interaction.response.send_message("次のトラックへスキップしました。")
     else:
         await interaction.response.send_message("スキップするトラックがありません。", ephemeral=True)
 
 @tree.command(name="previous", description="前のトラックに戻ります。")
 async def previous_track(interaction: discord.Interaction):
-    try:
-        from api import notify_clients
-    except ImportError:
-        print("警告: api.notify_clients のインポートに失敗しました。")
-        async def notify_clients(gid): pass # ダミー関数
-
     guild = interaction.guild
     if guild is None:
         await interaction.response.send_message("ギルド内でのみ実行可能です。", ephemeral=True)
@@ -841,7 +850,7 @@ async def previous_track(interaction: discord.Interaction):
     if player:
         success = await player.previous()
         if success:
-            # await notify_clients(guild_id) # previous内で呼ばれるはず
+            # await notify_clients_local(guild_id) # previous内で呼ばれるはず
             await interaction.response.send_message("前のトラックに戻りました。")
         else:
             await interaction.response.send_message("再生履歴がないため、前のトラックに戻れません。", ephemeral=True)
@@ -851,19 +860,12 @@ async def previous_track(interaction: discord.Interaction):
 
 @tree.command(name="queue", description="現在の再生キューを表示します。")
 async def show_queue(interaction: discord.Interaction):
-    try:
-        from api import get_queue # api.pyから取得関数をインポート
-    except ImportError:
-        print("警告: api.get_queue のインポートに失敗しました。")
-        await interaction.response.send_message("機能の準備中にエラーが発生しました。", ephemeral=True)
-        return
-
     guild = interaction.guild
     if guild is None:
         await interaction.response.send_message("ギルド内でのみ実行可能です。", ephemeral=True)
         return
     guild_id = str(guild.id)
-    queue = await get_queue(guild_id) # API経由でキューを取得
+    queue = await get_queue_local(guild_id) # ローカル関数でキューを取得
     if not queue:
         await interaction.response.send_message("キューは空です。", ephemeral=True)
         return
@@ -872,10 +874,10 @@ async def show_queue(interaction: discord.Interaction):
     description = ""
     for item in queue:
         # isCurrent フラグは QueueItem モデルに含まれている想定
-        prefix = "▶️ " if item.isCurrent else f"{item.position + 1}. "
+        prefix = "▶️ " if item['isCurrent'] else f"{item['position'] + 1}. "
         # URLが長すぎる場合があるので、タイトルのみ表示するなど調整も検討
-        track_info = f"[{item.track.title}]({item.track.url})" if item.track.url else item.track.title
-        description += f"{prefix}{track_info} by {item.track.artist}\n"
+        track_info = f"[{item['track']['title']}]({item['track']['url']})" if item['track']['url'] else item['track']['title']
+        description += f"{prefix}{track_info} by {item['track']['artist']}\n"
         if len(description) > 3900: # Embed Descriptionの上限近くになったら省略
              description += "\n... (以下省略)"
              break
@@ -886,30 +888,23 @@ async def show_queue(interaction: discord.Interaction):
 
 @tree.command(name="nowplaying", description="現在再生中のトラックを表示します。")
 async def now_playing(interaction: discord.Interaction):
-    try:
-        from api import get_current_track # api.pyから取得関数をインポート
-    except ImportError:
-        print("警告: api.get_current_track のインポートに失敗しました。")
-        await interaction.response.send_message("機能の準備中にエラーが発生しました。", ephemeral=True)
-        return
-
     guild = interaction.guild
     if guild is None:
         await interaction.response.send_message("ギルド内でのみ実行可能です。", ephemeral=True)
         return
     guild_id = str(guild.id)
-    current = await get_current_track(guild_id) # API経由で現在のトラックを取得
+    current = await get_current_track_local(guild_id) # ローカル関数で現在のトラックを取得
     if current:
          embed = discord.Embed(
               title="🎵 現在再生中",
-              description=f"[{current.title}]({current.url})" if current.url else current.title,
+              description=f"[{current['title']}]({current['url']})" if current['url'] else current['title'],
               color=discord.Color.green()
          )
-         embed.add_field(name="アーティスト", value=current.artist, inline=True)
-         if current.added_by:
-              embed.add_field(name="追加したユーザー", value=current.added_by.name, inline=True)
-         if current.thumbnail:
-              embed.set_thumbnail(url=current.thumbnail)
+         embed.add_field(name="アーティスト", value=current['artist'], inline=True)
+         if current['added_by']:
+              embed.add_field(name="追加したユーザー", value=current['added_by']['name'], inline=True)
+         if current['thumbnail']:
+              embed.set_thumbnail(url=current['thumbnail'])
          await interaction.response.send_message(embed=embed)
     else:
         await interaction.response.send_message("現在再生中のトラックはありません。", ephemeral=True)
@@ -930,31 +925,20 @@ async def set_volume(interaction: discord.Interaction, value: app_commands.Range
     if player:
         await player.set_volume(volume_float)
         await interaction.response.send_message(f"音量を{value}%に設定しました。")
-        # notify_clients は set_volume 内で呼ばれるか確認、必要なら呼ぶ
-        try:
-             from api import notify_clients
-             await notify_clients(guild_id)
-        except ImportError:
-             pass
+        # notify_clients_local は set_volume 内で呼ばれるか確認、必要なら呼ぶ
+        await notify_clients_local(guild_id)
     else:
         await interaction.response.send_message("ボイスチャンネルに接続していないか、再生中のトラックがありません。", ephemeral=True)
 
 
 @tree.command(name="history", description="再生履歴を表示します。")
 async def show_history(interaction: discord.Interaction):
-    try:
-        from api import get_history # api.pyから取得関数をインポート
-    except ImportError:
-        print("警告: api.get_history のインポートに失敗しました。")
-        await interaction.response.send_message("機能の準備中にエラーが発生しました。", ephemeral=True)
-        return
-
     guild = interaction.guild
     if guild is None:
         await interaction.response.send_message("ギルド内でのみ実行可能です。", ephemeral=True)
         return
     guild_id = str(guild.id)
-    history = await get_history(guild_id) # API経由で履歴を取得
+    history = await get_history_local(guild_id) # ローカル関数で履歴を取得
     if not history:
         await interaction.response.send_message("再生履歴はありません。", ephemeral=True)
         return
@@ -964,8 +948,8 @@ async def show_history(interaction: discord.Interaction):
     # 履歴は通常、新しいものがリストの最後に来るため逆順で表示
     for item in reversed(history):
          # position は QueueItem モデルに含まれる想定
-         track_info = f"[{item.track.title}]({item.track.url})" if item.track.url else item.track.title
-         description += f"{item.position + 1}. {track_info} by {item.track.artist}\n"
+         track_info = f"[{item['track']['title']}]({item['track']['url']})" if item['track']['url'] else item['track']['title']
+         description += f"{item['position'] + 1}. {track_info} by {item['track']['artist']}\n"
          if len(description) > 3900:
               description += "\n... (以下省略)"
               break

@@ -13,7 +13,7 @@ from typing import Optional, Dict, Any
 from pathlib import Path
 from datetime import datetime
 
-from settings import get_settings
+from .config import get_settings
 
 # 設定を取得
 settings = get_settings()

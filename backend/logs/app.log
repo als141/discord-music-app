@@ -1,0 +1,16 @@
+2025-07-06 15:51:10,187 - app.services.music_player - INFO - 音楽プレイヤーを初期化 (Guild: テストサーバー, ID: 1080511818658762752)
+2025-07-06 15:51:10,188 - app.services.music_player - INFO - 音楽プレイヤーループを開始 (Guild: 1080511818658762752)
+2025-07-06 16:06:31,732 - app.services.music_player - INFO - 音楽プレイヤーを初期化 (Guild: テストサーバー, ID: 1080511818658762752)
+2025-07-06 16:06:31,734 - app.services.music_player - INFO - 音楽プレイヤーループを開始 (Guild: 1080511818658762752)
+2025-07-06 16:06:51,154 - app.services.music_player - INFO - 再生準備: Plazma (music/Plazma-GjC4SznBD_A.webm)
+2025-07-06 16:06:51,181 - app.services.music_player - INFO - 再生開始: Plazma
+2025-07-06 16:09:55,000 - app.services.music_player - INFO - 音楽プレイヤーを初期化 (Guild: テストサーバー, ID: 1080511818658762752)
+2025-07-06 16:09:55,002 - app.services.music_player - INFO - 音楽プレイヤーループを開始 (Guild: 1080511818658762752)
+2025-07-06 16:10:13,225 - app.services.music_player - INFO - 再生準備: Plazma (music/Plazma-GjC4SznBD_A.webm)
+2025-07-06 16:10:13,227 - app.services.music_player - INFO - 再生開始: Plazma
+2025-07-06 16:23:07,726 - app.services.music_player - INFO - 音楽プレイヤーを初期化 (Guild: テストサーバー, ID: 1080511818658762752)
+2025-07-06 16:23:07,728 - app.services.music_player - INFO - 音楽プレイヤーループを開始 (Guild: 1080511818658762752)
+2025-07-06 16:23:07,946 - app.services.music_player - INFO - 音楽プレイヤーを初期化 (Guild: ドデカサーバー, ID: 1093915551174234212)
+2025-07-06 16:23:07,947 - app.services.music_player - INFO - 音楽プレイヤーループを開始 (Guild: 1093915551174234212)
+2025-07-06 16:23:52,265 - app.services.music_player - INFO - 再生準備: Plazma (music/Plazma-GjC4SznBD_A.webm)
+2025-07-06 16:23:52,267 - app.services.music_player - INFO - 再生開始: Plazma

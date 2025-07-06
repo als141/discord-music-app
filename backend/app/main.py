@@ -2,11 +2,14 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks, Request, Form, File, UploadFile
 import uuid
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 from typing import List, Optional, Dict
 import asyncio
-from bot import client, music_players
-from music_player import MusicPlayer, Song, MUSIC_DIR, OAUTH2_USERNAME, OAUTH2_PASSWORD
+from .bot import client, music_players
+from .services.music_player import MusicPlayer, Song, MUSIC_DIR, OAUTH2_USERNAME, OAUTH2_PASSWORD
+from .schemas import (
+    User, Track, QueueItem, SearchItem, SearchResult, Server, VoiceChannel,
+    AddUrlRequest, PlayTrackRequest, ReorderRequest, SongResponse
+)
 import yt_dlp
 import uvicorn
 from fastapi.encoders import jsonable_encoder
@@ -14,16 +17,16 @@ from dotenv import load_dotenv
 import os
 from ytmusicapi import YTMusic
 from discord import utils
-import chat
+from .api import chat
 from fastapi.responses import StreamingResponse
 import aiofiles
 import urllib.parse
-from valorant_api import router as valorant_router
+from .api.valorant import router as valorant_router
 import re
 from datetime import datetime, timedelta
 import signal
-from realtimeapi import router as realtime_router
-from db import init_db, UploadedSong, add_uploaded_song, get_uploaded_songs_in_guild, find_uploaded_song_by_id, update_uploaded_song, delete_uploaded_song
+from .api.realtime import router as realtime_router
+from .db import init_db, UploadedSong, add_uploaded_song, get_uploaded_songs_in_guild, find_uploaded_song_by_id, update_uploaded_song, delete_uploaded_song
 from contextlib import asynccontextmanager
 from fastapi.staticfiles import StaticFiles  # ← 追加
 
@@ -35,10 +38,96 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 起動時
-    init_db()  # テーブルが無ければ作る。既にあれば何もしない
+    # アプリケーション起動時の処理
+    print("アプリケーションを起動します...")
+    
+    # 背景タスクを管理するセット
+    background_tasks = set()
+    
+    try:
+        init_db()  # テーブルが無ければ作る
+        print("データベースの初期化が完了しました。")
+    except Exception as e:
+        print(f"データベースの初期化中にエラーが発生しました: {e}")
+        raise
+    
+    # Discordボットをバックグラウンドタスクとして起動
+    discord_task = None
+    try:
+        from .config import get_settings
+        settings = get_settings()
+        if hasattr(settings, 'discord') and hasattr(settings.discord, 'token'):
+            discord_task = asyncio.create_task(client.start(settings.discord.token))
+            background_tasks.add(discord_task)
+            # タスクが完了したらセットから削除
+            discord_task.add_done_callback(background_tasks.discard)
+            print("Discordボットの起動タスクを開始しました。")
+        else:
+            print("Discord設定が見つかりません。環境変数DISCORD_TOKENを確認してください。")
+    except Exception as e:
+        print(f"Discordボットの起動中にエラーが発生しました: {e}")
+        print("Discordボット無しでWebAPIサーバーのみ起動します。")
+    
+    # アプリケーションで背景タスクを管理できるように設定
+    app.state.background_tasks = background_tasks
+    
     yield
-    # シャットダウン時の処理（必要な場合）
+    
+    # アプリケーション終了時の処理
+    print("アプリケーションをシャットダウンします...")
+    
+    try:
+        # すべての背景タスクをキャンセル
+        if background_tasks:
+            print(f"{len(background_tasks)}個の背景タスクをキャンセルします...")
+            for task in list(background_tasks):
+                if not task.done():
+                    task.cancel()
+            
+            # すべてのタスクが完了するまで短時間待機
+            if background_tasks:
+                try:
+                    results = await asyncio.wait_for(
+                        asyncio.gather(*background_tasks, return_exceptions=True),
+                        timeout=3.0
+                    )
+                    cancelled_count = sum(1 for r in results if isinstance(r, asyncio.CancelledError))
+                    print(f"{cancelled_count}個のタスクが正常にキャンセルされました。")
+                except asyncio.TimeoutError:
+                    print("一部のタスクが時間内に終了しませんでした。")
+                except Exception as e:
+                    print(f"タスク終了中にエラー: {e}")
+        
+        # Discordクライアントを明示的に閉じる
+        if not client.is_closed():
+            await asyncio.wait_for(client.close(), timeout=2.0)
+        print("Discordボットを停止しました。")
+        
+        # 音楽プレイヤーをシャットダウン
+        if music_players:
+            print("音楽プレイヤーをシャットダウンします...")
+            for guild_id, player in list(music_players.items()):
+                try:
+                    await player.shutdown()
+                except Exception as e:
+                    print(f"音楽プレイヤーのシャットダウンエラー (guild: {guild_id}): {e}")
+            music_players.clear()
+        
+        # WebSocket接続をクリーンアップ
+        if active_connections:
+            print("WebSocket接続をクリーンアップします...")
+            for guild_id, connections in list(active_connections.items()):
+                for connection in list(connections):
+                    try:
+                        await connection.close()
+                    except Exception:
+                        pass
+            active_connections.clear()
+        
+        print("シャットダウンが完了しました。")
+        
+    except Exception as e:
+        print(f"シャットダウン中にエラーが発生しました: {e}")
 
 app = FastAPI(lifespan=lifespan)
 
@@ -71,55 +160,6 @@ app.include_router(chat.router)
 app.include_router(valorant_router)
 app.include_router(realtime_router)
 
-class User(BaseModel):
-    id: str
-    name: str
-    image: str
-
-class Track(BaseModel):
-    title: str
-    artist: str
-    thumbnail: str
-    url: str
-    added_by: Optional[User] = None  # ユーザー情報を追加
-
-class QueueItem(BaseModel):
-    track: Track
-    position: int
-    isCurrent: bool = False
-
-class SearchItem(BaseModel):
-    type: str  # 'song', 'video', 'album', 'playlist', 'artist'
-    title: str
-    artist: str
-    thumbnail: str
-    url: str
-    browseId: Optional[str] = None
-    artistId: Optional[str] = None
-    items: Optional[List[Track]] = None  # アルバムやプレイリストの場合
-
-class SearchResult(BaseModel):
-    results: List[SearchItem]
-
-class Server(BaseModel):
-    id: str
-    name: str
-
-class VoiceChannel(BaseModel):
-    id: str
-    name: str
-
-class AddUrlRequest(BaseModel):
-    url: str
-    user: Optional[User] = None
-    
-class PlayTrackRequest(BaseModel):
-    track: Track
-    user: Optional[User] = None
-    
-class ReorderRequest(BaseModel):
-    start_index: int
-    end_index: int
     
 def extract_artist_id(artist_data):
     # 'id' や 'browseId' を試して取得
@@ -128,50 +168,58 @@ def extract_artist_id(artist_data):
 active_connections: Dict[str, List[WebSocket]] = {}
 
 async def notify_clients(guild_id: str):
+    """WebSocketクライアントに音楽プレイヤーの状態変更を通知"""
     connections = active_connections.get(guild_id, [])
+    if not connections:
+        return
+    
+    try:
+        # データを一度だけ取得してキャッシュ
+        current_track = await get_current_track(guild_id)
+        queue = await get_queue(guild_id)
+        is_playing_status = await is_playing(guild_id)
+        history = await get_history(guild_id)
+        
+        message = {
+            "type": "update",
+            "data": {
+                "current_track": jsonable_encoder(current_track),
+                "queue": jsonable_encoder(queue),
+                "is_playing": is_playing_status,
+                "history": jsonable_encoder(history)
+            }
+        }
+    except Exception as e:
+        print(f"データ取得エラー (guild: {guild_id}): {str(e)}")
+        return
+    
+    # 切断されたコネクションを追跡
+    disconnected_connections = []
+    
     for connection in connections:
         try:
-            current_track = await get_current_track(guild_id)
-            queue = await get_queue(guild_id)
-            is_playing_status = await is_playing(guild_id)
-            history = await get_history(guild_id)  # 履歴を取得
-            await connection.send_json({
-                "type": "update",
-                "data": {
-                    "current_track": jsonable_encoder(current_track),
-                    "queue": jsonable_encoder(queue),
-                    "is_playing": is_playing_status,
-                    "history": jsonable_encoder(history)
-                }
-            })
+            await connection.send_json(message)
         except WebSocketDisconnect:
-            print(f"Client disconnected: {connection}")
-            active_connections[guild_id].remove(connection)
-            if not active_connections[guild_id]:
-                del active_connections[guild_id]
+            print(f"WebSocket切断検出 (guild: {guild_id})")
+            disconnected_connections.append(connection)
         except Exception as e:
-            print(f"Error notifying client: {str(e)}")
-            active_connections[guild_id].remove(connection)
-            if not active_connections[guild_id]:
-                del active_connections[guild_id]
+            print(f"WebSocket通知エラー (guild: {guild_id}): {str(e)}")
+            disconnected_connections.append(connection)
+    
+    # 切断されたコネクションをクリーンアップ
+    if disconnected_connections:
+        for connection in disconnected_connections:
+            try:
+                active_connections[guild_id].remove(connection)
+            except (ValueError, KeyError):
+                pass
+        
+        # リストが空になった場合は削除
+        if guild_id in active_connections and not active_connections[guild_id]:
+            del active_connections[guild_id]
+            print(f"ギルド {guild_id} の全接続が削除されました")
                 
-async def add_and_play_track(guild_id: str, track: Track):
-    player = music_players.get(guild_id)
-    if player:
-        await player.add_to_queue(track.url, added_by=track.added_by)
-        await notify_clients(guild_id)
 
-# レスポンス用のモデル
-class SongResponse(BaseModel):
-    id: str
-    guild_id: str
-    title: str
-    artist: str
-    filename: str
-    thumbnail_filename: str
-    uploader_id: str
-    uploader_name: str
-    full_path: str  # 必須にする
 
 @app.post("/upload-audio/{guild_id}")
 async def upload_audio(
@@ -380,24 +428,80 @@ async def websocket_endpoint(websocket: WebSocket, guild_id: str):
     if guild_id not in active_connections:
         active_connections[guild_id] = []
     active_connections[guild_id].append(websocket)
+    
+    # ハートビートタスクを作成
+    heartbeat_task = None
+    
     try:
+        # 初期データを送信
         current_track = await get_current_track(guild_id)
         queue = await get_queue(guild_id)
         is_playing_status = await is_playing(guild_id)
+        history = await get_history(guild_id)
         await websocket.send_json({
             "type": "update",
             "data": {
                 "current_track": jsonable_encoder(current_track),
                 "queue": jsonable_encoder(queue),
-                "is_playing": is_playing_status
+                "is_playing": is_playing_status,
+                "history": jsonable_encoder(history)
             }
         })
-        while True:
-            await asyncio.sleep(60)
+        
+        # ハートビートタスクを開始
+        async def heartbeat():
+            try:
+                while True:
+                    await asyncio.sleep(30)  # 30秒間隔でハートビート
+                    # 接続が生きているかテスト
+                    await websocket.send_json({"type": "ping"})
+            except asyncio.CancelledError:
+                print(f"Heartbeat task cancelled for guild {guild_id}")
+                raise
+            except Exception as e:
+                print(f"Heartbeat error for guild {guild_id}: {str(e)}")
+                raise
+        
+        heartbeat_task = asyncio.create_task(heartbeat())
+        
+        # アプリケーションの背景タスクに追加（適切なシャットダウンのため）
+        if hasattr(app.state, 'background_tasks'):
+            app.state.background_tasks.add(heartbeat_task)
+            heartbeat_task.add_done_callback(app.state.background_tasks.discard)
+        
+        # メインループ（メッセージ待機）
+        try:
+            while True:
+                data = await websocket.receive_text()
+                # クライアントからのメッセージがあれば処理（必要に応じて）
+        except WebSocketDisconnect:
+            print(f"WebSocket disconnected for guild {guild_id}")
+        
     except WebSocketDisconnect:
-        active_connections[guild_id].remove(websocket)
-        if not active_connections[guild_id]:
-            del active_connections[guild_id]
+        print(f"WebSocket disconnected for guild {guild_id}")
+    except asyncio.CancelledError:
+        print(f"WebSocket task cancelled for guild {guild_id}")
+        raise  # CancelledErrorは再発生させる
+    except Exception as e:
+        print(f"WebSocket error for guild {guild_id}: {str(e)}")
+    finally:
+        # ハートビートタスクをキャンセル
+        if heartbeat_task and not heartbeat_task.done():
+            heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except asyncio.CancelledError:
+                pass
+        
+        # クリーンアップ処理
+        try:
+            if websocket in active_connections.get(guild_id, []):
+                active_connections[guild_id].remove(websocket)
+            if guild_id in active_connections and not active_connections[guild_id]:
+                del active_connections[guild_id]
+            print(f"WebSocket connection cleaned up for guild {guild_id}")
+        except Exception as cleanup_error:
+            print(f"Error during WebSocket cleanup for guild {guild_id}: {str(cleanup_error)}")
             
 @app.get("/recommendations", response_model=List[dict])
 async def get_recommendations():
@@ -683,17 +787,31 @@ async def is_playing(guild_id: str):
 async def play_track(guild_id: str, request: PlayTrackRequest, background_tasks: BackgroundTasks):
     track = request.track
     track.added_by = request.user
-    background_tasks.add_task(add_and_play_track, guild_id, track)
+    async def add_track_task():
+        try:
+            player = music_players.get(guild_id)
+            if player:
+                await player.add_to_queue(track.url, added_by=track.added_by)
+                await notify_clients(guild_id)
+            else:
+                print(f"プレイヤーが見つかりません (guild: {guild_id})")
+        except Exception as e:
+            print(f"トラック追加エラー (guild: {guild_id}): {str(e)}")
+    background_tasks.add_task(add_track_task)
     return {"message": "Track is being added to queue and will start playing soon"}
 
 @app.post("/pause/{guild_id}")
 async def pause(guild_id: str):
-    player = music_players.get(guild_id)
-    if player:
-        await player.pause()
-        await notify_clients(guild_id)
-        return {"message": "Playback paused"}
-    raise HTTPException(status_code=404, detail="No active music player found")
+    try:
+        player = music_players.get(guild_id)
+        if player:
+            await player.pause()
+            await notify_clients(guild_id)
+            return {"message": "Playback paused"}
+        raise HTTPException(status_code=404, detail="No active music player found")
+    except Exception as e:
+        print(f"一時停止エラー (guild: {guild_id}): {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @app.post("/resume/{guild_id}")
 async def resume(guild_id: str):
@@ -912,7 +1030,17 @@ async def get_album_items(browse_id: str):
 @app.post("/add-url/{guild_id}")
 async def add_url(guild_id: str, request: AddUrlRequest, background_tasks: BackgroundTasks):
     track = Track(url=request.url, title="Loading...", artist="Unknown", thumbnail="", added_by=request.user)
-    background_tasks.add_task(add_and_play_track, guild_id, track)
+    async def add_url_task():
+        try:
+            player = music_players.get(guild_id)
+            if player:
+                await player.add_to_queue(track.url, added_by=track.added_by)
+                await notify_clients(guild_id)
+            else:
+                print(f"プレイヤーが見つかりません (guild: {guild_id})")
+        except Exception as e:
+            print(f"URL追加エラー (guild: {guild_id}): {str(e)}")
+    background_tasks.add_task(add_url_task)
     return {"message": "URL is being processed and will be added to queue soon"}
 
 @app.post("/reorder-queue/{guild_id}")
