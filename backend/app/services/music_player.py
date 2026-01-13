@@ -23,11 +23,15 @@ def get_ytdl_format_options() -> dict:
         'outtmpl': f'{settings.music.directory}/%(title)s-%(id)s.%(ext)s',
         'restrictfilenames': True,
         'nocheckcertificate': True,
-        'ignoreerrors': False,
+        'ignoreerrors': True,  # プレイリスト内で一部の動画が利用不可でも継続
         'cookiefile': '/home/als0028/work/irina/discord-music-app/backend/cookies.txt',  # YouTubeクッキーファイル
         'no_warnings': True,
         'default_search': 'auto',
         'source_address': '0.0.0.0',
+        'retries': 3,  # ダウンロードリトライ回数
+        'fragment_retries': 3,  # フラグメントリトライ回数
+        'socket_timeout': 30,  # ソケットタイムアウト（秒）
+        'extractor_retries': 3,  # エクストラクターリトライ回数
         # postprocessorsを削除し、MP3への変換を行わないようにする
     }
 
@@ -104,14 +108,29 @@ class MusicPlayer:
         """メインの音楽再生ループ"""
         await self.bot.wait_until_ready()
         logger.info(f"音楽プレイヤーループを開始 (Guild: {self.guild_id})")
-        
+
+        consecutive_errors = 0  # 連続エラーカウンター
+        max_consecutive_errors = 5  # 連続エラー上限
+
         while not self.bot.is_closed() and not self.shutdown_flag:
             self.next.clear()
-            
-            # Voice client の状態確認と再接続処理
+
+            # Voice client の状態確認
+            # guild.voice_client から最新の参照を取得
+            if self.guild.voice_client:
+                self.voice_client = self.guild.voice_client
+
             if not self.voice_client or not self.voice_client.is_connected():
                 logger.warning("Voice clientが接続されていません")
-                await asyncio.sleep(1)
+                # 接続待機（最大30秒）
+                for _ in range(30):
+                    await asyncio.sleep(1)
+                    if self.guild.voice_client and self.guild.voice_client.is_connected():
+                        self.voice_client = self.guild.voice_client
+                        logger.info("Voice client接続を検出")
+                        break
+                    if self.shutdown_flag:
+                        break
                 continue
 
             if not self.queue:
@@ -124,9 +143,16 @@ class MusicPlayer:
                     logger.debug(f"音源を準備中: {song.title}")
                     song = await self.bot.loop.run_in_executor(self.executor, self.prepare_source, song)
                     self.queue[0] = song
+                    consecutive_errors = 0  # 成功したらリセット
                 except Exception as e:
                     logger.error(f"音源準備中にエラー: {e}", exc_info=True)
+                    consecutive_errors += 1
+                    if consecutive_errors >= max_consecutive_errors:
+                        logger.error(f"連続エラー上限 ({max_consecutive_errors}) に達しました。一時停止します。")
+                        await asyncio.sleep(10)  # 10秒待機
+                        consecutive_errors = 0
                     self.queue.popleft()
+                    await self.notify_clients(self.guild_id)
                     continue
 
             self.current = song
@@ -212,35 +238,67 @@ class MusicPlayer:
         """現在のボリュームを取得する"""
         return self.volume
 
-    def prepare_source(self, song: Song) -> Song:
-        """音楽ソースを準備する"""
-        try:
-            if self.is_local_path(song.url):
-                if not os.path.exists(song.url):
-                    raise FileNotFoundError(f"ファイルが存在しません: {song.url}")
-                song.source = song.url
-                logger.debug(f"ローカルファイルを使用: {song.url}")
-            else:
-                logger.debug(f"音楽をダウンロード中: {song.title} ({song.url})")
-                info = ytdl.extract_info(song.url, download=True)  # ダウンロード実行
-                if 'entries' in info:
-                    info = info['entries'][0]
-                
-                # 元のファイル名をそのまま使用（拡張子変換なし）
-                filename = ytdl.prepare_filename(info)
-                
-                if not os.path.exists(filename):
-                    logger.error(f"ダウンロードされたファイルが見つかりません: {filename}")
-                    raise FileNotFoundError
-                    
-                song.source = filename
-                
-            logger.debug(f"音源準備完了: {song.source}")
-            return song
-            
-        except Exception as e:
-            logger.error(f"ソース準備エラー: {e}", exc_info=True)
-            raise
+    def prepare_source(self, song: Song, max_retries: int = 3) -> Song:
+        """音楽ソースを準備する（リトライ機能付き）"""
+        last_error = None
+
+        for attempt in range(max_retries):
+            try:
+                if self.is_local_path(song.url):
+                    if not os.path.exists(song.url):
+                        raise FileNotFoundError(f"ファイルが存在しません: {song.url}")
+                    song.source = song.url
+                    logger.debug(f"ローカルファイルを使用: {song.url}")
+                else:
+                    if attempt > 0:
+                        logger.info(f"ダウンロードリトライ ({attempt + 1}/{max_retries}): {song.title}")
+
+                    logger.debug(f"音楽をダウンロード中: {song.title} ({song.url})")
+
+                    # ダウンロード前に既存ファイルをチェック（キャッシュとして利用）
+                    try:
+                        info = ytdl.extract_info(song.url, download=False)
+                        if info and 'entries' in info:
+                            info = info['entries'][0] if info['entries'] else None
+                        if info:
+                            potential_filename = ytdl.prepare_filename(info)
+                            if os.path.exists(potential_filename):
+                                logger.debug(f"キャッシュされたファイルを使用: {potential_filename}")
+                                song.source = potential_filename
+                                return song
+                    except Exception:
+                        pass  # キャッシュチェック失敗は無視してダウンロードを試行
+
+                    info = ytdl.extract_info(song.url, download=True)  # ダウンロード実行
+                    if info is None:
+                        raise Exception("動画情報の取得に失敗しました")
+
+                    if 'entries' in info:
+                        info = info['entries'][0] if info['entries'] else None
+                        if info is None:
+                            raise Exception("プレイリストに有効な動画がありません")
+
+                    # 元のファイル名をそのまま使用（拡張子変換なし）
+                    filename = ytdl.prepare_filename(info)
+
+                    if not os.path.exists(filename):
+                        logger.error(f"ダウンロードされたファイルが見つかりません: {filename}")
+                        raise FileNotFoundError(f"ダウンロードされたファイルが見つかりません: {filename}")
+
+                    song.source = filename
+
+                logger.debug(f"音源準備完了: {song.source}")
+                return song
+
+            except Exception as e:
+                last_error = e
+                logger.warning(f"ソース準備エラー (試行 {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(2 ** attempt)  # 指数バックオフ: 1秒, 2秒, 4秒...
+
+        logger.error(f"ソース準備に{max_retries}回失敗しました: {last_error}", exc_info=True)
+        raise last_error
 
     def is_local_path(self, path: str) -> bool:
         """パスがローカルファイルパスかどうか判定する"""

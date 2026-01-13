@@ -474,12 +474,42 @@ async def on_message(message: discord.Message):
 
 @client.event
 async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
-    # ボット自身の状態変化は無視
-    if member.id == client.user.id:
-        return
-
     guild = member.guild
     guild_id = str(guild.id)
+
+    # ボット自身の状態変化を処理（チャンネル移動・切断への対応）
+    if member.id == client.user.id:
+        player = music_players.get(guild_id)
+
+        # ボットが切断された場合（Discord側からの強制切断など）
+        if before.channel is not None and after.channel is None:
+            print(f"Bot was disconnected from voice channel in {guild.name}")
+            if player:
+                await player.shutdown()
+                del music_players[guild_id]
+            await notify_clients_local(guild_id)
+            return
+
+        # ボットが別のチャンネルに移動された場合
+        if before.channel is not None and after.channel is not None and before.channel.id != after.channel.id:
+            print(f"Bot was moved from {before.channel.name} to {after.channel.name} in {guild.name}")
+            if player:
+                # voice_client の参照を更新
+                player.voice_client = guild.voice_client
+
+                # 再生中の場合、pause/resume で再生を復旧（discord.py のチャンネル移動バグ対策）
+                if player.voice_client and player.voice_client.is_playing():
+                    try:
+                        player.voice_client.pause()
+                        await asyncio.sleep(0.5)  # 短い待機
+                        player.voice_client.resume()
+                        print(f"Playback recovered after channel move in {guild.name}")
+                    except Exception as e:
+                        print(f"Error recovering playback after channel move: {e}")
+            await notify_clients_local(guild_id)
+            return
+
+        return  # ボット自身のその他の状態変化（ミュート等）は無視
 
     # ★新規追加★
     # ユーザーがボイスチャンネルに参加した場合で、
