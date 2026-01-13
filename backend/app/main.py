@@ -169,24 +169,32 @@ active_connections: Dict[str, List[WebSocket]] = {}
 
 async def notify_clients(guild_id: str):
     """WebSocketクライアントに音楽プレイヤーの状態変更を通知"""
+    import time
+
     connections = active_connections.get(guild_id, [])
     if not connections:
         return
-    
+
     try:
         # データを一度だけ取得してキャッシュ
         current_track = await get_current_track(guild_id)
         queue = await get_queue(guild_id)
         is_playing_status = await is_playing(guild_id)
         history = await get_history(guild_id)
-        
+
+        # バージョンを取得（プレイヤーが存在する場合）
+        player = music_players.get(guild_id)
+        version = player.increment_version() if player else 0
+
         message = {
             "type": "update",
             "data": {
                 "current_track": jsonable_encoder(current_track),
                 "queue": jsonable_encoder(queue),
                 "is_playing": is_playing_status,
-                "history": jsonable_encoder(history)
+                "history": jsonable_encoder(history),
+                "version": version,
+                "timestamp": int(time.time() * 1000)  # ミリ秒単位のタイムスタンプ
             }
         }
     except Exception as e:
@@ -433,18 +441,27 @@ async def websocket_endpoint(websocket: WebSocket, guild_id: str):
     heartbeat_task = None
     
     try:
+        import time
+
         # 初期データを送信
         current_track = await get_current_track(guild_id)
         queue = await get_queue(guild_id)
         is_playing_status = await is_playing(guild_id)
         history = await get_history(guild_id)
+
+        # バージョンを取得（プレイヤーが存在する場合）
+        player = music_players.get(guild_id)
+        version = player.get_version() if player else 0
+
         await websocket.send_json({
             "type": "update",
             "data": {
                 "current_track": jsonable_encoder(current_track),
                 "queue": jsonable_encoder(queue),
                 "is_playing": is_playing_status,
-                "history": jsonable_encoder(history)
+                "history": jsonable_encoder(history),
+                "version": version,
+                "timestamp": int(time.time() * 1000)
             }
         })
         

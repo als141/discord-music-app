@@ -75,7 +75,7 @@ class Song:
 
 class MusicPlayer:
     """音楽プレイヤークラス"""
-    
+
     def __init__(self, bot, guild, guild_id: str, notify_clients: Callable):
         self.bot = bot
         self.guild = guild
@@ -91,6 +91,9 @@ class MusicPlayer:
         self.voice_client = guild.voice_client
         self.executor = ThreadPoolExecutor(max_workers=3)
         self.shutdown_flag = False  # シャットダウンフラグ
+
+        # 状態バージョン管理（フロントエンドとの同期用）
+        self.state_version: int = 0
 
         logger.info(f"音楽プレイヤーを初期化 (Guild: {guild.name}, ID: {guild_id})")
         
@@ -379,6 +382,15 @@ class MusicPlayer:
     def is_playing(self) -> bool:
         """現在再生中かどうかを返す"""
         return bool(self.voice_client and self.voice_client.is_playing())
+
+    def increment_version(self) -> int:
+        """状態バージョンをインクリメントして返す"""
+        self.state_version += 1
+        return self.state_version
+
+    def get_version(self) -> int:
+        """現在の状態バージョンを返す"""
+        return self.state_version
 
     async def shutdown(self):
         """プレイヤーを適切にシャットダウンする"""

@@ -26,3 +26,12 @@
 2026-01-14 04:28:29,780 - app.services.music_player - INFO - 再生開始: Seikai
 2026-01-14 04:37:10,768 - app.services.music_player - INFO - 再生準備: IRIS OUT (music/IRIS_OUT-wggigwtz4dQ.webm)
 2026-01-14 04:37:10,772 - app.services.music_player - INFO - 再生開始: IRIS OUT
+2026-01-14 04:39:43,499 - app.services.music_player - INFO - 再生準備: BOW AND ARROW (music/BOW_AND_ARROW-su5oj4X9_AU.webm)
+2026-01-14 04:39:43,504 - app.services.music_player - INFO - 再生開始: BOW AND ARROW
+2026-01-14 04:47:07,757 - app.services.music_player - INFO - 音楽プレイヤーを初期化 (Guild: テストサーバー, ID: 1080511818658762752)
+2026-01-14 04:47:07,758 - app.services.music_player - INFO - 音楽プレイヤーループを開始 (Guild: 1080511818658762752)
+2026-01-14 04:48:03,058 - app.services.music_player - INFO - 再生準備: Bokuno Koto (music/Bokuno_Koto-gd5-TdPJ3AQ.webm)
+2026-01-14 04:48:03,063 - app.services.music_player - INFO - 再生開始: Bokuno Koto
+2026-01-14 05:02:39,402 - app.services.music_player - INFO - 音楽プレイヤーをシャットダウン中 (Guild: 1080511818658762752)
+2026-01-14 05:02:39,402 - app.services.music_player - INFO - 音楽プレイヤーのシャットダウン完了 (Guild: 1080511818658762752)
+2026-01-14 05:02:39,402 - app.services.music_player - INFO - 音楽プレイヤーループを終了 (Guild: 1080511818658762752)
