@@ -219,29 +219,44 @@
     display: flex;
     overflow-x: auto;
     overflow-y: hidden;
-    scroll-snap-type: x mandatory;
+    scroll-snap-type: x proximity;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
     padding-bottom: 8px;
+    /* タッチスクロールを有効化 */
+    touch-action: pan-x;
+    /* スクロールの慣性を有効化 */
+    scroll-behavior: smooth;
   }
 
   .horizontal-scroll-container::-webkit-scrollbar {
-    height: 6px;
+    height: 4px;
   }
 
   .horizontal-scroll-container::-webkit-scrollbar-track {
-    background: var(--color-muted);
-    border-radius: 3px;
+    background: transparent;
   }
 
   .horizontal-scroll-container::-webkit-scrollbar-thumb {
     background: var(--color-border);
-    border-radius: 3px;
+    border-radius: 2px;
   }
 
   .horizontal-scroll-container > * {
     scroll-snap-align: start;
     flex-shrink: 0;
+  }
+
+  /* モバイルでスクロールバーを非表示 */
+  @media (max-width: 640px) {
+    .horizontal-scroll-container {
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    .horizontal-scroll-container::-webkit-scrollbar {
+      display: none;
+    }
   }
 
   /* Hide scrollbar on mobile but keep functionality */

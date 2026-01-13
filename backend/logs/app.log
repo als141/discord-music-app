@@ -20,3 +20,7 @@
 2026-01-14 03:11:39,185 - app.services.music_player - INFO - 再生開始: IRIS OUT
 2026-01-14 04:16:09,525 - app.services.music_player - INFO - 再生準備: Que Sera Sera (music/Que_Sera_Sera-s4ZThuWQdhA.webm)
 2026-01-14 04:16:09,539 - app.services.music_player - INFO - 再生開始: Que Sera Sera
+2026-01-14 04:25:56,605 - app.services.music_player - INFO - 再生準備: IRIS OUT (music/IRIS_OUT-wggigwtz4dQ.webm)
+2026-01-14 04:25:56,609 - app.services.music_player - INFO - 再生開始: IRIS OUT
+2026-01-14 04:28:29,776 - app.services.music_player - INFO - 再生準備: Seikai (music/Seikai-lMDjJqWquXM.webm)
+2026-01-14 04:28:29,780 - app.services.music_player - INFO - 再生開始: Seikai

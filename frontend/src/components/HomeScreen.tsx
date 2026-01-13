@@ -15,7 +15,7 @@ import {
   Info,
   Music2,
 } from 'lucide-react';
-import { ScrollArea } from '@/components/ui/scroll-area';
+// Note: Using native scroll instead of Radix ScrollArea for better nested scroll support
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useInView } from 'react-intersection-observer';
 import { UploadedMusicScreen } from './UploadedMusicScreen';
@@ -366,41 +366,33 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   // ホーム画面の描画(履歴 + おすすめ)
   const renderHomeContent = useCallback(() => {
     const reversedHistory = [...history].reverse();
-    
+
     return (
-      <ScrollArea className="h-full">
-        <div className="p-2 sm:p-4 space-y-6 sm:space-y-10">
+      <div className="h-full overflow-y-auto overflow-x-hidden">
+        <div className="py-3 sm:py-4 space-y-6 sm:space-y-8">
           {/* 再生履歴 */}
           {reversedHistory.length > 0 && guildId && (
             <section key="section-history" className="w-full" aria-labelledby="history-heading">
-              <div className="flex items-center mb-3 sm:mb-4">
+              <div className="flex items-center mb-3 sm:mb-4 px-3 sm:px-4">
                 <div className="mr-2 p-1.5 sm:p-2 bg-primary/10 rounded-full">
                   <History className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
                 </div>
                 <h2 id="history-heading" className="text-lg sm:text-2xl font-bold">再生履歴</h2>
               </div>
-              <div className="relative w-full">
-                <motion.div
-                  className="flex gap-3 sm:gap-4 p-3 sm:p-4 overflow-x-auto scrollbar-thin pb-4"
-                  style={{
-                    scrollSnapType: 'x mandatory',
-                    WebkitOverflowScrolling: 'touch'
-                  }}
-                  variants={animations.container}
-                  initial="hidden"
-                  animate="visible"
-                >
-                  {reversedHistory.map((item, idx) => (
-                    <motion.div
-                      key={`history-${idx}`}
-                      className="w-[140px] h-[200px] xs:w-[150px] xs:h-[210px] sm:w-[170px] sm:h-[240px] md:w-[200px] md:h-[280px] flex-shrink-0"
-                      style={{ scrollSnapAlign: 'start' }}
-                      variants={animations.item}
-                    >
-                      <HistoryCard item={item} onSelectTrack={handleSelectTrackCallback} />
-                    </motion.div>
-                  ))}
-                </motion.div>
+              {/* 横スクロールコンテナ - ネイティブスクロール使用 */}
+              <div
+                className="horizontal-scroll-container gap-3 sm:gap-4 px-3 sm:px-4"
+              >
+                {reversedHistory.map((item, idx) => (
+                  <div
+                    key={`history-${idx}`}
+                    className="w-[140px] min-w-[140px] sm:w-[170px] sm:min-w-[170px] md:w-[200px] md:min-w-[200px]"
+                  >
+                    <HistoryCard item={item} onSelectTrack={handleSelectTrackCallback} />
+                  </div>
+                ))}
+                {/* 右端のパディング用スペーサー */}
+                <div className="w-1 min-w-[4px] flex-shrink-0" aria-hidden="true" />
               </div>
             </section>
           )}
@@ -408,43 +400,35 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           {/* おすすめセクション */}
           {sections.map((section, index) => (
             <section key={`section-${index}`} className="w-full" aria-labelledby={`section-heading-${index}`}>
-              <div className="flex items-center mb-3 sm:mb-4">
+              <div className="flex items-center mb-3 sm:mb-4 px-3 sm:px-4">
                 <div className="mr-2 p-1.5 sm:p-2 bg-primary/10 rounded-full">
                   <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
                 </div>
                 <h2 id={`section-heading-${index}`} className="text-lg sm:text-2xl font-bold line-clamp-1">{section.title}</h2>
               </div>
-              <div className="relative w-full">
-                <motion.div
-                  className="flex gap-3 sm:gap-4 p-3 sm:p-4 overflow-x-auto scrollbar-thin pb-4"
-                  style={{
-                    scrollSnapType: 'x mandatory',
-                    WebkitOverflowScrolling: 'touch'
-                  }}
-                  variants={animations.container}
-                  initial="hidden"
-                  animate="visible"
-                >
-                  {section.contents.map((item, idx) => (
-                    <motion.div
-                      key={`item-${idx}`}
-                      className="w-[140px] h-[200px] xs:w-[150px] xs:h-[210px] sm:w-[170px] sm:h-[240px] md:w-[200px] md:h-[280px] flex-shrink-0"
-                      style={{ scrollSnapAlign: 'start' }}
-                      variants={animations.item}
-                    >
-                      <TrackCard
-                        item={item}
-                        onSelectTrack={handleSelectTrackCallback}
-                        onArtistClick={handleArtistClick}
-                      />
-                    </motion.div>
-                  ))}
-                </motion.div>
+              {/* 横スクロールコンテナ - ネイティブスクロール使用 */}
+              <div
+                className="horizontal-scroll-container gap-3 sm:gap-4 px-3 sm:px-4"
+              >
+                {section.contents.map((item, idx) => (
+                  <div
+                    key={`item-${idx}`}
+                    className="w-[140px] min-w-[140px] sm:w-[170px] sm:min-w-[170px] md:w-[200px] md:min-w-[200px]"
+                  >
+                    <TrackCard
+                      item={item}
+                      onSelectTrack={handleSelectTrackCallback}
+                      onArtistClick={handleArtistClick}
+                    />
+                  </div>
+                ))}
+                {/* 右端のパディング用スペーサー */}
+                <div className="w-1 min-w-[4px] flex-shrink-0" aria-hidden="true" />
               </div>
             </section>
           ))}
         </div>
-      </ScrollArea>
+      </div>
     );
   }, [history, guildId, sections, handleSelectTrackCallback, handleArtistClick]);
 
