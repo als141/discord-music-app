@@ -18,6 +18,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { useGuildStore } from '@/store/useGuildStore';
+import { VOICE_CHAT_ENABLED } from '@/lib/features';
 
 // アニメーション設定
 const animations = {
@@ -52,7 +53,7 @@ interface SideMenuProps {
   onRefresh: () => void;
   onInviteBot: (serverId: string) => void;
   onDisconnect: () => void;
-  onFetchServers: () => Promise<void>;
+  onFetchServers: (force?: boolean) => Promise<void>;
 }
 
 // メモ化したヘッダーコンポーネント
@@ -151,7 +152,7 @@ const ServerListItem = memo(({
         </Badge>
       )}
     </Button>
-    {isActive && (
+    {VOICE_CHAT_ENABLED && isActive && (
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
@@ -282,7 +283,7 @@ export const SideMenu: React.FC<SideMenuProps> = ({
   // サーバー一覧の再取得
   const handleFetchServers = async () => {
     try {
-      await onFetchServers();
+      await onFetchServers(true);
       toast({
         title: "成功",
         description: "サーバー一覧を更新しました。",
@@ -411,7 +412,7 @@ export const SideMenu: React.FC<SideMenuProps> = ({
                   </div>
 
                   {/* ボイスチャンネル */}
-                  {activeServerId && (
+                  {VOICE_CHAT_ENABLED && activeServerId && (
                     <div>
                       <h3 className="text-lg font-semibold mb-3 flex items-center">
                         <Mic size={20} className="mr-2" /> ボイスチャンネル

@@ -1102,16 +1102,5 @@ def shutdown(loop):
     loop.stop()
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, lambda: shutdown(loop))
-    try:
-        loop.run_until_complete(start_both())
-    except asyncio.CancelledError:
-        pass
-    finally:
-        # ここでのシャットダウン処理が正しく実行されるように調整
-        if not loop.is_closed():
-            loop.run_until_complete(loop.shutdown_asyncgens())
-            loop.close()
-        print("プログラムを終了します")
+    # FastAPI lifespan に任せて Discord bot を起動/停止させる
+    uvicorn.run(app, host="0.0.0.0", port=8000)

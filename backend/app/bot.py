@@ -416,7 +416,7 @@ async def handle_thread_message(message):
 
 @client.event
 async def on_ready():
-    await client.change_presence(status=discord.Status.online, activity=discord.CustomActivity(name='やっとなおった！！！！！'))
+    await client.change_presence(status=discord.Status.online, activity=discord.CustomActivity(name='開発中'))
     await tree.sync()
     print(f"Logged in as {client.user}")
 

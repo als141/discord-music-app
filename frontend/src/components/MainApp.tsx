@@ -20,6 +20,7 @@ import { IntroPage } from './IntroPage';
 import { ErrorBoundary } from './ErrorBoundary';
 import { HomeScreen } from './HomeScreen';
 import { useGuildStore, usePlayerStore, setupWebSocket, cleanupWebSocket } from '@/store';
+import { VOICE_CHAT_ENABLED } from '@/lib/features';
 
 // API URL の取得
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -71,12 +72,15 @@ export const MainApp: React.FC = () => {
   // WebSocket 参照
   const wsConnectionRef = useRef<{ close: () => void } | null>(null);
 
-  // アプリケーションの初期化
+  // サーバー一覧の初期取得（認証済みのときのみ）
   useEffect(() => {
-    // ミュータブルサーバー一覧を取得
-    fetchMutualServers();
-    
-    // ローカルストレージから状態を復元
+    if (status === 'authenticated') {
+      fetchMutualServers();
+    }
+  }, [fetchMutualServers, status]);
+
+  // ローカルストレージから状態を復元
+  useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedHomeTab = localStorage.getItem('homeActiveTab');
       if (savedHomeTab) {
@@ -84,16 +88,17 @@ export const MainApp: React.FC = () => {
       }
     }
     
-    // クリーンアップ関数
     return () => {
       cleanupWebSocket();
     };
-  }, [fetchMutualServers]);
+  }, [cleanupWebSocket]);
   
   // activeServerId 変更時にボイスチャンネルを取得
   useEffect(() => {
     if (activeServerId) {
-      fetchVoiceChannels(activeServerId);
+      if (VOICE_CHAT_ENABLED) {
+        fetchVoiceChannels(activeServerId);
+      }
       
       // WebSocketの設定
       if (wsConnectionRef.current) {

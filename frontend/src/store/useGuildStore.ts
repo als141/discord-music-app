@@ -4,6 +4,10 @@ import { persist } from 'zustand/middleware';
 import { api, Server, VoiceChannel } from '@/utils/api';
 import { setActiveServerIdGetter } from './usePlayerStore';
 
+const MIN_SERVER_FETCH_INTERVAL_MS = 15000;
+let mutualServersRequest: Promise<void> | null = null;
+let lastServersFetchAt = 0;
+
 interface GuildState {
   // サーバー情報
   mutualServers: Server[];
@@ -20,7 +24,7 @@ interface GuildState {
   // アクション
   setActiveServerId: (serverId: string | null) => void;
   setActiveChannelId: (channelId: string | null) => void;
-  fetchMutualServers: () => Promise<void>;
+  fetchMutualServers: (force?: boolean) => Promise<void>;
   fetchVoiceChannels: (serverId: string) => Promise<void>;
   inviteBot: (serverId: string) => void;
   joinVoiceChannel: (serverId: string, channelId: string) => Promise<void>;
@@ -56,46 +60,64 @@ export const useGuildStore = create<GuildState>()(
       },
       
       // サーバー一覧の取得
-      fetchMutualServers: async () => {
-        try {
-          set({ isLoadingServers: true, serversError: null });
-          
-          // ボットが参加しているサーバーを取得
-          const botGuilds = await api.getBotGuilds();
-          const botGuildIds = new Set(botGuilds.map((guild) => guild.id));
-          
-          // ユーザーが参加しているサーバーを取得
-          const userGuildsResponse = await fetch('/api/discord/userGuilds');
-          
-          if (!userGuildsResponse.ok) {
-            throw new Error('ユーザーのサーバー一覧の取得に失敗しました');
+      fetchMutualServers: async (force = false) => {
+        const now = Date.now();
+        if (mutualServersRequest) {
+          return mutualServersRequest;
+        }
+        if (!force && lastServersFetchAt && now - lastServersFetchAt < MIN_SERVER_FETCH_INTERVAL_MS) {
+          return;
+        }
+
+        mutualServersRequest = (async () => {
+          try {
+            set({ isLoadingServers: true, serversError: null });
+
+            // ボットが参加しているサーバーを取得
+            const botGuilds = await api.getBotGuilds();
+            const botGuildIds = new Set(botGuilds.map((guild) => guild.id));
+
+            // ユーザーが参加しているサーバーを取得
+            const userGuildsResponse = await fetch('/api/discord/userGuilds');
+
+            if (!userGuildsResponse.ok) {
+              throw new Error('ユーザーのサーバー一覧の取得に失敗しました');
+            }
+
+            const userGuildsData = await userGuildsResponse.json();
+
+            // 共通のサーバーと招待可能なサーバーを分類
+            const mutualGuilds = userGuildsData.filter((guild: Server) => botGuildIds.has(guild.id));
+
+            const guildsWithManageServer = userGuildsData.filter((guild: Server) => {
+              if (!guild.permissions) return false;
+              const permissions = BigInt(guild.permissions);
+              const MANAGE_GUILD = BigInt(0x20); // 'サーバーを管理'の権限ビット
+              return (permissions & MANAGE_GUILD) === MANAGE_GUILD;
+            });
+
+            const inviteGuilds = guildsWithManageServer.filter((guild: Server) => !botGuildIds.has(guild.id));
+
+            set({
+              mutualServers: mutualGuilds,
+              inviteServers: inviteGuilds,
+              isLoadingServers: false
+            });
+          } catch (error) {
+            console.error('サーバー一覧の取得中にエラーが発生しました:', error);
+            set({
+              isLoadingServers: false,
+              serversError: error instanceof Error ? error.message : '不明なエラーが発生しました'
+            });
+          } finally {
+            lastServersFetchAt = Date.now();
           }
-          
-          const userGuildsData = await userGuildsResponse.json();
-          
-          // 共通のサーバーと招待可能なサーバーを分類
-          const mutualGuilds = userGuildsData.filter((guild: Server) => botGuildIds.has(guild.id));
-          
-          const guildsWithManageServer = userGuildsData.filter((guild: Server) => {
-            if (!guild.permissions) return false;
-            const permissions = BigInt(guild.permissions);
-            const MANAGE_GUILD = BigInt(0x20); // 'サーバーを管理'の権限ビット
-            return (permissions & MANAGE_GUILD) === MANAGE_GUILD;
-          });
-          
-          const inviteGuilds = guildsWithManageServer.filter((guild: Server) => !botGuildIds.has(guild.id));
-          
-          set({
-            mutualServers: mutualGuilds,
-            inviteServers: inviteGuilds,
-            isLoadingServers: false
-          });
-        } catch (error) {
-          console.error('サーバー一覧の取得中にエラーが発生しました:', error);
-          set({
-            isLoadingServers: false,
-            serversError: error instanceof Error ? error.message : '不明なエラーが発生しました'
-          });
+        })();
+
+        try {
+          await mutualServersRequest;
+        } finally {
+          mutualServersRequest = null;
         }
       },
       
