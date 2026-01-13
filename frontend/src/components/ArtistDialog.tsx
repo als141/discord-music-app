@@ -394,7 +394,9 @@ export const ArtistDialog: React.FC<ArtistDialogProps> = ({
                 {artistData.related.length > 0 && (
                   <section>
                     <h3 className="text-base sm:text-xl font-bold mb-3 sm:mb-4">似たアーティスト</h3>
-                    <div className="horizontal-scroll-container gap-2 sm:gap-4">
+                    <div className="horizontal-scroll-container gap-2 sm:gap-4 -mx-3 sm:-mx-6">
+                      {/* 左端スペーサー */}
+                      <div className="w-3 min-w-[12px] sm:w-6 sm:min-w-[24px] flex-shrink-0" aria-hidden="true" />
                       {artistData.related.map((artist, index) => (
                         <Button
                           key={index}
@@ -420,6 +422,8 @@ export const ArtistDialog: React.FC<ArtistDialogProps> = ({
                           </div>
                         </Button>
                       ))}
+                      {/* 右端スペーサー */}
+                      <div className="w-3 min-w-[12px] sm:w-6 sm:min-w-[24px] flex-shrink-0" aria-hidden="true" />
                     </div>
                   </section>
                 )}

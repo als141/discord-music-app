@@ -380,9 +380,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 <h2 id="history-heading" className="text-lg sm:text-2xl font-bold">再生履歴</h2>
               </div>
               {/* 横スクロールコンテナ - ネイティブスクロール使用 */}
-              <div
-                className="horizontal-scroll-container gap-3 sm:gap-4 px-3 sm:px-4"
-              >
+              <div className="horizontal-scroll-container gap-3 sm:gap-4">
+                {/* 左端のパディング用スペーサー */}
+                <div className="w-3 min-w-[12px] sm:w-4 sm:min-w-[16px] flex-shrink-0" aria-hidden="true" />
                 {reversedHistory.map((item, idx) => (
                   <div
                     key={`history-${idx}`}
@@ -392,7 +392,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   </div>
                 ))}
                 {/* 右端のパディング用スペーサー */}
-                <div className="w-1 min-w-[4px] flex-shrink-0" aria-hidden="true" />
+                <div className="w-3 min-w-[12px] sm:w-4 sm:min-w-[16px] flex-shrink-0" aria-hidden="true" />
               </div>
             </section>
           )}
@@ -407,9 +407,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 <h2 id={`section-heading-${index}`} className="text-lg sm:text-2xl font-bold line-clamp-1">{section.title}</h2>
               </div>
               {/* 横スクロールコンテナ - ネイティブスクロール使用 */}
-              <div
-                className="horizontal-scroll-container gap-3 sm:gap-4 px-3 sm:px-4"
-              >
+              <div className="horizontal-scroll-container gap-3 sm:gap-4">
+                {/* 左端のパディング用スペーサー */}
+                <div className="w-3 min-w-[12px] sm:w-4 sm:min-w-[16px] flex-shrink-0" aria-hidden="true" />
                 {section.contents.map((item, idx) => (
                   <div
                     key={`item-${idx}`}
@@ -423,7 +423,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   </div>
                 ))}
                 {/* 右端のパディング用スペーサー */}
-                <div className="w-1 min-w-[4px] flex-shrink-0" aria-hidden="true" />
+                <div className="w-3 min-w-[12px] sm:w-4 sm:min-w-[16px] flex-shrink-0" aria-hidden="true" />
               </div>
             </section>
           ))}
