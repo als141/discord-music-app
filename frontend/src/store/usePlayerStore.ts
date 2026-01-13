@@ -44,7 +44,7 @@ interface PlayerState {
   isRelatedLoading: boolean;
   
   // オーディオエレメント参照
-  audioRef: React.RefObject<HTMLAudioElement>;
+  audioRef: React.RefObject<HTMLAudioElement | null>;
   
   // アクション
   setCurrentTrack: (track: Track | null) => void;

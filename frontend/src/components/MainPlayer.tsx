@@ -723,10 +723,10 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
                 </TabsTrigger>
               </TabsList>
               
-              <TabsContent 
-                value="queue" 
-                className="mt-4 overflow-y-auto pb-20" 
-                style={{ height: 'calc(100vh - 300px)' }}
+              <TabsContent
+                value="queue"
+                className="mt-4 overflow-y-auto pb-20"
+                style={{ height: 'min(calc(100vh - 300px), calc(100dvh - 300px))' }}
                 id="queue-panel"
                 role="tabpanel"
               >
@@ -743,22 +743,24 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
                 />
               </TabsContent>
               
-              <TabsContent 
-                value="related" 
-                className="mt-4 overflow-y-auto space-y-4 pb-20" 
-                style={{ height: 'calc(100vh - 300px)' }}
+              <TabsContent
+                value="related"
+                className="mt-4 overflow-y-auto space-y-4 pb-20 px-2 sm:px-4"
+                style={{ height: 'min(calc(100vh - 300px), calc(100dvh - 300px))' }}
                 id="related-panel"
                 role="tabpanel"
               >
-                <div className="flex justify-between">
-                  <Button 
-                    onClick={handleAddAllToQueue} 
-                    disabled={isRelatedLoading || relatedTracks.length === 0} 
-                    className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200"
+                <div className="flex flex-wrap gap-2 justify-between">
+                  <Button
+                    onClick={handleAddAllToQueue}
+                    disabled={isRelatedLoading || relatedTracks.length === 0}
+                    size="sm"
+                    className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs sm:text-sm"
                   >
-                    <PlusIcon className="mr-2 h-4 w-4" /> 全てキューに追加
+                    <PlusIcon className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+                    <span className="hidden xs:inline">全て</span>追加
                   </Button>
-                  <Button 
+                  <Button
                     onClick={() => {
                       setIsRelatedLoading(true);
                       if (currentTrack) {
@@ -784,11 +786,13 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
                       } else {
                         setIsRelatedLoading(false);
                       }
-                    }} 
-                    disabled={isRelatedLoading} 
-                    className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200"
+                    }}
+                    disabled={isRelatedLoading}
+                    size="sm"
+                    className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs sm:text-sm"
                   >
-                    <RefreshCwIcon className={`mr-2 h-4 w-4 ${isRelatedLoading ? 'animate-spin' : ''}`} /> 再取得
+                    <RefreshCwIcon className={`mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4 ${isRelatedLoading ? 'animate-spin' : ''}`} />
+                    再取得
                   </Button>
                 </div>
                 <AnimatePresence mode="wait">

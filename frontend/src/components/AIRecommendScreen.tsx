@@ -82,18 +82,18 @@ export const AIRecommendScreen: React.FC<AIRecommendScreenProps> = ({ onSelectTr
       initial={{ opacity: 0, y: 50 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -50 }}
-      className="text-center p-8"
+      className="text-center p-4 sm:p-8"
     >
       {/* 告知 */}
-      <div className="text-center text-sm text-gray-500 mb-4">
+      <div className="text-center text-xs sm:text-sm text-gray-500 mb-3 sm:mb-4">
         お試しモード
         <br />
         この機能はバージョン 1.0.0 でリリース予定です
       </div>
-      <Sparkles className="w-24 h-24 text-primary mx-auto mb-8" />
-      <h2 className="text-4xl font-bold mb-6 text-white">AIリコメンドへようこそ！</h2>
-      <p className="text-xl mb-8 text-gray-300">あなたの好みに合わせて音楽をお探しします。いくつかの質問に答えてください。</p>
-      <Button onClick={() => setStep('genre')} size="lg" className="px-8 py-4 text-lg rounded-full bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 transition-all duration-300">
+      <Sparkles className="w-16 h-16 sm:w-24 sm:h-24 text-primary mx-auto mb-4 sm:mb-8" />
+      <h2 className="text-2xl sm:text-4xl font-bold mb-4 sm:mb-6 text-white">AIリコメンドへようこそ！</h2>
+      <p className="text-base sm:text-xl mb-6 sm:mb-8 text-gray-300 px-2">あなたの好みに合わせて音楽をお探しします。いくつかの質問に答えてください。</p>
+      <Button onClick={() => setStep('genre')} size="lg" className="px-6 sm:px-8 py-3 sm:py-4 text-base sm:text-lg rounded-full bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 transition-all duration-300">
         始めましょう
       </Button>
     </motion.div>
@@ -105,23 +105,23 @@ export const AIRecommendScreen: React.FC<AIRecommendScreenProps> = ({ onSelectTr
       initial={{ opacity: 0, y: 50 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -50 }}
-      className="p-8"
+      className="p-4 sm:p-8"
     >
-      <h2 className="text-3xl font-bold mb-6 text-white">好きなジャンルを選んでください</h2>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <h2 className="text-xl sm:text-3xl font-bold mb-4 sm:mb-6 text-white">好きなジャンルを選んでください</h2>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4">
         {genres.map(genre => (
           <Button
             key={genre}
             onClick={() => handleGenreSelection(genre)}
             variant={selectedGenres.includes(genre) ? 'default' : 'outline'}
-            className="h-24 text-lg rounded-xl transition-all duration-300 hover:scale-105"
+            className="h-16 sm:h-24 text-sm sm:text-lg rounded-xl transition-all duration-300 hover:scale-105"
           >
             {genre}
           </Button>
         ))}
       </div>
       <Button
-        className="mt-8 px-8 py-4 text-lg rounded-full bg-gradient-to-r from-blue-500 to-green-500 hover:from-blue-600 hover:to-green-600 transition-all duration-300"
+        className="mt-6 sm:mt-8 px-6 sm:px-8 py-3 sm:py-4 text-base sm:text-lg rounded-full bg-gradient-to-r from-blue-500 to-green-500 hover:from-blue-600 hover:to-green-600 transition-all duration-300"
         onClick={() => setStep('mood')}
         disabled={selectedGenres.length === 0}
       >
@@ -136,23 +136,23 @@ export const AIRecommendScreen: React.FC<AIRecommendScreenProps> = ({ onSelectTr
       initial={{ opacity: 0, y: 50 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -50 }}
-      className="p-8"
+      className="p-4 sm:p-8"
     >
-      <h2 className="text-3xl font-bold mb-6 text-white">好きな雰囲気を選んでください</h2>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <h2 className="text-xl sm:text-3xl font-bold mb-4 sm:mb-6 text-white">好きな雰囲気を選んでください</h2>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4">
         {moods.map(mood => (
           <Button
             key={mood}
             onClick={() => handleMoodSelection(mood)}
             variant={selectedMoods.includes(mood) ? 'default' : 'outline'}
-            className="h-24 text-lg rounded-xl transition-all duration-300 hover:scale-105"
+            className="h-16 sm:h-24 text-sm sm:text-lg rounded-xl transition-all duration-300 hover:scale-105"
           >
             {mood}
           </Button>
         ))}
       </div>
       <Button
-        className="mt-8 px-8 py-4 text-lg rounded-full bg-gradient-to-r from-blue-500 to-green-500 hover:from-blue-600 hover:to-green-600 transition-all duration-300"
+        className="mt-6 sm:mt-8 px-6 sm:px-8 py-3 sm:py-4 text-base sm:text-lg rounded-full bg-gradient-to-r from-blue-500 to-green-500 hover:from-blue-600 hover:to-green-600 transition-all duration-300"
         onClick={() => setStep('artists')}
         disabled={selectedMoods.length === 0}
       >
@@ -167,24 +167,24 @@ export const AIRecommendScreen: React.FC<AIRecommendScreenProps> = ({ onSelectTr
       initial={{ opacity: 0, y: 50 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -50 }}
-      className="p-8"
+      className="p-4 sm:p-8"
     >
-      <h2 className="text-3xl font-bold mb-6 text-white">好きなアーティストを選んでください</h2>
-      <ScrollArea className="h-[400px]">
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <h2 className="text-xl sm:text-3xl font-bold mb-4 sm:mb-6 text-white">好きなアーティストを選んでください</h2>
+      <ScrollArea className="h-[300px] sm:h-[400px]">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4">
           {mockArtists.map(artist => (
             <Button
               key={artist.id}
               onClick={() => handleArtistSelection(artist.id)}
               variant={selectedArtists.includes(artist.id) ? 'default' : 'outline'}
-              className="h-24 text-lg flex flex-col items-center justify-center rounded-xl transition-all duration-300 hover:scale-105"
+              className="h-20 sm:h-24 text-sm sm:text-lg flex flex-col items-center justify-center rounded-xl transition-all duration-300 hover:scale-105"
             >
               <Image
                 src={artist.image}
                 alt={artist.name}
-                width={40}
-                height={40}
-                className="rounded-full mb-2"
+                width={32}
+                height={32}
+                className="rounded-full mb-1 sm:mb-2 w-8 h-8 sm:w-10 sm:h-10"
               />
               {artist.name}
             </Button>
@@ -192,7 +192,7 @@ export const AIRecommendScreen: React.FC<AIRecommendScreenProps> = ({ onSelectTr
         </div>
       </ScrollArea>
       <Button
-        className="mt-8 px-8 py-4 text-lg rounded-full bg-gradient-to-r from-blue-500 to-green-500 hover:from-blue-600 hover:to-green-600 transition-all duration-300"
+        className="mt-6 sm:mt-8 px-6 sm:px-8 py-3 sm:py-4 text-base sm:text-lg rounded-full bg-gradient-to-r from-blue-500 to-green-500 hover:from-blue-600 hover:to-green-600 transition-all duration-300"
         onClick={() => setStep('matching')}
         disabled={selectedArtists.length === 0}
       >
@@ -207,10 +207,10 @@ export const AIRecommendScreen: React.FC<AIRecommendScreenProps> = ({ onSelectTr
       initial={{ opacity: 0, y: 50 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -50 }}
-      className="flex flex-col items-center p-8"
+      className="flex flex-col items-center p-4 sm:p-8"
     >
-      <h2 className="text-3xl font-bold mb-8 text-white">この曲はどうですか？</h2>
-      <div className="w-full max-w-sm aspect-square relative">
+      <h2 className="text-xl sm:text-3xl font-bold mb-4 sm:mb-8 text-white">この曲はどうですか？</h2>
+      <div className="w-full max-w-[280px] sm:max-w-sm aspect-square relative">
         <AnimatePresence>
           {currentTrack && (
             <TrackCard
@@ -235,7 +235,7 @@ export const AIRecommendScreen: React.FC<AIRecommendScreenProps> = ({ onSelectTr
           )}
         </AnimatePresence>
       </div>
-      <div className="flex justify-center mt-8 space-x-8">
+      <div className="flex justify-center mt-6 sm:mt-8 space-x-6 sm:space-x-8">
         <Button
           onClick={() => {
             if (!swipeDirection) {
@@ -243,9 +243,9 @@ export const AIRecommendScreen: React.FC<AIRecommendScreenProps> = ({ onSelectTr
             }
           }}
           size="lg"
-          className="w-16 h-16 rounded-full bg-transparent hover:bg-red-600/20 border-2 border-red-500 transition-all duration-300 flex items-center justify-center"
+          className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-transparent hover:bg-red-600/20 border-2 border-red-500 transition-all duration-300 flex items-center justify-center"
         >
-          <ThumbsDown className="w-8 h-8 text-red-500" />
+          <ThumbsDown className="w-6 h-6 sm:w-8 sm:h-8 text-red-500" />
         </Button>
         <Button
           onClick={() => {
@@ -254,12 +254,12 @@ export const AIRecommendScreen: React.FC<AIRecommendScreenProps> = ({ onSelectTr
             }
           }}
           size="lg"
-          className="w-16 h-16 rounded-full bg-transparent hover:bg-green-600/20 border-2 border-green-500 transition-all duration-300 flex items-center justify-center"
+          className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-transparent hover:bg-green-600/20 border-2 border-green-500 transition-all duration-300 flex items-center justify-center"
         >
-          <ThumbsUp className="w-8 h-8 text-green-500" />
+          <ThumbsUp className="w-6 h-6 sm:w-8 sm:h-8 text-green-500" />
         </Button>
       </div>
-      <Progress value={progress} className="w-full mt-8" />
+      <Progress value={progress} className="w-full mt-6 sm:mt-8" />
     </motion.div>
   )
 
@@ -269,10 +269,10 @@ export const AIRecommendScreen: React.FC<AIRecommendScreenProps> = ({ onSelectTr
       initial={{ opacity: 0, y: 50 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -50 }}
-      className="p-8"
+      className="p-4 sm:p-8"
     >
-      <h2 className="text-3xl font-bold mb-6 text-white">あなたへのおすすめ</h2>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      <h2 className="text-xl sm:text-3xl font-bold mb-4 sm:mb-6 text-white">あなたへのおすすめ</h2>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4">
         {recommendations.map((track, index) => (
           <motion.div
             key={index}
@@ -289,9 +289,9 @@ export const AIRecommendScreen: React.FC<AIRecommendScreenProps> = ({ onSelectTr
                   objectFit="cover"
                 />
               </div>
-              <div className="p-4">
-                <p className="font-bold truncate">{track.title}</p>
-                <p className="text-sm text-muted-foreground truncate">{track.artist}</p>
+              <div className="p-2 sm:p-4">
+                <p className="font-bold text-sm sm:text-base truncate">{track.title}</p>
+                <p className="text-xs sm:text-sm text-muted-foreground truncate">{track.artist}</p>
               </div>
             </Card>
           </motion.div>
@@ -302,9 +302,9 @@ export const AIRecommendScreen: React.FC<AIRecommendScreenProps> = ({ onSelectTr
 
   return (
     <div className="flex flex-col h-full bg-gradient-to-br from-gray-900 to-black">
-      <div className="flex items-center justify-center p-6 bg-black/50 backdrop-blur-lg">
-        <Brain className="w-12 h-12 text-primary mr-4" />
-        <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-500 to-pink-500">AIリコメンド（仮）</h1>
+      <div className="flex items-center justify-center p-3 sm:p-6 bg-black/50 backdrop-blur-lg">
+        <Brain className="w-8 h-8 sm:w-12 sm:h-12 text-primary mr-2 sm:mr-4" />
+        <h1 className="text-xl sm:text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-500 to-pink-500">AIリコメンド<span className="hidden sm:inline">（仮）</span></h1>
       </div>
       <ScrollArea className="flex-grow">
         <AnimatePresence mode="wait">
@@ -317,7 +317,7 @@ export const AIRecommendScreen: React.FC<AIRecommendScreenProps> = ({ onSelectTr
         </AnimatePresence>
       </ScrollArea>
       {step !== 'intro' && step !== 'recommendations' && (
-        <div className="p-4 bg-black/50 backdrop-blur-lg">
+        <div className="p-3 sm:p-4 bg-black/50 backdrop-blur-lg">
           <div className="flex justify-between items-center">
             <Button
               onClick={() => {
@@ -327,15 +327,16 @@ export const AIRecommendScreen: React.FC<AIRecommendScreenProps> = ({ onSelectTr
                 if (step === 'matching') setStep('artists')
               }}
               variant="outline"
-              className="px-6 py-2 rounded-full text-white border-white hover:bg-white/20"
+              size="sm"
+              className="px-4 sm:px-6 py-1.5 sm:py-2 rounded-full text-white border-white hover:bg-white/20 text-sm sm:text-base"
             >
               戻る
             </Button>
-            <div className="flex space-x-2">
+            <div className="flex space-x-1.5 sm:space-x-2">
               {['genre', 'mood', 'artists', 'matching'].map((s, index) => (
                 <div
                   key={s}
-                  className={`w-3 h-3 rounded-full ${
+                  className={`w-2 h-2 sm:w-3 sm:h-3 rounded-full ${
                     ['genre', 'mood', 'artists', 'matching'].indexOf(step) >= index
                       ? 'bg-primary'
                       : 'bg-gray-600'

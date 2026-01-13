@@ -5,7 +5,7 @@ import {
 	DialogTitle,
 } from '@/components/ui/dialog';
 import { api, Track, SearchItem } from '@/utils/api';
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Loader2, Plus, ChevronDown } from 'lucide-react';
 import Image from 'next/image';
@@ -165,18 +165,18 @@ export const ArtistDialog: React.FC<ArtistDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl p-0 h-[90vh] flex flex-col">
-				<VisuallyHidden>
+      <DialogContent className="max-w-[95vw] sm:max-w-4xl p-0 h-[85vh] sm:h-[90vh] flex flex-col">
+        <VisuallyHidden>
           <DialogTitle>アーティスト詳細: {artistData.name}</DialogTitle>
-				</VisuallyHidden>
+        </VisuallyHidden>
         {loading ? (
           <div className="flex-grow flex items-center justify-center">
-            <Loader2 className="w-12 h-12 animate-spin text-primary" />
+            <Loader2 className="w-10 h-10 sm:w-12 sm:h-12 animate-spin text-primary" />
           </div>
         ) : (
           <>
             {/* ヘッダー部分（固定） */}
-            <div className="relative h-48 w-full flex-shrink-0">
+            <div className="relative h-32 sm:h-48 w-full flex-shrink-0">
               <div className="absolute inset-0">
                 <Image
                   src={artistData.thumbnails[0]?.url || '/placeholder.png'}
@@ -186,9 +186,9 @@ export const ArtistDialog: React.FC<ArtistDialogProps> = ({
                   unoptimized
                 />
               </div>
-              <div className="absolute inset-0 flex items-center p-6">
-                <div className="flex items-center gap-6">
-                  <div className="relative w-32 h-32 flex-shrink-0">
+              <div className="absolute inset-0 flex items-center p-3 sm:p-6">
+                <div className="flex items-center gap-3 sm:gap-6">
+                  <div className="relative w-20 h-20 sm:w-32 sm:h-32 flex-shrink-0">
                     <Image
                       src={artistData.thumbnails[0]?.url || '/placeholder.png'}
                       alt={artistData.name}
@@ -197,10 +197,10 @@ export const ArtistDialog: React.FC<ArtistDialogProps> = ({
                       unoptimized
                     />
                   </div>
-                  <div className="text-white">
-                    <h2 className="text-3xl font-bold mb-2">{artistData.name}</h2>
+                  <div className="text-white min-w-0 flex-1">
+                    <h2 className="text-lg sm:text-3xl font-bold mb-1 sm:mb-2 line-clamp-2">{artistData.name}</h2>
                     {artistData.subscribers && (
-                      <Badge variant="secondary" className="bg-white/10">
+                      <Badge variant="secondary" className="bg-white/10 text-xs sm:text-sm">
                         {artistData.subscribers}
                       </Badge>
                     )}
@@ -211,12 +211,12 @@ export const ArtistDialog: React.FC<ArtistDialogProps> = ({
 
             {/* スクロール可能なコンテンツ部分 */}
             <ScrollArea className="flex-grow">
-              <div className="p-6 space-y-8">
+              <div className="p-3 sm:p-6 space-y-6 sm:space-y-8">
                 {/* トップソング */}
                 {artistData.songs.length > 0 && (
                   <section>
-                    <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-xl font-bold">トップソング</h3>
+                    <div className="flex justify-between items-center mb-3 sm:mb-4">
+                      <h3 className="text-base sm:text-xl font-bold">トップソング</h3>
                       <Button
                         onClick={() => handleAddAllTracks(artistData.songs.map((song) => ({
                           title: song.title,
@@ -226,9 +226,9 @@ export const ArtistDialog: React.FC<ArtistDialogProps> = ({
                         })))}
                         variant="secondary"
                         size="sm"
-                        className="gap-2"
+                        className="gap-1 sm:gap-2 text-xs sm:text-sm h-7 sm:h-9"
                       >
-                        <Plus className="w-4 h-4" />
+                        <Plus className="w-3 h-3 sm:w-4 sm:h-4" />
                         全曲追加
                       </Button>
                     </div>
@@ -236,12 +236,12 @@ export const ArtistDialog: React.FC<ArtistDialogProps> = ({
                       {artistData.songs.map((song, index) => (
                         <div
                           key={index}
-                          className="flex items-center p-3 rounded-lg hover:bg-muted/50 transition-colors group"
+                          className="flex items-center p-2 sm:p-3 rounded-lg hover:bg-muted/50 transition-colors group"
                         >
-                          <div className="w-10 text-muted-foreground font-medium">
+                          <div className="w-6 sm:w-10 text-muted-foreground font-medium text-xs sm:text-base">
                             {index + 1}
                           </div>
-                          <div className="relative w-12 h-12 mr-4">
+                          <div className="relative w-10 h-10 sm:w-12 sm:h-12 mr-2 sm:mr-4 flex-shrink-0">
                             <Image
                               src={song.thumbnails[0]?.url || '/placeholder.png'}
                               alt={song.title}
@@ -251,14 +251,15 @@ export const ArtistDialog: React.FC<ArtistDialogProps> = ({
                             />
                           </div>
                           <div className="flex-grow min-w-0">
-                            <p className="font-medium line-clamp-1">{song.title}</p>
-                            <p className="text-sm text-muted-foreground line-clamp-1">
+                            <p className="font-medium text-sm sm:text-base line-clamp-1">{song.title}</p>
+                            <p className="text-xs sm:text-sm text-muted-foreground line-clamp-1">
                               {song.artist || artistData.name}
                             </p>
                           </div>
                           <Button
                             size="sm"
                             variant="ghost"
+                            className="h-7 w-7 sm:h-9 sm:w-9 flex-shrink-0"
                             onClick={() =>
                               handleAddTrack({
                                 title: song.title,
@@ -268,7 +269,7 @@ export const ArtistDialog: React.FC<ArtistDialogProps> = ({
                               })
                             }
                           >
-                            <Plus className="w-4 h-4" />
+                            <Plus className="w-3 h-3 sm:w-4 sm:h-4" />
                           </Button>
                         </div>
                       ))}
@@ -279,7 +280,7 @@ export const ArtistDialog: React.FC<ArtistDialogProps> = ({
                 {/* アルバム */}
                 {artistData.albums.length > 0 && (
                   <section>
-                    <h3 className="text-xl font-bold mb-4">アルバム</h3>
+                    <h3 className="text-base sm:text-xl font-bold mb-3 sm:mb-4">アルバム</h3>
                     <div className="space-y-4">
                       {artistData.albums.map((album, index) => (
                         <Collapsible
@@ -393,20 +394,20 @@ export const ArtistDialog: React.FC<ArtistDialogProps> = ({
                 {/* 似たアーティスト */}
                 {artistData.related.length > 0 && (
                   <section>
-                    <h3 className="text-xl font-bold mb-4">似たアーティスト</h3>
-                    <ScrollArea className="w-full">
-                      <div className="flex space-x-4 pb-4">
+                    <h3 className="text-base sm:text-xl font-bold mb-3 sm:mb-4">似たアーティスト</h3>
+                    <div className="overflow-x-auto scrollbar-thin pb-2">
+                      <div className="flex gap-2 sm:gap-4">
                         {artistData.related.map((artist, index) => (
                           <Button
                             key={index}
                             variant="ghost"
-                            className="h-auto p-4 hover:bg-muted/50"
+                            className="h-auto p-2 sm:p-4 hover:bg-muted/50 flex-shrink-0"
                             onClick={() => {
                               fetchArtistData(artist.browseId);
                             }}
                           >
-                            <div className="space-y-3">
-                              <div className="relative w-32 h-32">
+                            <div className="space-y-2 sm:space-y-3">
+                              <div className="relative w-20 h-20 sm:w-32 sm:h-32">
                                 <Image
                                   src={artist.thumbnails[0]?.url || '/placeholder.png'}
                                   alt={artist.title}
@@ -415,15 +416,14 @@ export const ArtistDialog: React.FC<ArtistDialogProps> = ({
                                   unoptimized
                                 />
                               </div>
-                              <p className="text-sm font-medium whitespace-normal text-center">
+                              <p className="text-xs sm:text-sm font-medium whitespace-normal text-center max-w-[80px] sm:max-w-[128px] line-clamp-2">
                                 {artist.title}
                               </p>
                             </div>
                           </Button>
                         ))}
                       </div>
-                      <ScrollBar orientation="horizontal" />
-                    </ScrollArea>
+                    </div>
                   </section>
                 )}
               </div>

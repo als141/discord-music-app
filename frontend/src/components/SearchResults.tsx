@@ -12,7 +12,7 @@ import {
   TooltipProvider,
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import Image from 'next/image';
 import { api } from '@/utils/api';
 import ArtistDialog from '@/components/ArtistDialog';
@@ -85,67 +85,66 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
       >
-        <div className="bg-background/80 backdrop-blur-md py-4 px-6 shadow-md z-10">
+        <div className="bg-background/80 backdrop-blur-md py-3 sm:py-4 px-3 sm:px-6 shadow-md z-10">
           {/* 既存のヘッダー部分 */}
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-bold">検索結果</h2>
-            <Button variant="ghost" size="icon" onClick={onClose}>
-              <X size={24} />
+          <div className="flex justify-between items-center mb-3 sm:mb-4">
+            <h2 className="text-lg sm:text-2xl font-bold">検索結果</h2>
+            <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 sm:h-10 sm:w-10">
+              <X className="h-5 w-5 sm:h-6 sm:w-6" />
             </Button>
           </div>
           {/* 検索フォーム */}
-          <form onSubmit={handleSearch} className="mb-4">
+          <form onSubmit={handleSearch} className="mb-3 sm:mb-4">
             <div className="flex items-center bg-input rounded-full overflow-hidden shadow-lg">
               <Input
                 type="text"
                 placeholder="曲名、アーティスト名を入力..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="flex-grow border-none"
+                className="flex-grow border-none text-sm sm:text-base"
               />
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search size={20} />}
+              <Button type="submit" disabled={isLoading} size="sm" className="h-8 sm:h-10 px-3 sm:px-4">
+                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4 sm:h-5 sm:w-5" />}
               </Button>
             </div>
           </form>
         </div>
 
         <ScrollArea className="flex-grow">
-          <div className="p-6">
+          <div className="p-3 sm:p-6">
             <Tabs defaultValue="all" className="w-full">
-              <div className="relative">
-                <ScrollArea className="w-full whitespace-nowrap pb-2 mb-2">
-                  <TabsList className="inline-flex h-9 items-center justify-start rounded-lg p-1 text-muted-foreground">
-                    <TabsTrigger 
+              <div className="relative mb-4">
+                <div className="overflow-x-auto scrollbar-thin pb-2">
+                  <TabsList className="inline-flex h-8 sm:h-9 items-center justify-start rounded-lg p-1 text-muted-foreground min-w-max">
+                    <TabsTrigger
                       value="all"
-                      className="inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow"
+                      className="inline-flex items-center justify-center whitespace-nowrap rounded-md px-2 sm:px-3 py-1 text-xs sm:text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow"
                     >
                       {categoryLabels.all}
                     </TabsTrigger>
                     {Object.entries(categorizedResults).map(([category, items]) => (
                       items.length > 0 && (
-                        <TabsTrigger 
+                        <TabsTrigger
                           key={category}
                           value={category}
-                          className="inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow"
+                          className="inline-flex items-center justify-center whitespace-nowrap rounded-md px-2 sm:px-3 py-1 text-xs sm:text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow"
                         >
-                          {categoryLabels[category]} ({items.length})
+                          {categoryLabels[category]} <span className="hidden xs:inline ml-1">({items.length})</span>
                         </TabsTrigger>
                       )
                     ))}
                   </TabsList>
-                  <ScrollBar orientation="horizontal" className="invisible" />
-                </ScrollArea>
+                </div>
               </div>
 
               <TabsContent value="all">
                 {Object.entries(categorizedResults).map(([category, items]) => {
                   if (items.length === 0) return null;
-                  
+
                   return (
-                    <div key={category} className="mb-8">
-                      <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-xl font-semibold">{categoryLabels[category]}</h3>
+                    <div key={category} className="mb-6 sm:mb-8">
+                      <div className="flex justify-between items-center mb-3 sm:mb-4">
+                        <h3 className="text-base sm:text-xl font-semibold">{categoryLabels[category]}</h3>
                         {items.length > (category === 'artists' ? 1 : 5) && (
                           <Button
                             variant="ghost"
@@ -154,9 +153,9 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
                               ...prev,
                               [category]: !prev[category]
                             }))}
-                            className="text-sm"
+                            className="text-xs sm:text-sm h-7 sm:h-9"
                           >
-                            {showMore[category] ? "折りたたむ" : `もっと見る (${items.length})`}
+                            {showMore[category] ? "折りたたむ" : `もっと見る`}
                           </Button>
                         )}
                       </div>
@@ -280,30 +279,30 @@ const SearchResultCard: React.FC<SearchResultCardProps> = ({
       transition={{ duration: 0.3 }}
     >
       <div className="flex p-2 items-center">
-        <div className="relative w-12 h-12 flex-shrink-0">
-          <Image 
-            src={item.thumbnail} 
-            alt={item.title} 
+        <div className="relative w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0">
+          <Image
+            src={item.thumbnail}
+            alt={item.title}
             fill
             style={{ objectFit: 'cover' }}
             className="rounded-md"
             unoptimized
           />
-          <Badge 
-            variant="secondary" 
-            className="absolute -top-1 -right-1 text-[10px] font-semibold px-1 py-0.5 flex items-center gap-0.5 bg-black/50 text-white"
+          <Badge
+            variant="secondary"
+            className="absolute -top-1 -right-1 text-[8px] sm:text-[10px] font-semibold px-1 py-0.5 flex items-center gap-0.5 bg-black/50 text-white"
           >
             {getItemIcon(item.type)}
             <span className="hidden sm:inline">{item.type.toUpperCase()}</span>
           </Badge>
         </div>
 
-        <div className="flex-grow px-3 min-w-0">
-          <h3 className="font-bold text-base line-clamp-1">{item.title}</h3>
-          <p className="text-sm text-muted-foreground line-clamp-1">{item.artist}</p>
+        <div className="flex-grow px-2 sm:px-3 min-w-0">
+          <h3 className="font-bold text-sm sm:text-base line-clamp-1">{item.title}</h3>
+          <p className="text-xs sm:text-sm text-muted-foreground line-clamp-1">{item.artist}</p>
         </div>
 
-        <div className="flex-shrink-0 ml-2">
+        <div className="flex-shrink-0 ml-1 sm:ml-2">
           {item.type === 'artist' ? (
             <Button
               size="sm"
@@ -312,22 +311,22 @@ const SearchResultCard: React.FC<SearchResultCardProps> = ({
                 setIsArtistDialogOpen(true);
               }}
               variant="ghost"
-              className="h-8"
+              className="h-7 sm:h-8 text-xs sm:text-sm px-2 sm:px-3"
             >
-              詳細を見る
+              <span className="hidden xs:inline">詳細</span><span className="xs:hidden">見る</span>
             </Button>
           ) : item.type === 'song' || item.type === 'video' ? (
             <Button
               size="sm"
               onClick={() => onAddToQueue(item)}
               variant="ghost"
-              className="h-8"
+              className="h-7 sm:h-8 px-2 sm:px-3"
             >
-              <Plus className="w-4 h-4 mr-1" />
-              <span className="hidden sm:inline">追加</span>
+              <Plus className="w-3 h-3 sm:w-4 sm:h-4 mr-0.5 sm:mr-1" />
+              <span className="hidden xs:inline text-xs sm:text-sm">追加</span>
             </Button>
           ) : (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 sm:gap-2">
               <Button
                 size="sm"
                 onClick={async () => {
@@ -341,10 +340,10 @@ const SearchResultCard: React.FC<SearchResultCardProps> = ({
                   }
                 }}
                 variant="ghost"
-                className="h-8"
+                className="h-7 sm:h-8 px-1.5 sm:px-2"
               >
-                <Plus className="w-4 h-4 mr-1" />
-                <span className="hidden sm:inline">全曲追加</span>
+                <Plus className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline ml-1 text-xs">全曲</span>
               </Button>
               <Button
                 size="sm"
@@ -355,9 +354,9 @@ const SearchResultCard: React.FC<SearchResultCardProps> = ({
                     fetchPlaylistTracks(item);
                   }
                 }}
-                className="h-8"
+                className="h-7 sm:h-8 px-1.5 sm:px-2 text-xs"
               >
-                トラック表示
+                <span className="hidden xs:inline">トラック</span><span className="xs:hidden">表示</span>
               </Button>
             </div>
           )}
