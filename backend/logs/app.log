@@ -35,3 +35,5 @@
 2026-01-14 05:02:39,402 - app.services.music_player - INFO - 音楽プレイヤーをシャットダウン中 (Guild: 1080511818658762752)
 2026-01-14 05:02:39,402 - app.services.music_player - INFO - 音楽プレイヤーのシャットダウン完了 (Guild: 1080511818658762752)
 2026-01-14 05:02:39,402 - app.services.music_player - INFO - 音楽プレイヤーループを終了 (Guild: 1080511818658762752)
+2026-01-14 05:13:17,294 - app.services.music_player - INFO - 音楽プレイヤーを初期化 (Guild: テストサーバー, ID: 1080511818658762752)
+2026-01-14 05:13:17,298 - app.services.music_player - INFO - 音楽プレイヤーループを開始 (Guild: 1080511818658762752)

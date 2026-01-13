@@ -43,10 +43,11 @@ export const MainApp: React.FC = () => {
   const { toast } = useToast();
   
   // Zustand ストアから状態を取得
-  const { 
+  const {
     activeServerId, activeChannelId, voiceChannels, setActiveServerId, setActiveChannelId,
-    fetchMutualServers, fetchVoiceChannels, inviteBot, 
-    joinVoiceChannel, disconnectVoiceChannel
+    fetchMutualServers, fetchVoiceChannels, inviteBot,
+    joinVoiceChannel, disconnectVoiceChannel,
+    fetchBotVoiceStatus, stopVoiceStatusPolling
   } = useGuildStore();
   
   const {
@@ -79,6 +80,17 @@ export const MainApp: React.FC = () => {
     }
   }, [fetchMutualServers, status]);
 
+  // 初回マウント時に保存されているactiveServerIdのボイス状態を取得
+  const initialLoadRef = useRef(false);
+  useEffect(() => {
+    if (status === 'authenticated' && activeServerId && !initialLoadRef.current) {
+      initialLoadRef.current = true;
+      // 保存されているactiveServerIdがある場合、ボイスチャンネルとボットステータスを取得
+      fetchVoiceChannels(activeServerId);
+      fetchBotVoiceStatus(activeServerId);
+    }
+  }, [status, activeServerId, fetchVoiceChannels, fetchBotVoiceStatus]);
+
   // ローカルストレージから状態を復元
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -87,33 +99,31 @@ export const MainApp: React.FC = () => {
         setHomeActiveTab(savedHomeTab);
       }
     }
-    
+
     return () => {
       cleanupWebSocket();
+      stopVoiceStatusPolling();
     };
-  }, [cleanupWebSocket]);
+  }, [stopVoiceStatusPolling]);
   
-  // activeServerId 変更時にボイスチャンネルを取得
+  // activeServerId 変更時にWebSocketを設定
+  // Note: ボイスチャンネルとボットステータスの取得は setActiveServerId 内で行われる
   useEffect(() => {
     if (activeServerId) {
-      if (VOICE_CHAT_ENABLED) {
-        fetchVoiceChannels(activeServerId);
-      }
-      
       // WebSocketの設定
       if (wsConnectionRef.current) {
         wsConnectionRef.current.close();
       }
       wsConnectionRef.current = setupWebSocket(activeServerId);
     }
-    
+
     return () => {
       if (wsConnectionRef.current) {
         wsConnectionRef.current.close();
         wsConnectionRef.current = null;
       }
     };
-  }, [activeServerId, fetchVoiceChannels]);
+  }, [activeServerId]);
 
   // homeActiveTab の変更時に localStorage に保存
   useEffect(() => {
