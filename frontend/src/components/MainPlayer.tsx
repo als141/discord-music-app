@@ -1,19 +1,18 @@
 import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  PlayIcon, 
-  PauseIcon, 
-  SkipForwardIcon, 
-  SkipBackIcon, 
-  ChevronUpIcon, 
-  ChevronDownIcon, 
-  Volume2Icon, 
-  VolumeXIcon, 
-  RefreshCwIcon, 
-  PlusIcon, 
+import {
+  PlayIcon,
+  PauseIcon,
+  SkipForwardIcon,
+  ChevronUpIcon,
+  ChevronDownIcon,
+  Volume2Icon,
+  VolumeXIcon,
+  RefreshCwIcon,
+  PlusIcon,
   Loader2,
   ExternalLink,
-  UserIcon 
+  UserIcon
 } from 'lucide-react';
 import { Track, api } from '@/utils/api';
 import Image from 'next/image';
@@ -84,7 +83,6 @@ interface MainPlayerProps {
   onPlay: () => void;
   onPause: () => void;
   onSkip: () => void;
-  onPrevious: () => void;
   queue: Track[];
   onReorder: (startIndex: number, endIndex: number) => void;
   onDelete: (index: number) => void;
@@ -101,7 +99,6 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
   onPlay,
   onPause,
   onSkip,
-  onPrevious,
   queue,
   onReorder,
   onDelete,
@@ -151,14 +148,13 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
         album: 'Album Name',
         artwork: [{ src: currentTrack.thumbnail, sizes: '512x512', type: 'image/png' }],
       });
-      
+
       // Media session action handlers
       navigator.mediaSession.setActionHandler('play', onPlay);
       navigator.mediaSession.setActionHandler('pause', onPause);
-      navigator.mediaSession.setActionHandler('previoustrack', onPrevious);
       navigator.mediaSession.setActionHandler('nexttrack', onSkip);
     }
-  }, [currentTrack, onPlay, onPause, onPrevious, onSkip]);
+  }, [currentTrack, onPlay, onPause, onSkip]);
 
   // Artist info retrieval
   const handleArtistClick = async (artistName: string) => {
@@ -608,23 +604,6 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
         {/* Player controls */}
         <div className="w-full max-w-md">
           <div className="flex justify-center items-center space-x-4 sm:space-x-8 mb-4 sm:mb-8">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={onPrevious}
-                  className="p-3 rounded-full bg-white/20 hover:bg-white/30 transition-all duration-200"
-                  aria-label="前の曲へ"
-                >
-                  <SkipBackIcon size={24} className="text-white" />
-                </motion.button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>前の曲へ</p>
-              </TooltipContent>
-            </Tooltip>
-
             <Tooltip>
               <TooltipTrigger asChild>
                 <motion.button

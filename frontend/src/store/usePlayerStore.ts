@@ -410,72 +410,10 @@ export const usePlayerStore = create<PlayerState>()(
         }
       },
       
-      // 前の曲へ（楽観的更新）
+      // 前の曲へ（機能削除 - バグのため）
       previous: async () => {
-        const { isOnDeviceMode, history, currentTrack, queue } = get();
-        const activeServerId = getActiveServerId();
-
-        if (isOnDeviceMode) {
-          toast({
-            title: 'デバイスモード',
-            description: '前の曲機能はデバイスモードではまだ利用できません。',
-          });
-          return Promise.resolve();
-        } else {
-          if (!activeServerId) return Promise.resolve();
-
-          // 前の状態を保存（ロールバック用）
-          const previousCurrentTrack = currentTrack;
-          const previousQueue = [...queue];
-          const previousHistory = [...history];
-
-          try {
-            // 楽観的更新：履歴から前の曲を取得 + タイムアウト設定
-            if (history.length > 0) {
-              const lastHistoryItem = history[history.length - 1];
-              const prevTrack = lastHistoryItem.track || lastHistoryItem;
-
-              // 現在の曲をキューの先頭に戻す
-              const newQueue = currentTrack ? [currentTrack, ...queue] : [...queue];
-
-              set({
-                currentTrack: prevTrack as Track,
-                queue: newQueue,
-                history: history.slice(0, -1),
-                hasPendingOperation: true
-              });
-            } else {
-              // 履歴がない場合は操作中フラグのみ設定
-              set({ hasPendingOperation: true });
-            }
-            setPendingOperationWithTimeout();
-
-            await api.previousTrack(activeServerId);
-            // 成功したらWebSocket更新で最終状態が来る
-            return Promise.resolve();
-          } catch (error) {
-            console.error('前の曲エラー:', error);
-
-            // エラー時はロールバック + タイムアウトクリア
-            if (pendingOperationTimeoutTimer) {
-              clearTimeout(pendingOperationTimeoutTimer);
-              pendingOperationTimeoutTimer = null;
-            }
-            set({
-              currentTrack: previousCurrentTrack,
-              queue: previousQueue,
-              history: previousHistory as QueueItem[],
-              hasPendingOperation: false
-            });
-
-            toast({
-              title: 'エラー',
-              description: '前の曲への移動に失敗しました。',
-              variant: 'destructive',
-            });
-            return Promise.reject(error);
-          }
-        }
+        // この機能はバグが多いため削除されました
+        return Promise.resolve();
       },
       
       // キューに追加（楽観的更新）

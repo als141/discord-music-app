@@ -339,14 +339,6 @@ export const api = {
     }
   },
 
-  previousTrack: async (guildId: string): Promise<void> => {
-    try {
-      await apiClient.post(`/previous/${guildId}`);
-    } catch (error) {
-      handleApiError(error);
-    }
-  },
-
   search: async (query: string, filter?: string): Promise<SearchItem[]> => {
     try {
       const response = await apiClient.get('/search', {

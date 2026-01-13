@@ -54,7 +54,7 @@ export const MainApp: React.FC = () => {
     currentTrack, queue, isPlaying, isLoading, history,
     isOnDeviceMode, deviceQueue, deviceCurrentTrack, deviceIsPlaying,
     isMainPlayerVisible, setIsMainPlayerVisible,
-    play, pause, skip, previous, 
+    play, pause, skip,
     addToQueue, reorderQueue, removeFromQueue,
     toggleDeviceMode, audioRef
   } = usePlayerStore();
@@ -322,7 +322,6 @@ export const MainApp: React.FC = () => {
                     onPlay={play}
                     onPause={pause}
                     onSkip={skip}
-                    onPrevious={previous}
                     queue={deviceQueue}
                     onReorder={reorderQueue}
                     onDelete={removeFromQueue}
@@ -366,7 +365,6 @@ export const MainApp: React.FC = () => {
                         onPlay={play}
                         onPause={pause}
                         onSkip={skip}
-                        onPrevious={previous}
                         queue={queue}
                         onReorder={reorderQueue}
                         onDelete={removeFromQueue}

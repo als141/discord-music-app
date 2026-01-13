@@ -848,15 +848,6 @@ async def skip(guild_id: str):
         return {"message": "Skipped to next track"}
     raise HTTPException(status_code=404, detail="No active music player found")
 
-@app.post("/previous/{guild_id}")
-async def previous(guild_id: str):
-    player = music_players.get(guild_id)
-    if player:
-        await player.previous()
-        await notify_clients(guild_id)
-        return {"message": "Moved to previous track"}
-    raise HTTPException(status_code=404, detail="No active music player found")
-
 def adjust_thumbnail_size(thumbnail_url, width=400, height=400):
     """サムネイルURLのサイズを調整する"""
     if not thumbnail_url:
