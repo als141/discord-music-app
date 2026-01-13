@@ -3,6 +3,7 @@ import {
   Dialog,
   DialogContent,
   DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { api, Track, SearchItem } from '@/utils/api';
 import { Button } from '@/components/ui/button';
@@ -167,6 +168,9 @@ export const ArtistDialog: React.FC<ArtistDialogProps> = ({
       <DialogContent className="max-w-[92vw] sm:max-w-4xl p-0 h-[85vh] sm:h-[90vh] flex flex-col overflow-hidden">
         <VisuallyHidden>
           <DialogTitle>アーティスト詳細: {artistData.name}</DialogTitle>
+          <DialogDescription>
+            {artistData.name}のトップソング、アルバム、関連アーティスト情報
+          </DialogDescription>
         </VisuallyHidden>
         {loading ? (
           <div className="flex-grow flex items-center justify-center">

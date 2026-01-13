@@ -409,12 +409,13 @@ export const MainApp: React.FC = () => {
             transition={{ duration: 0.3 }}
             {...miniPlayerSwipeHandlers}
           >
-            <Image 
-              src={isOnDeviceMode ? deviceCurrentTrack!.thumbnail : currentTrack!.thumbnail} 
-              alt={isOnDeviceMode ? deviceCurrentTrack!.title : currentTrack!.title} 
-              width={48} 
-              height={48} 
+            <Image
+              src={isOnDeviceMode ? deviceCurrentTrack!.thumbnail : currentTrack!.thumbnail}
+              alt={isOnDeviceMode ? deviceCurrentTrack!.title : currentTrack!.title}
+              width={48}
+              height={48}
               className="object-cover rounded-md flex-shrink-0"
+              style={{ width: 48, height: 48 }}
               unoptimized
             />
             <div className="ml-4 flex-grow min-w-0 mr-4">

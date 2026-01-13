@@ -614,17 +614,17 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                   onClick={onPrevious}
-                  className="p-3 rounded-full bg-white bg-opacity-10 hover:bg-opacity-20 transition-all duration-200"
+                  className="p-3 rounded-full bg-white/20 hover:bg-white/30 transition-all duration-200"
                   aria-label="前の曲へ"
                 >
-                  <SkipBackIcon size={24} />
+                  <SkipBackIcon size={24} className="text-white" />
                 </motion.button>
               </TooltipTrigger>
               <TooltipContent>
                 <p>前の曲へ</p>
               </TooltipContent>
             </Tooltip>
-            
+
             <Tooltip>
               <TooltipTrigger asChild>
                 <motion.button
@@ -632,17 +632,17 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
                   whileTap={{ scale: isLoading ? 1 : 0.9 }}
                   onClick={isLoading ? undefined : isPlaying ? onPause : onPlay}
                   className={`p-6 rounded-full ${
-                    isLoading ? 'bg-gray-500' : 'bg-white text-black'
-                  } hover:bg-opacity-80 transition-all duration-200`}
+                    isLoading ? 'bg-gray-500 text-white' : 'bg-white text-black'
+                  } hover:bg-opacity-90 transition-all duration-200 shadow-lg`}
                   disabled={isLoading}
                   aria-label={isLoading ? "読み込み中" : isPlaying ? "一時停止" : "再生"}
                 >
                   {isLoading ? (
                     <Loader2 className="animate-spin" size={32} />
                   ) : isPlaying ? (
-                    <PauseIcon size={32} />
+                    <PauseIcon size={32} fill="currentColor" />
                   ) : (
-                    <PlayIcon size={32} />
+                    <PlayIcon size={32} fill="currentColor" />
                   )}
                 </motion.button>
               </TooltipTrigger>
@@ -650,17 +650,17 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
                 <p>{isLoading ? "読み込み中" : isPlaying ? "一時停止" : "再生"}</p>
               </TooltipContent>
             </Tooltip>
-            
+
             <Tooltip>
               <TooltipTrigger asChild>
                 <motion.button
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                   onClick={onSkip}
-                  className="p-3 rounded-full bg-white bg-opacity-10 hover:bg-opacity-20 transition-all duration-200"
+                  className="p-3 rounded-full bg-white/20 hover:bg-white/30 transition-all duration-200"
                   aria-label="次の曲へ"
                 >
-                  <SkipForwardIcon size={24} />
+                  <SkipForwardIcon size={24} className="text-white" />
                 </motion.button>
               </TooltipTrigger>
               <TooltipContent>
@@ -679,13 +679,13 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
             aria-controls="queue-drawer"
           >
             <motion.div
-              className="flex items-center justify-center bg-white bg-opacity-10 rounded-full p-1 sm:p-2 mb-1 sm:mb-2"
+              className="flex items-center justify-center bg-white/20 rounded-full p-2 sm:p-3 mb-1 sm:mb-2"
               animate={{ y: [0, -5, 0] }}
               transition={{ repeat: Infinity, duration: 1.5 }}
             >
-              <ChevronUpIcon size={20} />
+              <ChevronUpIcon size={20} className="text-white" />
             </motion.div>
-            <span className="text-xs sm:text-sm text-white text-opacity-70">
+            <span className="text-xs sm:text-sm text-white/70">
               キューを表示
             </span>
           </motion.button>
