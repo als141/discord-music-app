@@ -28,6 +28,7 @@ import { AIRecommendScreen } from './AIRecommendScreen';
 import { VALORANTScreen } from './VALORANTScreen';
 import ArtistDialog from '@/components/ArtistDialog';
 import { RealtimeScreen } from './RealtimeScreen';
+import { VOICE_CHAT_ENABLED } from '@/lib/features';
 
 interface HomeScreenProps {
   onSelectTrack: (item: PlayableItem) => void;
@@ -348,50 +349,63 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   }, [toast]);
 
   // タブ定義
-  const tabs = useMemo(() => [
-    { 
-      id: 'home', 
-      label: { full: 'ホーム', short: '' }, 
-      icon: <Home className="w-5 h-5" />,
-      gradient: 'from-blue-500 to-purple-500',
-      ariaLabel: 'ホーム画面を表示'
-    },
-    { 
-      id: 'uploaded-music', 
-      label: { full: 'ライブラリ', short: '' }, 
-      icon: <Music2 className="w-5 h-5" />,
-      gradient: 'from-violet-500 to-indigo-500',
-      ariaLabel: 'ライブラリ画面を表示'
-    },
-    { 
-      id: 'chat', 
-      label: { full: 'チャット', short: '' }, 
-      icon: <MessageSquare className="w-5 h-5" />,
-      gradient: 'from-green-500 to-teal-500',
-      ariaLabel: 'チャット画面を表示'
-    },
-    { 
-      id: 'ai-recommend', 
-      label: { full: 'AIリコメンド', short: '' }, 
-      icon: <Brain className="w-5 h-5" />,
-      gradient: 'from-purple-500 to-pink-500',
-      ariaLabel: 'AIリコメンド画面を表示'
-    },
-    { 
-      id: 'valorant', 
-      label: { full: 'VALORANT', short: '' }, 
-      icon: <Target className="w-5 h-5" />,
-      gradient: 'from-red-500 to-orange-500',
-      ariaLabel: 'VALORANT画面を表示'
-    },
-    { 
-      id: 'realtime', 
-      label: { full: 'ボイスチャット', short: '' }, 
-      icon: <Mic className="w-5 h-5" />,
-      gradient: 'from-orange-500 to-yellow-500',
-      ariaLabel: 'ボイスチャット画面を表示'
+  const tabs = useMemo(() => {
+    const baseTabs = [
+      { 
+        id: 'home', 
+        label: { full: 'ホーム', short: '' }, 
+        icon: <Home className="w-5 h-5" />,
+        gradient: 'from-blue-500 to-purple-500',
+        ariaLabel: 'ホーム画面を表示'
+      },
+      { 
+        id: 'uploaded-music', 
+        label: { full: 'ライブラリ', short: '' }, 
+        icon: <Music2 className="w-5 h-5" />,
+        gradient: 'from-violet-500 to-indigo-500',
+        ariaLabel: 'ライブラリ画面を表示'
+      },
+      { 
+        id: 'chat', 
+        label: { full: 'チャット', short: '' }, 
+        icon: <MessageSquare className="w-5 h-5" />,
+        gradient: 'from-green-500 to-teal-500',
+        ariaLabel: 'チャット画面を表示'
+      },
+      { 
+        id: 'ai-recommend', 
+        label: { full: 'AIリコメンド', short: '' }, 
+        icon: <Brain className="w-5 h-5" />,
+        gradient: 'from-purple-500 to-pink-500',
+        ariaLabel: 'AIリコメンド画面を表示'
+      },
+      { 
+        id: 'valorant', 
+        label: { full: 'VALORANT', short: '' }, 
+        icon: <Target className="w-5 h-5" />,
+        gradient: 'from-red-500 to-orange-500',
+        ariaLabel: 'VALORANT画面を表示'
+      },
+    ];
+
+    if (VOICE_CHAT_ENABLED) {
+      baseTabs.push({ 
+        id: 'realtime', 
+        label: { full: 'ボイスチャット', short: '' }, 
+        icon: <Mic className="w-5 h-5" />,
+        gradient: 'from-orange-500 to-yellow-500',
+        ariaLabel: 'ボイスチャット画面を表示'
+      });
     }
-  ], []);
+
+    return baseTabs;
+  }, []);
+
+  useEffect(() => {
+    if (!tabs.some((tab) => tab.id === activeTab)) {
+      onTabChange('home');
+    }
+  }, [activeTab, onTabChange, tabs]);
 
   // ホーム画面の描画(履歴 + おすすめ)
   const renderHomeContent = useCallback(() => {
@@ -559,7 +573,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   <VALORANTScreen />
                 </div>
               )}
-              {activeTab === 'realtime' && (
+              {VOICE_CHAT_ENABLED && activeTab === 'realtime' && (
                 <div className="h-full">
                   <RealtimeScreen />
                 </div>
