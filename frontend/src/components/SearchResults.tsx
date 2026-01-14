@@ -4,7 +4,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PlayableItem, SearchItem, Track } from '@/utils/api';
-import { X, Search, Music, Disc, PlaySquare, ListMusic, Plus, Loader2, User, Music2 } from 'lucide-react';
+import { ChevronLeft, Search, Music, Disc, PlaySquare, ListMusic, Plus, Loader2, User, Music2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
@@ -81,33 +81,28 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
   return (
     <TooltipProvider delayDuration={300} skipDelayDuration={100}>
       <motion.div
-        className="fixed inset-0 bg-background z-50 overflow-hidden flex flex-col"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
+        className="fixed top-14 left-0 right-0 bottom-0 bg-background z-40 overflow-hidden flex flex-col"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 20 }}
+        transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
       >
-        {/* Header - Apple Music style frosted glass */}
-        <div className="glass border-b border-border/50 py-4 px-4 sm:px-6 z-10">
+        {/* Search Header */}
+        <div className="bg-background/95 backdrop-blur-sm border-b border-border/50 py-3 px-4 sm:px-6">
           <div className="max-w-screen-xl mx-auto">
-            {/* Title and close */}
-            <div className="flex justify-between items-center mb-4 pl-12 sm:pl-0">
-              <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">検索結果</h2>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={onClose}
-                    className="h-9 w-9 rounded-full hover:bg-black/5"
-                  >
-                    <X className="h-5 w-5 text-muted-foreground" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent className="bg-white/95 backdrop-blur-xl border-black/10">
-                  <p>閉じる</p>
-                </TooltipContent>
-              </Tooltip>
+            {/* Title and close button */}
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg sm:text-xl font-bold text-foreground tracking-tight">
+                検索結果
+              </h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onClose}
+                className="h-8 px-3 rounded-full hover:bg-black/5 active:bg-black/10 text-primary font-medium transition-all duration-150 flex items-center gap-1"
+              >
+                <span className="text-sm">閉じる</span>
+              </Button>
             </div>
 
             {/* Search form - Apple Music style */}
@@ -390,9 +385,10 @@ const SearchResultCard: React.FC<SearchResultCardProps> = ({
                 <Button
                   size="sm"
                   onClick={() => onAddToQueue(item)}
-                  className="h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-primary hover:bg-primary/90 text-white"
+                  className="h-8 w-8 sm:h-9 sm:w-9 rounded-full bg-black/[0.03] hover:bg-black/[0.08] active:bg-black/[0.12] text-primary hover:text-primary/80 transition-all duration-150 border border-black/[0.04]"
+                  variant="ghost"
                 >
-                  <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <Plus className="w-[18px] h-[18px] sm:w-5 sm:h-5" strokeWidth={1.5} />
                 </Button>
               </TooltipTrigger>
               <TooltipContent className="bg-white/95 backdrop-blur-xl border-black/10">
@@ -400,7 +396,7 @@ const SearchResultCard: React.FC<SearchResultCardProps> = ({
               </TooltipContent>
             </Tooltip>
           ) : (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -419,9 +415,10 @@ const SearchResultCard: React.FC<SearchResultCardProps> = ({
                         });
                       }
                     }}
-                    className="h-7 sm:h-8 px-2 sm:px-3 bg-primary hover:bg-primary/90 text-white rounded-full text-[10px] sm:text-xs font-medium"
+                    className="h-7 sm:h-8 px-2.5 sm:px-3 bg-primary/10 hover:bg-primary/20 active:bg-primary/25 text-primary rounded-full text-[10px] sm:text-xs font-medium transition-all duration-150"
+                    variant="ghost"
                   >
-                    <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-0.5 sm:mr-1" />
+                    <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-0.5" strokeWidth={2} />
                     全曲
                   </Button>
                 </TooltipTrigger>
@@ -438,7 +435,7 @@ const SearchResultCard: React.FC<SearchResultCardProps> = ({
                     fetchPlaylistTracks(item);
                   }
                 }}
-                className="h-7 sm:h-8 px-2 sm:px-3 rounded-full text-[10px] sm:text-xs hover:bg-black/5"
+                className="h-7 sm:h-8 px-2.5 sm:px-3 rounded-full text-[10px] sm:text-xs text-muted-foreground hover:text-foreground hover:bg-black/5 active:bg-black/10 transition-all duration-150"
               >
                 {isExpanded ? '閉じる' : 'トラック'}
               </Button>
