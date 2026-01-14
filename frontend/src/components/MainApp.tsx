@@ -388,6 +388,7 @@ export const MainApp: React.FC = () => {
                       onTabChange={(tab) => setHomeActiveTab(tab)}
                       history={history}
                       isOnDeviceMode={isOnDeviceMode}
+                      onAddUrl={handleAddUrl}
                     />
                   )}
                 </>

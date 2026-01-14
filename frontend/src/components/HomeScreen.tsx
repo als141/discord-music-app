@@ -16,7 +16,13 @@ import {
   ListMusic,
   Radio,
   Headphones,
+  Link2,
+  Clipboard,
+  Plus,
+  Sparkles,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useInView } from 'react-intersection-observer';
 import { UploadedMusicScreen } from './UploadedMusicScreen';
@@ -29,6 +35,7 @@ interface HomeScreenProps {
   onTabChange: (tab: string) => void;
   history: QueueItem[];
   isOnDeviceMode: boolean;
+  onAddUrl?: (url: string) => void;
 }
 
 interface VersionInfo {
@@ -273,6 +280,169 @@ const VersionDisplay = memo(({ versionInfo }: { versionInfo: VersionInfo }) => (
 
 VersionDisplay.displayName = 'VersionDisplay';
 
+// URL Add Card - Apple Music inspired floating card
+const URLAddCard = memo(({
+  onAddUrl,
+  isOnDeviceMode
+}: {
+  onAddUrl: (url: string) => void;
+  isOnDeviceMode: boolean;
+}) => {
+  const [url, setUrl] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast } = useToast();
+
+  const handlePaste = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      setUrl(text);
+      toast({
+        title: "ペーストしました",
+        description: "URLを入力欄に貼り付けました",
+      });
+    } catch (err) {
+      console.error('クリップボードからの読み取りに失敗しました: ', err);
+      toast({
+        title: "エラー",
+        description: "クリップボードからの読み取りに失敗しました",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!url.trim()) return;
+
+    setIsSubmitting(true);
+    try {
+      await onAddUrl(url);
+      setUrl('');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // デバイスモードでは表示しない
+  if (isOnDeviceMode) return null;
+
+  return (
+    <TooltipProvider>
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1], delay: 0.1 }}
+        className="px-4 sm:px-6 mb-6"
+      >
+      <div
+        className={`
+          relative overflow-hidden rounded-2xl
+          bg-gradient-to-br from-white via-white to-rose-50/30
+          border transition-all duration-300
+          ${isFocused
+            ? 'border-primary/30 shadow-lg shadow-primary/5'
+            : 'border-black/[0.04] shadow-sm'
+          }
+        `}
+      >
+        {/* Decorative gradient orb */}
+        <div className="absolute -top-12 -right-12 w-32 h-32 bg-gradient-to-br from-primary/10 via-rose-400/10 to-orange-300/10 rounded-full blur-2xl pointer-events-none" />
+        <div className="absolute -bottom-8 -left-8 w-24 h-24 bg-gradient-to-tr from-violet-400/10 to-primary/5 rounded-full blur-xl pointer-events-none" />
+
+        <div className="relative p-4 sm:p-5">
+          {/* Header */}
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 via-primary to-rose-600 shadow-md shadow-primary/20">
+              <Link2 className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className="text-[15px] font-semibold text-foreground tracking-tight">
+                URLから追加
+              </h3>
+              <p className="text-[12px] text-muted-foreground">
+                YouTube URLを貼り付けて曲を追加
+              </p>
+            </div>
+          </div>
+
+          {/* Input Form */}
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <div className="relative">
+              <Input
+                type="url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
+                placeholder="https://youtube.com/watch?v=..."
+                className={`
+                  w-full h-12 pl-4 pr-24
+                  bg-secondary/60 hover:bg-secondary/80
+                  border-0 rounded-xl
+                  text-[14px] placeholder:text-muted-foreground/60
+                  transition-all duration-200
+                  focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:bg-white
+                `}
+              />
+
+              {/* Action buttons inside input */}
+              <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      onClick={handlePaste}
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 rounded-lg hover:bg-black/5 active:bg-black/10 transition-colors"
+                    >
+                      <Clipboard className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="bg-foreground text-background text-xs px-2 py-1">
+                    ペースト
+                  </TooltipContent>
+                </Tooltip>
+
+                <Button
+                  type="submit"
+                  disabled={!url.trim() || isSubmitting}
+                  size="sm"
+                  className={`
+                    h-9 px-4 rounded-lg font-medium text-[13px]
+                    bg-primary hover:bg-primary/90 active:bg-primary/80
+                    text-white shadow-sm
+                    disabled:opacity-50 disabled:cursor-not-allowed
+                    transition-all duration-200
+                  `}
+                >
+                  {isSubmitting ? (
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                    >
+                      <Sparkles className="h-4 w-4" />
+                    </motion.div>
+                  ) : (
+                    <span className="flex items-center gap-1.5">
+                      <Plus className="h-4 w-4" />
+                      追加
+                    </span>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+      </motion.div>
+    </TooltipProvider>
+  );
+});
+
+URLAddCard.displayName = 'URLAddCard';
+
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   onSelectTrack,
   guildId,
@@ -280,6 +450,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onTabChange,
   history = [],
   isOnDeviceMode,
+  onAddUrl,
 }) => {
   const { toast } = useToast();
   const cacheTime = useRef<number | null>(null);
@@ -380,6 +551,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     return (
       <div className="h-full overflow-y-auto overflow-x-hidden bg-background">
         <div className="py-4 sm:py-6 space-y-8 sm:space-y-10">
+          {/* URL Add Card - Apple Music Style */}
+          {onAddUrl && !isOnDeviceMode && (
+            <URLAddCard onAddUrl={onAddUrl} isOnDeviceMode={isOnDeviceMode} />
+          )}
+
           {/* Recently Played - Apple Music Style */}
           {reversedHistory.length > 0 && guildId && (
             <section key="section-history" className="w-full" aria-labelledby="history-heading">
@@ -486,7 +662,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
       </div>
     );
-  }, [history, guildId, sections, loading, handleSelectTrackCallback, handleArtistClick]);
+  }, [history, guildId, sections, loading, handleSelectTrackCallback, handleArtistClick, onAddUrl, isOnDeviceMode]);
 
   return (
     <div className="flex flex-col h-full bg-background">
