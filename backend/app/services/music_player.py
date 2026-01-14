@@ -20,14 +20,20 @@ def get_ytdl_format_options() -> dict:
     """
     yt-dlp の設定オプションを取得
 
-    注意: JavaScriptランタイム（deno）をインストールすることで
-    YouTube署名解読が高速化され、警告が解消されます。
-    インストール方法: https://deno.com/ または apt/brew等で deno をインストール
+    YouTube認証とPO Token生成の設定:
+    - bgutil-ytdlp-pot-provider: PO Token（Proof of Origin）を自動生成
+    - cookies: YouTube Premiumアカウントの認証に使用
+    - player-client: web クライアントを使用（Premium機能利用のため）
+
+    参考: https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide
     """
     # フォーマット選択: 確実に取得できるようにフォールバックを多く設定
-    # 139: 低品質AAC (48k) - 常に利用可能
-    # bestaudio: 最高品質オーディオ
+    # YouTube Premiumユーザーは高品質フォーマットにアクセス可能
     format_string = 'bestaudio/best/139'
+
+    # bgutil-ytdlp-pot-provider のスクリプトパス
+    # Docker環境: /opt/bgutil-pot/server/build/generate_once.js
+    pot_script_path = '/opt/bgutil-pot/server/build/generate_once.js'
 
     options = {
         'format': format_string,
@@ -50,6 +56,16 @@ def get_ytdl_format_options() -> dict:
         # プレイリスト処理を無効化（単一動画のみ）
         'noplaylist': True,
     }
+
+    # bgutil-ytdlp-pot-provider のスクリプトパス設定
+    # Docker環境（Cloud Run）の場合のみ設定
+    if os.path.exists(pot_script_path):
+        options['extractor_args'] = {
+            'youtubepot-bgutilscript': {
+                'script_path': [pot_script_path]
+            }
+        }
+        logger.info(f"PO Token provider script configured: {pot_script_path}")
 
     # YouTube認証用クッキーファイル（環境変数COOKIES_FILEで設定）
     cookies_path = settings.music.cookies_file

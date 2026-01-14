@@ -32,6 +32,7 @@ FROM python:3.12-slim AS runtime
 # - libffi8: ctypesなどの外部関数インターフェースに必要
 # - ca-certificates: HTTPS通信用の証明書
 # - curl, unzip: denoのインストールに必要
+# - git: bgutil-ytdlp-pot-providerのクローンに必要
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libopus0 \
@@ -40,13 +41,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     unzip \
+    git \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
+
+# Node.js 20 LTS のインストール（bgutil-ytdlp-pot-provider用）
+# PO Token生成にはNode.js 18以上が必要
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
 
 # deno のインストール（yt-dlpのYouTube署名解読を高速化）
 # yt-dlpはJavaScriptランタイムを使用してYouTubeの署名を解読する
 RUN curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh \
     && chmod +x /usr/local/bin/deno
+
+# bgutil-ytdlp-pot-provider のサーバースクリプトをセットアップ
+# PO Token（Proof of Origin）を自動生成してYouTubeのボット検出を回避
+RUN git clone --single-branch --branch 1.2.2 https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git /opt/bgutil-pot \
+    && cd /opt/bgutil-pot/server \
+    && npm install \
+    && npx tsc
 
 # セキュリティ: 非rootユーザーで実行
 RUN useradd --create-home --shell /bin/bash appuser

@@ -12,6 +12,7 @@ dependencies = [
     "annotated-types",
     "anyio",
     "attrs",
+    "bgutil-ytdlp-pot-provider>=1.2.2",
     "Brotli",
     "certifi",
     "charset-normalizer",
