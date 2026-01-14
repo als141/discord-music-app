@@ -18,13 +18,12 @@ logger = get_logger(__name__)
 
 def get_ytdl_format_options() -> dict:
     """yt-dlp の設定オプションを取得"""
-    return {
+    options = {
         'format': settings.music.ytdl_format,
         'outtmpl': f'{settings.music.directory}/%(title)s-%(id)s.%(ext)s',
         'restrictfilenames': True,
         'nocheckcertificate': True,
         'ignoreerrors': True,  # プレイリスト内で一部の動画が利用不可でも継続
-        'cookiefile': '/home/als0028/work/irina/discord-music-app/backend/cookies.txt',  # YouTubeクッキーファイル
         'no_warnings': True,
         'default_search': 'auto',
         'source_address': '0.0.0.0',
@@ -34,6 +33,13 @@ def get_ytdl_format_options() -> dict:
         'extractor_retries': 3,  # エクストラクターリトライ回数
         # postprocessorsを削除し、MP3への変換を行わないようにする
     }
+
+    # YouTube認証用クッキーファイル（環境変数COOKIES_FILEで設定）
+    if settings.music.cookies_file and os.path.exists(settings.music.cookies_file):
+        options['cookiefile'] = settings.music.cookies_file
+        logger.info(f"YouTube cookies file loaded: {settings.music.cookies_file}")
+
+    return options
 
 def get_ffmpeg_options(is_local_file: bool = False) -> dict:
     """FFmpeg の設定オプションを取得"""

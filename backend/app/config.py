@@ -58,11 +58,14 @@ class MusicSettings(BaseSettings):
     oauth2_username: str = Field("oauth2", env="OAUTH2_USERNAME")
     oauth2_password: str = Field("", env="OAUTH2_PASSWORD")
     upload_directory: str = Field("uploaded_music", env="UPLOAD_DIR")
-    
+
     # yt-dlp設定
     ytdl_format: str = Field("bestaudio", env="YTDL_FORMAT")
     ytdl_extract_flat: bool = Field(False, env="YTDL_EXTRACT_FLAT")
-    
+
+    # YouTube認証用クッキーファイル（空文字列の場合は使用しない）
+    cookies_file: str = Field("", env="COOKIES_FILE")
+
     model_config = {"env_prefix": "MUSIC_"}
 
 class DatabaseSettings(BaseSettings):
@@ -191,6 +194,7 @@ MUSIC_DIR = settings.music.directory
 UPLOAD_DIR = settings.music.upload_directory
 OAUTH2_USERNAME = settings.music.oauth2_username
 OAUTH2_PASSWORD = settings.music.oauth2_password
+COOKIES_FILE = settings.music.cookies_file
 PROMPT = settings.system_prompt
 VOICE_SYSTEM = settings.voice_system_prompt
 ALLOWED_CHANNELS = settings.discord.allowed_channels
