@@ -299,19 +299,19 @@ export const SideMenu: React.FC<SideMenuProps> = ({
       <AnimatePresence>
         {isOpen && (
           <>
-            {/* Overlay */}
+            {/* Overlay - must be above Header (z-100) */}
             <motion.div
               initial="closed"
               animate="open"
               exit="closed"
               variants={animations.overlay}
-              className="fixed inset-0 bg-black/30 z-40 backdrop-blur-sm"
+              className="fixed inset-0 bg-black/30 z-[150] backdrop-blur-sm"
               onClick={onClose}
             />
 
-            {/* Sidebar Panel */}
+            {/* Sidebar Panel - must be above overlay */}
             <motion.div
-              className="fixed inset-y-0 left-0 w-80 bg-background z-50 shadow-2xl flex flex-col"
+              className="fixed inset-y-0 left-0 w-80 bg-background z-[151] shadow-2xl flex flex-col"
               initial="closed"
               animate="open"
               exit="closed"
