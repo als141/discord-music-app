@@ -94,8 +94,18 @@ def get_ffmpeg_options(is_local_file: bool = False) -> dict:
             'options': '-vn'
         }
 
-# yt-dlp インスタンスを作成
-ytdl = yt_dlp.YoutubeDL(get_ytdl_format_options())
+# yt-dlp インスタンス（遅延初期化）
+_ytdl_instance = None
+
+def get_ytdl():
+    """yt-dlpインスタンスを遅延初期化して取得"""
+    global _ytdl_instance
+    if _ytdl_instance is None:
+        options = get_ytdl_format_options()
+        _ytdl_instance = yt_dlp.YoutubeDL(options)
+        # 起動時に必ず出力
+        print(f"[STARTUP] yt-dlp initialized with cookiefile: {options.get('cookiefile', 'NOT SET')}")
+    return _ytdl_instance
 
 # 後方互換性のための定数
 MUSIC_DIR = settings.music.directory
@@ -316,7 +326,7 @@ class MusicPlayer:
                     logger.debug(f"音楽をダウンロード中: {song.title} ({song.url})")
 
                     # ダウンロード実行（1回のextract_info呼び出しのみ）
-                    info = ytdl.extract_info(song.url, download=True)
+                    info = get_ytdl().extract_info(song.url, download=True)
                     if info is None:
                         raise Exception("動画情報の取得に失敗しました")
 
@@ -326,7 +336,7 @@ class MusicPlayer:
                             raise Exception("プレイリストに有効な動画がありません")
 
                     # 元のファイル名をそのまま使用（拡張子変換なし）
-                    filename = ytdl.prepare_filename(info)
+                    filename = get_ytdl().prepare_filename(info)
 
                     if not os.path.exists(filename):
                         logger.error(f"ダウンロードされたファイルが見つかりません: {filename}")
@@ -372,7 +382,7 @@ class MusicPlayer:
             if not url.startswith("ytsearch1:"):
                 url = "ytsearch1:" + url[len("ytsearch:"):]
             try:
-                search_result = ytdl.extract_info(url, download=False)
+                search_result = get_ytdl().extract_info(url, download=False)
                 if search_result is None:
                     raise Exception(f"検索結果が取得できません: {url}")
                 if 'entries' in search_result and search_result['entries']:
@@ -401,7 +411,7 @@ class MusicPlayer:
         # YouTube/外部URLの処理
         try:
             logger.debug(f"yt-dlpで情報を取得中: {url}")
-            info = ytdl.extract_info(url, download=False)
+            info = get_ytdl().extract_info(url, download=False)
 
             if info is None:
                 logger.error(f"yt-dlpがNoneを返しました: {url}")
