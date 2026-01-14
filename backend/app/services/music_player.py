@@ -35,9 +35,17 @@ def get_ytdl_format_options() -> dict:
     }
 
     # YouTube認証用クッキーファイル（環境変数COOKIES_FILEで設定）
-    if settings.music.cookies_file and os.path.exists(settings.music.cookies_file):
-        options['cookiefile'] = settings.music.cookies_file
-        logger.info(f"YouTube cookies file loaded: {settings.music.cookies_file}")
+    cookies_path = settings.music.cookies_file
+    logger.info(f"COOKIES_FILE env value: '{cookies_path}'")
+    if cookies_path:
+        logger.info(f"Checking if cookies file exists at: {cookies_path}")
+        if os.path.exists(cookies_path):
+            options['cookiefile'] = cookies_path
+            logger.info(f"YouTube cookies file loaded: {cookies_path}")
+        else:
+            logger.warning(f"Cookies file NOT FOUND at: {cookies_path}")
+    else:
+        logger.info("COOKIES_FILE not set, skipping cookies authentication")
 
     return options
 
