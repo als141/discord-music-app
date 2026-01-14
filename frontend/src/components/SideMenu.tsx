@@ -18,6 +18,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { useGuildStore } from '@/store/useGuildStore';
+import { VOICE_CHAT_ENABLED } from '@/lib/features';
 
 // アニメーション設定
 const animations = {
@@ -52,7 +53,7 @@ interface SideMenuProps {
   onRefresh: () => void;
   onInviteBot: (serverId: string) => void;
   onDisconnect: () => void;
-  onFetchServers: () => Promise<void>;
+  onFetchServers: (force?: boolean) => Promise<void>;
 }
 
 // メモ化したヘッダーコンポーネント
@@ -125,16 +126,20 @@ const UserProfile = memo(() => {
 UserProfile.displayName = 'UserProfile';
 
 // メモ化したサーバーリストアイテムコンポーネント
-const ServerListItem = memo(({ 
-  server, 
-  isActive, 
-  onSelect, 
-  onDisconnect 
-}: { 
-  server: { id: string; name: string; icon?: string }, 
-  isActive: boolean, 
-  onSelect: () => void, 
-  onDisconnect: () => void 
+const ServerListItem = memo(({
+  server,
+  isActive,
+  isBotConnected,
+  isLoading,
+  onSelect,
+  onDisconnect
+}: {
+  server: { id: string; name: string; icon?: string },
+  isActive: boolean,
+  isBotConnected: boolean,
+  isLoading: boolean,
+  onSelect: () => void,
+  onDisconnect: () => void
 }) => (
   <div className="flex items-center my-1">
     <Button
@@ -146,12 +151,26 @@ const ServerListItem = memo(({
       <Server size={16} className={isActive ? 'text-primary-foreground' : 'text-muted-foreground'} />
       <span className="truncate">{server.name}</span>
       {isActive && (
-        <Badge variant="secondary" className="ml-2 bg-primary-foreground/20 text-primary-foreground">
-          接続中
-        </Badge>
+        <>
+          {isLoading ? (
+            <Badge variant="secondary" className="ml-2 bg-primary-foreground/20 text-primary-foreground">
+              <RefreshCw size={12} className="animate-spin mr-1" />
+              確認中
+            </Badge>
+          ) : isBotConnected ? (
+            <Badge variant="secondary" className="ml-2 bg-green-500/20 text-green-100">
+              <span className="w-2 h-2 rounded-full bg-green-400 mr-1 animate-pulse" />
+              接続中
+            </Badge>
+          ) : (
+            <Badge variant="secondary" className="ml-2 bg-primary-foreground/20 text-primary-foreground">
+              選択中
+            </Badge>
+          )}
+        </>
       )}
     </Button>
-    {isActive && (
+    {isActive && isBotConnected && (
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
@@ -175,14 +194,16 @@ const ServerListItem = memo(({
 ServerListItem.displayName = 'ServerListItem';
 
 // メモ化したボイスチャンネルリストアイテムコンポーネント
-const VoiceChannelItem = memo(({ 
-  channel, 
-  isActive, 
-  onClick 
-}: { 
-  channel: VoiceChannel, 
-  isActive: boolean, 
-  onClick: () => void 
+const VoiceChannelItem = memo(({
+  channel,
+  isActive,
+  isBotInChannel,
+  onClick
+}: {
+  channel: VoiceChannel,
+  isActive: boolean,
+  isBotInChannel: boolean,
+  onClick: () => void
 }) => (
   <motion.li
     variants={animations.item}
@@ -194,14 +215,17 @@ const VoiceChannelItem = memo(({
   >
     <Button
       onClick={onClick}
-      variant={isActive ? "secondary" : "ghost"}
+      variant={isBotInChannel ? "secondary" : isActive ? "outline" : "ghost"}
       className="w-full justify-start group relative"
       aria-pressed={isActive}
     >
-      <Mic size={16} className={`mr-2 ${isActive ? 'text-primary' : 'text-muted-foreground'}`} />
+      <Mic size={16} className={`mr-2 ${isBotInChannel ? 'text-green-500' : isActive ? 'text-primary' : 'text-muted-foreground'}`} />
       <span className="truncate">{channel.name}</span>
-      {isActive && (
-        <ChevronRight size={18} className="ml-auto flex-shrink-0 text-primary" />
+      {isBotInChannel && (
+        <Badge variant="secondary" className="ml-auto bg-green-500/20 text-green-600 dark:text-green-400 text-xs">
+          <span className="w-1.5 h-1.5 rounded-full bg-green-500 mr-1 animate-pulse" />
+          接続中
+        </Badge>
       )}
     </Button>
   </motion.li>
@@ -245,7 +269,15 @@ export const SideMenu: React.FC<SideMenuProps> = ({
   const [botVersion, setBotVersion] = useState<string | null>(null);
 
   // サーバー一覧の状態
-  const { mutualServers, inviteServers, isLoadingServers, serversError } = useGuildStore();
+  const {
+    mutualServers,
+    inviteServers,
+    isLoadingServers,
+    serversError,
+    isBotConnected,
+    botVoiceChannelId,
+    isLoadingBotStatus
+  } = useGuildStore();
 
   // スワイプ処理用
   const swipeHandlers = useSwipeable({
@@ -282,7 +314,7 @@ export const SideMenu: React.FC<SideMenuProps> = ({
   // サーバー一覧の再取得
   const handleFetchServers = async () => {
     try {
-      await onFetchServers();
+      await onFetchServers(true);
       toast({
         title: "成功",
         description: "サーバー一覧を更新しました。",
@@ -401,6 +433,8 @@ export const SideMenu: React.FC<SideMenuProps> = ({
                               key={server.id}
                               server={server}
                               isActive={activeServerId === server.id}
+                              isBotConnected={activeServerId === server.id && isBotConnected}
+                              isLoading={activeServerId === server.id && isLoadingBotStatus}
                               onSelect={() => onSelectServer(server.id)}
                               onDisconnect={onDisconnect}
                             />
@@ -411,7 +445,7 @@ export const SideMenu: React.FC<SideMenuProps> = ({
                   </div>
 
                   {/* ボイスチャンネル */}
-                  {activeServerId && (
+                  {VOICE_CHAT_ENABLED && activeServerId && (
                     <div>
                       <h3 className="text-lg font-semibold mb-3 flex items-center">
                         <Mic size={20} className="mr-2" /> ボイスチャンネル
@@ -430,6 +464,7 @@ export const SideMenu: React.FC<SideMenuProps> = ({
                               key={channel.id}
                               channel={channel}
                               isActive={activeChannelId === channel.id}
+                              isBotInChannel={botVoiceChannelId === channel.id}
                               onClick={() => onSelectChannel(channel.id)}
                             />
                           ))}

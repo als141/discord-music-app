@@ -7,7 +7,7 @@ interface PlaybackContextProps {
   duration: number;
   setCurrentTime: (time: number) => void;
   setDuration: (duration: number) => void;
-  audioRef: React.RefObject<HTMLAudioElement>;
+  audioRef: React.RefObject<HTMLAudioElement | null>;
 }
 
 const PlaybackContext = createContext<PlaybackContextProps | undefined>(undefined);

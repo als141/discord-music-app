@@ -11,23 +11,15 @@ import {
   History,
   Sparkles,
   Home,
-  MessageSquare,
-  Brain,
-  Target,
-  Mic,
   ExternalLink,
   Info,
   Music2,
 } from 'lucide-react';
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+// Note: Using native scroll instead of Radix ScrollArea for better nested scroll support
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useInView } from 'react-intersection-observer';
 import { UploadedMusicScreen } from './UploadedMusicScreen';
-import { ChatScreen } from './ChatScreen';
-import { AIRecommendScreen } from './AIRecommendScreen';
-import { VALORANTScreen } from './VALORANTScreen';
 import ArtistDialog from '@/components/ArtistDialog';
-import { RealtimeScreen } from './RealtimeScreen';
 
 interface HomeScreenProps {
   onSelectTrack: (item: PlayableItem) => void;
@@ -347,154 +339,133 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     fetchData();
   }, [toast]);
 
-  // タブ定義
+  // タブ定義（ホームとライブラリのみ）
   const tabs = useMemo(() => [
-    { 
-      id: 'home', 
-      label: { full: 'ホーム', short: '' }, 
+    {
+      id: 'home',
+      label: { full: 'ホーム', short: '' },
       icon: <Home className="w-5 h-5" />,
       gradient: 'from-blue-500 to-purple-500',
       ariaLabel: 'ホーム画面を表示'
     },
-    { 
-      id: 'uploaded-music', 
-      label: { full: 'ライブラリ', short: '' }, 
+    {
+      id: 'uploaded-music',
+      label: { full: 'ライブラリ', short: '' },
       icon: <Music2 className="w-5 h-5" />,
       gradient: 'from-violet-500 to-indigo-500',
       ariaLabel: 'ライブラリ画面を表示'
     },
-    { 
-      id: 'chat', 
-      label: { full: 'チャット', short: '' }, 
-      icon: <MessageSquare className="w-5 h-5" />,
-      gradient: 'from-green-500 to-teal-500',
-      ariaLabel: 'チャット画面を表示'
-    },
-    { 
-      id: 'ai-recommend', 
-      label: { full: 'AIリコメンド', short: '' }, 
-      icon: <Brain className="w-5 h-5" />,
-      gradient: 'from-purple-500 to-pink-500',
-      ariaLabel: 'AIリコメンド画面を表示'
-    },
-    { 
-      id: 'valorant', 
-      label: { full: 'VALORANT', short: '' }, 
-      icon: <Target className="w-5 h-5" />,
-      gradient: 'from-red-500 to-orange-500',
-      ariaLabel: 'VALORANT画面を表示'
-    },
-    { 
-      id: 'realtime', 
-      label: { full: 'ボイスチャット', short: '' }, 
-      icon: <Mic className="w-5 h-5" />,
-      gradient: 'from-orange-500 to-yellow-500',
-      ariaLabel: 'ボイスチャット画面を表示'
-    }
   ], []);
+
+  useEffect(() => {
+    if (!tabs.some((tab) => tab.id === activeTab)) {
+      onTabChange('home');
+    }
+  }, [activeTab, onTabChange, tabs]);
 
   // ホーム画面の描画(履歴 + おすすめ)
   const renderHomeContent = useCallback(() => {
     const reversedHistory = [...history].reverse();
-    
+
     return (
-      <ScrollArea className="h-full">
-        <div className="p-4 space-y-10">
+      <div className="h-full overflow-y-auto overflow-x-hidden">
+        <div className="py-3 sm:py-4 space-y-6 sm:space-y-8">
           {/* 再生履歴 */}
           {reversedHistory.length > 0 && guildId && (
             <section key="section-history" className="w-full" aria-labelledby="history-heading">
-              <div className="flex items-center mb-4">
-                <div className="mr-2 p-2 bg-primary/10 rounded-full">
-                  <History className="w-6 h-6 text-primary" />
+              <div className="flex items-center mb-3 sm:mb-4 px-3 sm:px-4">
+                <div className="mr-2 p-1.5 sm:p-2 bg-primary/10 rounded-full">
+                  <History className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
                 </div>
-                <h2 id="history-heading" className="text-2xl font-bold">再生履歴</h2>
+                <h2 id="history-heading" className="text-lg sm:text-2xl font-bold">再生履歴</h2>
               </div>
-              <ScrollArea className="w-full whitespace-nowrap rounded-md border">
-                <motion.div 
-                  className="flex space-x-4 p-4" 
-                  variants={animations.container}
-                  initial="hidden"
-                  animate="visible"
-                >
-                  {reversedHistory.map((item, idx) => (
-                    <motion.div key={`history-${idx}`} className="w-[200px] h-[280px]" variants={animations.item}>
-                      <HistoryCard item={item} onSelectTrack={handleSelectTrackCallback} />
-                    </motion.div>
-                  ))}
-                </motion.div>
-                <ScrollBar orientation="horizontal" />
-              </ScrollArea>
+              {/* 横スクロールコンテナ - ネイティブスクロール使用 */}
+              <div className="horizontal-scroll-container gap-3 sm:gap-4">
+                {/* 左端のパディング用スペーサー */}
+                <div className="w-3 min-w-[12px] sm:w-4 sm:min-w-[16px] flex-shrink-0" aria-hidden="true" />
+                {reversedHistory.map((item, idx) => (
+                  <div
+                    key={`history-${idx}`}
+                    className="w-[140px] min-w-[140px] sm:w-[170px] sm:min-w-[170px] md:w-[200px] md:min-w-[200px]"
+                  >
+                    <HistoryCard item={item} onSelectTrack={handleSelectTrackCallback} />
+                  </div>
+                ))}
+                {/* 右端のパディング用スペーサー */}
+                <div className="w-3 min-w-[12px] sm:w-4 sm:min-w-[16px] flex-shrink-0" aria-hidden="true" />
+              </div>
             </section>
           )}
 
           {/* おすすめセクション */}
           {sections.map((section, index) => (
             <section key={`section-${index}`} className="w-full" aria-labelledby={`section-heading-${index}`}>
-              <div className="flex items-center mb-4">
-                <div className="mr-2 p-2 bg-primary/10 rounded-full">
-                  <Sparkles className="w-6 h-6 text-primary" />
+              <div className="flex items-center mb-3 sm:mb-4 px-3 sm:px-4">
+                <div className="mr-2 p-1.5 sm:p-2 bg-primary/10 rounded-full">
+                  <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
                 </div>
-                <h2 id={`section-heading-${index}`} className="text-2xl font-bold">{section.title}</h2>
+                <h2 id={`section-heading-${index}`} className="text-lg sm:text-2xl font-bold line-clamp-1">{section.title}</h2>
               </div>
-              <ScrollArea className="w-full whitespace-nowrap rounded-md border">
-                <motion.div 
-                  className="flex space-x-4 p-4"
-                  variants={animations.container}
-                  initial="hidden"
-                  animate="visible"
-                >
-                  {section.contents.map((item, idx) => (
-                    <motion.div key={`item-${idx}`} className="w-[200px] h-[280px]" variants={animations.item}>
-                      <TrackCard 
-                        item={item} 
-                        onSelectTrack={handleSelectTrackCallback} 
-                        onArtistClick={handleArtistClick} 
-                      />
-                    </motion.div>
-                  ))}
-                </motion.div>
-                <ScrollBar orientation="horizontal" />
-              </ScrollArea>
+              {/* 横スクロールコンテナ - ネイティブスクロール使用 */}
+              <div className="horizontal-scroll-container gap-3 sm:gap-4">
+                {/* 左端のパディング用スペーサー */}
+                <div className="w-3 min-w-[12px] sm:w-4 sm:min-w-[16px] flex-shrink-0" aria-hidden="true" />
+                {section.contents.map((item, idx) => (
+                  <div
+                    key={`item-${idx}`}
+                    className="w-[140px] min-w-[140px] sm:w-[170px] sm:min-w-[170px] md:w-[200px] md:min-w-[200px]"
+                  >
+                    <TrackCard
+                      item={item}
+                      onSelectTrack={handleSelectTrackCallback}
+                      onArtistClick={handleArtistClick}
+                    />
+                  </div>
+                ))}
+                {/* 右端のパディング用スペーサー */}
+                <div className="w-3 min-w-[12px] sm:w-4 sm:min-w-[16px] flex-shrink-0" aria-hidden="true" />
+              </div>
             </section>
           ))}
         </div>
-      </ScrollArea>
+      </div>
     );
   }, [history, guildId, sections, handleSelectTrackCallback, handleArtistClick]);
 
   return (
     <div className="flex flex-col h-full">
       {/* ヘッダー部 */}
-      <div className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-25 flex flex-col items-center py-4 sticky top-0">
-        {/* タブ一覧 */}
-        <nav 
-          className="flex space-x-1 p-1 rounded-full bg-muted"
-          aria-label="メインナビゲーション"
-          role="tablist"
-        >
-          {tabs.map((tab) => (
-            <motion.button
-              key={tab.id}
-              className={`flex items-center px-3 sm:px-4 py-2 text-sm font-medium rounded-full transition-all duration-300 ${
-                activeTab === tab.id
-                  ? `bg-gradient-to-r ${tab.gradient} text-white`
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted-foreground/10'
-              }`}
-              onClick={() => onTabChange(tab.id)}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              role="tab"
-              aria-selected={activeTab === tab.id}
-              aria-controls={`panel-${tab.id}`}
-              id={`tab-${tab.id}`}
-              aria-label={tab.ariaLabel}
-            >
-              {tab.icon}
-              <span className="ml-2 hidden sm:inline">{tab.label.full}</span>
-              <span className="ml-2 sm:hidden">{tab.label.short}</span>
-            </motion.button>
-          ))}
-        </nav>
+      <div className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-25 flex flex-col items-center py-2 sm:py-4 sticky top-0">
+        {/* タブ一覧 - 横スクロール対応 */}
+        <div className="w-full max-w-full px-2 sm:px-4 overflow-x-auto scrollbar-thin">
+          <nav
+            className="flex space-x-1 p-1 rounded-full bg-muted w-fit mx-auto min-w-max"
+            aria-label="メインナビゲーション"
+            role="tablist"
+          >
+            {tabs.map((tab) => (
+              <motion.button
+                key={tab.id}
+                className={`flex items-center px-2.5 xs:px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-full transition-all duration-300 whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? `bg-gradient-to-r ${tab.gradient} text-white`
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted-foreground/10'
+                }`}
+                onClick={() => onTabChange(tab.id)}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                aria-controls={`panel-${tab.id}`}
+                id={`tab-${tab.id}`}
+                aria-label={tab.ariaLabel}
+              >
+                {tab.icon}
+                <span className="ml-1.5 sm:ml-2 hidden xs:inline">{tab.label.full}</span>
+              </motion.button>
+            ))}
+          </nav>
+        </div>
 
         {/* バージョン表示 */}
         <VersionDisplay versionInfo={versionInfo} />
@@ -542,26 +513,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               {activeTab === 'uploaded-music' && (
                 <div className="h-full">
                   <UploadedMusicScreen guildId={guildId} />
-                </div>
-              )}
-              {activeTab === 'chat' && (
-                <div className="h-full">
-                  <ChatScreen />
-                </div>
-              )}
-              {activeTab === 'ai-recommend' && (
-                <div className="h-full">
-                  <AIRecommendScreen onSelectTrack={handleSelectTrackCallback} />
-                </div>
-              )}
-              {activeTab === 'valorant' && (
-                <div className="h-full">
-                  <VALORANTScreen />
-                </div>
-              )}
-              {activeTab === 'realtime' && (
-                <div className="h-full">
-                  <RealtimeScreen />
                 </div>
               )}
             </motion.div>

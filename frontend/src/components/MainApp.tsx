@@ -20,6 +20,7 @@ import { IntroPage } from './IntroPage';
 import { ErrorBoundary } from './ErrorBoundary';
 import { HomeScreen } from './HomeScreen';
 import { useGuildStore, usePlayerStore, setupWebSocket, cleanupWebSocket } from '@/store';
+import { VOICE_CHAT_ENABLED } from '@/lib/features';
 
 // API URL の取得
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -42,17 +43,18 @@ export const MainApp: React.FC = () => {
   const { toast } = useToast();
   
   // Zustand ストアから状態を取得
-  const { 
+  const {
     activeServerId, activeChannelId, voiceChannels, setActiveServerId, setActiveChannelId,
-    fetchMutualServers, fetchVoiceChannels, inviteBot, 
-    joinVoiceChannel, disconnectVoiceChannel
+    fetchMutualServers, fetchVoiceChannels, inviteBot,
+    joinVoiceChannel, disconnectVoiceChannel,
+    fetchBotVoiceStatus, stopVoiceStatusPolling
   } = useGuildStore();
   
   const {
     currentTrack, queue, isPlaying, isLoading, history,
     isOnDeviceMode, deviceQueue, deviceCurrentTrack, deviceIsPlaying,
     isMainPlayerVisible, setIsMainPlayerVisible,
-    play, pause, skip, previous, 
+    play, pause, skip,
     addToQueue, reorderQueue, removeFromQueue,
     toggleDeviceMode, audioRef
   } = usePlayerStore();
@@ -71,44 +73,57 @@ export const MainApp: React.FC = () => {
   // WebSocket 参照
   const wsConnectionRef = useRef<{ close: () => void } | null>(null);
 
-  // アプリケーションの初期化
+  // サーバー一覧の初期取得（認証済みのときのみ）
   useEffect(() => {
-    // ミュータブルサーバー一覧を取得
-    fetchMutualServers();
-    
-    // ローカルストレージから状態を復元
+    if (status === 'authenticated') {
+      fetchMutualServers();
+    }
+  }, [fetchMutualServers, status]);
+
+  // 初回マウント時に保存されているactiveServerIdのボイス状態を取得
+  const initialLoadRef = useRef(false);
+  useEffect(() => {
+    if (status === 'authenticated' && activeServerId && !initialLoadRef.current) {
+      initialLoadRef.current = true;
+      // 保存されているactiveServerIdがある場合、ボイスチャンネルとボットステータスを取得
+      fetchVoiceChannels(activeServerId);
+      fetchBotVoiceStatus(activeServerId);
+    }
+  }, [status, activeServerId, fetchVoiceChannels, fetchBotVoiceStatus]);
+
+  // ローカルストレージから状態を復元
+  useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedHomeTab = localStorage.getItem('homeActiveTab');
       if (savedHomeTab) {
         setHomeActiveTab(savedHomeTab);
       }
     }
-    
-    // クリーンアップ関数
+
     return () => {
       cleanupWebSocket();
+      stopVoiceStatusPolling();
     };
-  }, [fetchMutualServers]);
+  }, [stopVoiceStatusPolling]);
   
-  // activeServerId 変更時にボイスチャンネルを取得
+  // activeServerId 変更時にWebSocketを設定
+  // Note: ボイスチャンネルとボットステータスの取得は setActiveServerId 内で行われる
   useEffect(() => {
     if (activeServerId) {
-      fetchVoiceChannels(activeServerId);
-      
       // WebSocketの設定
       if (wsConnectionRef.current) {
         wsConnectionRef.current.close();
       }
       wsConnectionRef.current = setupWebSocket(activeServerId);
     }
-    
+
     return () => {
       if (wsConnectionRef.current) {
         wsConnectionRef.current.close();
         wsConnectionRef.current = null;
       }
     };
-  }, [activeServerId, fetchVoiceChannels]);
+  }, [activeServerId]);
 
   // homeActiveTab の変更時に localStorage に保存
   useEffect(() => {
@@ -307,7 +322,6 @@ export const MainApp: React.FC = () => {
                     onPlay={play}
                     onPause={pause}
                     onSkip={skip}
-                    onPrevious={previous}
                     queue={deviceQueue}
                     onReorder={reorderQueue}
                     onDelete={removeFromQueue}
@@ -351,7 +365,6 @@ export const MainApp: React.FC = () => {
                         onPlay={play}
                         onPause={pause}
                         onSkip={skip}
-                        onPrevious={previous}
                         queue={queue}
                         onReorder={reorderQueue}
                         onDelete={removeFromQueue}
@@ -394,12 +407,13 @@ export const MainApp: React.FC = () => {
             transition={{ duration: 0.3 }}
             {...miniPlayerSwipeHandlers}
           >
-            <Image 
-              src={isOnDeviceMode ? deviceCurrentTrack!.thumbnail : currentTrack!.thumbnail} 
-              alt={isOnDeviceMode ? deviceCurrentTrack!.title : currentTrack!.title} 
-              width={48} 
-              height={48} 
+            <Image
+              src={isOnDeviceMode ? deviceCurrentTrack!.thumbnail : currentTrack!.thumbnail}
+              alt={isOnDeviceMode ? deviceCurrentTrack!.title : currentTrack!.title}
+              width={48}
+              height={48}
               className="object-cover rounded-md flex-shrink-0"
+              style={{ width: 48, height: 48 }}
               unoptimized
             />
             <div className="ml-4 flex-grow min-w-0 mr-4">

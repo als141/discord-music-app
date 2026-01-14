@@ -4,6 +4,14 @@ import { persist } from 'zustand/middleware';
 import { api, Server, VoiceChannel } from '@/utils/api';
 import { setActiveServerIdGetter } from './usePlayerStore';
 
+const MIN_SERVER_FETCH_INTERVAL_MS = 15000;
+let mutualServersRequest: Promise<void> | null = null;
+let lastServersFetchAt = 0;
+
+// ボイスステータスポーリング用タイマー
+let voiceStatusPollingTimer: NodeJS.Timeout | null = null;
+const VOICE_STATUS_POLLING_INTERVAL_MS = 10000; // 10秒間隔でポーリング
+
 interface GuildState {
   // サーバー情報
   mutualServers: Server[];
@@ -11,17 +19,25 @@ interface GuildState {
   activeServerId: string | null;
   activeChannelId: string | null;
   voiceChannels: VoiceChannel[];
-  
+
+  // ボットの実際のボイスチャンネル状態
+  botVoiceChannelId: string | null;
+  isBotConnected: boolean;
+
   // 読み込み状態
   isLoadingServers: boolean;
   serversError: string | null;
   isLoadingChannels: boolean;
-  
+  isLoadingBotStatus: boolean;
+
   // アクション
   setActiveServerId: (serverId: string | null) => void;
   setActiveChannelId: (channelId: string | null) => void;
-  fetchMutualServers: () => Promise<void>;
+  fetchMutualServers: (force?: boolean) => Promise<void>;
   fetchVoiceChannels: (serverId: string) => Promise<void>;
+  fetchBotVoiceStatus: (serverId: string) => Promise<void>;
+  startVoiceStatusPolling: (serverId: string) => void;
+  stopVoiceStatusPolling: () => void;
   inviteBot: (serverId: string) => void;
   joinVoiceChannel: (serverId: string, channelId: string) => Promise<void>;
   disconnectVoiceChannel: (serverId: string) => Promise<void>;
@@ -38,15 +54,35 @@ export const useGuildStore = create<GuildState>()(
       activeServerId: null,
       activeChannelId: null,
       voiceChannels: [],
+
+      // ボットの実際のボイスチャンネル状態
+      botVoiceChannelId: null,
+      isBotConnected: false,
+
       isLoadingServers: false,
       serversError: null,
       isLoadingChannels: false,
-      
+      isLoadingBotStatus: false,
+
       // アクティブサーバーの設定
       setActiveServerId: (serverId) => {
-        set({ activeServerId: serverId, activeChannelId: null });
+        // 前のサーバーのポーリングを停止
+        get().stopVoiceStatusPolling();
+
+        set({
+          activeServerId: serverId,
+          activeChannelId: null,
+          botVoiceChannelId: null,
+          isBotConnected: false
+        });
+
         if (serverId) {
+          // ボイスチャンネル一覧を取得
           get().fetchVoiceChannels(serverId);
+          // ボットのボイスステータスを取得
+          get().fetchBotVoiceStatus(serverId);
+          // ポーリングを開始
+          get().startVoiceStatusPolling(serverId);
         }
       },
       
@@ -56,46 +92,64 @@ export const useGuildStore = create<GuildState>()(
       },
       
       // サーバー一覧の取得
-      fetchMutualServers: async () => {
-        try {
-          set({ isLoadingServers: true, serversError: null });
-          
-          // ボットが参加しているサーバーを取得
-          const botGuilds = await api.getBotGuilds();
-          const botGuildIds = new Set(botGuilds.map((guild) => guild.id));
-          
-          // ユーザーが参加しているサーバーを取得
-          const userGuildsResponse = await fetch('/api/discord/userGuilds');
-          
-          if (!userGuildsResponse.ok) {
-            throw new Error('ユーザーのサーバー一覧の取得に失敗しました');
+      fetchMutualServers: async (force = false) => {
+        const now = Date.now();
+        if (mutualServersRequest) {
+          return mutualServersRequest;
+        }
+        if (!force && lastServersFetchAt && now - lastServersFetchAt < MIN_SERVER_FETCH_INTERVAL_MS) {
+          return;
+        }
+
+        mutualServersRequest = (async () => {
+          try {
+            set({ isLoadingServers: true, serversError: null });
+
+            // ボットが参加しているサーバーを取得
+            const botGuilds = await api.getBotGuilds();
+            const botGuildIds = new Set(botGuilds.map((guild) => guild.id));
+
+            // ユーザーが参加しているサーバーを取得
+            const userGuildsResponse = await fetch('/api/discord/userGuilds');
+
+            if (!userGuildsResponse.ok) {
+              throw new Error('ユーザーのサーバー一覧の取得に失敗しました');
+            }
+
+            const userGuildsData = await userGuildsResponse.json();
+
+            // 共通のサーバーと招待可能なサーバーを分類
+            const mutualGuilds = userGuildsData.filter((guild: Server) => botGuildIds.has(guild.id));
+
+            const guildsWithManageServer = userGuildsData.filter((guild: Server) => {
+              if (!guild.permissions) return false;
+              const permissions = BigInt(guild.permissions);
+              const MANAGE_GUILD = BigInt(0x20); // 'サーバーを管理'の権限ビット
+              return (permissions & MANAGE_GUILD) === MANAGE_GUILD;
+            });
+
+            const inviteGuilds = guildsWithManageServer.filter((guild: Server) => !botGuildIds.has(guild.id));
+
+            set({
+              mutualServers: mutualGuilds,
+              inviteServers: inviteGuilds,
+              isLoadingServers: false
+            });
+          } catch (error) {
+            console.error('サーバー一覧の取得中にエラーが発生しました:', error);
+            set({
+              isLoadingServers: false,
+              serversError: error instanceof Error ? error.message : '不明なエラーが発生しました'
+            });
+          } finally {
+            lastServersFetchAt = Date.now();
           }
-          
-          const userGuildsData = await userGuildsResponse.json();
-          
-          // 共通のサーバーと招待可能なサーバーを分類
-          const mutualGuilds = userGuildsData.filter((guild: Server) => botGuildIds.has(guild.id));
-          
-          const guildsWithManageServer = userGuildsData.filter((guild: Server) => {
-            if (!guild.permissions) return false;
-            const permissions = BigInt(guild.permissions);
-            const MANAGE_GUILD = BigInt(0x20); // 'サーバーを管理'の権限ビット
-            return (permissions & MANAGE_GUILD) === MANAGE_GUILD;
-          });
-          
-          const inviteGuilds = guildsWithManageServer.filter((guild: Server) => !botGuildIds.has(guild.id));
-          
-          set({
-            mutualServers: mutualGuilds,
-            inviteServers: inviteGuilds,
-            isLoadingServers: false
-          });
-        } catch (error) {
-          console.error('サーバー一覧の取得中にエラーが発生しました:', error);
-          set({
-            isLoadingServers: false,
-            serversError: error instanceof Error ? error.message : '不明なエラーが発生しました'
-          });
+        })();
+
+        try {
+          await mutualServersRequest;
+        } finally {
+          mutualServersRequest = null;
         }
       },
       
@@ -110,7 +164,56 @@ export const useGuildStore = create<GuildState>()(
           set({ isLoadingChannels: false });
         }
       },
-      
+
+      // ボットのボイスチャンネル状態を取得
+      fetchBotVoiceStatus: async (serverId) => {
+        try {
+          set({ isLoadingBotStatus: true });
+          const channelId = await api.getBotVoiceStatus(serverId);
+
+          set({
+            botVoiceChannelId: channelId,
+            isBotConnected: channelId !== null,
+            activeChannelId: channelId, // 実際のボットの状態と同期
+            isLoadingBotStatus: false
+          });
+        } catch (error) {
+          console.error('ボットのボイスステータス取得中にエラーが発生しました:', error);
+          set({
+            botVoiceChannelId: null,
+            isBotConnected: false,
+            isLoadingBotStatus: false
+          });
+        }
+      },
+
+      // ボイスステータスのポーリングを開始
+      startVoiceStatusPolling: (serverId) => {
+        // 既存のポーリングを停止
+        if (voiceStatusPollingTimer) {
+          clearInterval(voiceStatusPollingTimer);
+        }
+
+        // 定期的にボイスステータスをチェック
+        voiceStatusPollingTimer = setInterval(() => {
+          const currentServerId = get().activeServerId;
+          if (currentServerId === serverId) {
+            get().fetchBotVoiceStatus(serverId);
+          } else {
+            // サーバーが変わった場合はポーリングを停止
+            get().stopVoiceStatusPolling();
+          }
+        }, VOICE_STATUS_POLLING_INTERVAL_MS);
+      },
+
+      // ボイスステータスのポーリングを停止
+      stopVoiceStatusPolling: () => {
+        if (voiceStatusPollingTimer) {
+          clearInterval(voiceStatusPollingTimer);
+          voiceStatusPollingTimer = null;
+        }
+      },
+
       // ボットを招待
       inviteBot: (serverId) => {
         const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID;
@@ -130,19 +233,34 @@ export const useGuildStore = create<GuildState>()(
       joinVoiceChannel: async (serverId, channelId) => {
         try {
           await api.joinVoiceChannel(serverId, channelId);
-          set({ activeChannelId: channelId });
+          // 参加成功後、ボット状態を更新
+          set({
+            activeChannelId: channelId,
+            botVoiceChannelId: channelId,
+            isBotConnected: true
+          });
           return Promise.resolve();
         } catch (error) {
           console.error('ボイスチャンネルへの参加に失敗しました:', error);
           return Promise.reject(error);
         }
       },
-      
+
       // ボイスチャンネルから切断
       disconnectVoiceChannel: async (serverId) => {
+        // ポーリングを停止
+        get().stopVoiceStatusPolling();
+
         try {
           await api.disconnectVoiceChannel(serverId);
-          set({ activeServerId: null, activeChannelId: null });
+          // 切断成功後、状態をリセット
+          set({
+            activeServerId: null,
+            activeChannelId: null,
+            botVoiceChannelId: null,
+            isBotConnected: false,
+            voiceChannels: []
+          });
           return Promise.resolve();
         } catch (error) {
           console.error('ボイスチャンネルからの切断に失敗しました:', error);

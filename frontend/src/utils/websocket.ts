@@ -285,6 +285,9 @@ export interface WebSocketData {
     queue?: unknown[];
     is_playing?: boolean;
     history?: unknown[];
+    version?: number;
+    timestamp?: number;
+    current_track?: unknown;
     [key: string]: unknown;
 }
 

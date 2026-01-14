@@ -157,24 +157,9 @@ export const MainPlayerProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   };
 
-  // 前の楽曲への移動
+  // 前の楽曲への移動（機能削除 - バグのため）
   const previousTrack = async () => {
-    if (!activeServerId) return;
-    try {
-      await api.previousTrack(activeServerId);
-      // 適切なロジックで前の曲を設定
-      // ここでは仮に最初の曲を再設定
-      const prevTrack = queue[0] || null;
-      setCurrentTrack(prevTrack);
-      setIsPlaying(true);
-    } catch (error) {
-      console.error('前の曲への移動に失敗しました:', error);
-      toast({
-        title: 'エラー',
-        description: '前の曲への移動に失敗しました。',
-        variant: 'destructive',
-      });
-    }
+    // この機能はバグが多いため削除されました
   };
 
   // キューの並び替え

@@ -1,19 +1,18 @@
 import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  PlayIcon, 
-  PauseIcon, 
-  SkipForwardIcon, 
-  SkipBackIcon, 
-  ChevronUpIcon, 
-  ChevronDownIcon, 
-  Volume2Icon, 
-  VolumeXIcon, 
-  RefreshCwIcon, 
-  PlusIcon, 
+import {
+  PlayIcon,
+  PauseIcon,
+  SkipForwardIcon,
+  ChevronUpIcon,
+  ChevronDownIcon,
+  Volume2Icon,
+  VolumeXIcon,
+  RefreshCwIcon,
+  PlusIcon,
   Loader2,
   ExternalLink,
-  UserIcon 
+  UserIcon
 } from 'lucide-react';
 import { Track, api } from '@/utils/api';
 import Image from 'next/image';
@@ -84,7 +83,6 @@ interface MainPlayerProps {
   onPlay: () => void;
   onPause: () => void;
   onSkip: () => void;
-  onPrevious: () => void;
   queue: Track[];
   onReorder: (startIndex: number, endIndex: number) => void;
   onDelete: (index: number) => void;
@@ -101,7 +99,6 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
   onPlay,
   onPause,
   onSkip,
-  onPrevious,
   queue,
   onReorder,
   onDelete,
@@ -151,14 +148,13 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
         album: 'Album Name',
         artwork: [{ src: currentTrack.thumbnail, sizes: '512x512', type: 'image/png' }],
       });
-      
+
       // Media session action handlers
       navigator.mediaSession.setActionHandler('play', onPlay);
       navigator.mediaSession.setActionHandler('pause', onPause);
-      navigator.mediaSession.setActionHandler('previoustrack', onPrevious);
       navigator.mediaSession.setActionHandler('nexttrack', onSkip);
     }
-  }, [currentTrack, onPlay, onPause, onPrevious, onSkip]);
+  }, [currentTrack, onPlay, onPause, onSkip]);
 
   // Artist info retrieval
   const handleArtistClick = async (artistName: string) => {
@@ -611,38 +607,21 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
             <Tooltip>
               <TooltipTrigger asChild>
                 <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={onPrevious}
-                  className="p-3 rounded-full bg-white bg-opacity-10 hover:bg-opacity-20 transition-all duration-200"
-                  aria-label="前の曲へ"
-                >
-                  <SkipBackIcon size={24} />
-                </motion.button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>前の曲へ</p>
-              </TooltipContent>
-            </Tooltip>
-            
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <motion.button
                   whileHover={{ scale: isLoading ? 1 : 1.1 }}
                   whileTap={{ scale: isLoading ? 1 : 0.9 }}
                   onClick={isLoading ? undefined : isPlaying ? onPause : onPlay}
                   className={`p-6 rounded-full ${
-                    isLoading ? 'bg-gray-500' : 'bg-white text-black'
-                  } hover:bg-opacity-80 transition-all duration-200`}
+                    isLoading ? 'bg-gray-500 text-white' : 'bg-white text-black'
+                  } hover:bg-opacity-90 transition-all duration-200 shadow-lg`}
                   disabled={isLoading}
                   aria-label={isLoading ? "読み込み中" : isPlaying ? "一時停止" : "再生"}
                 >
                   {isLoading ? (
                     <Loader2 className="animate-spin" size={32} />
                   ) : isPlaying ? (
-                    <PauseIcon size={32} />
+                    <PauseIcon size={32} fill="currentColor" />
                   ) : (
-                    <PlayIcon size={32} />
+                    <PlayIcon size={32} fill="currentColor" />
                   )}
                 </motion.button>
               </TooltipTrigger>
@@ -650,17 +629,17 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
                 <p>{isLoading ? "読み込み中" : isPlaying ? "一時停止" : "再生"}</p>
               </TooltipContent>
             </Tooltip>
-            
+
             <Tooltip>
               <TooltipTrigger asChild>
                 <motion.button
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                   onClick={onSkip}
-                  className="p-3 rounded-full bg-white bg-opacity-10 hover:bg-opacity-20 transition-all duration-200"
+                  className="p-3 rounded-full bg-white/20 hover:bg-white/30 transition-all duration-200"
                   aria-label="次の曲へ"
                 >
-                  <SkipForwardIcon size={24} />
+                  <SkipForwardIcon size={24} className="text-white" />
                 </motion.button>
               </TooltipTrigger>
               <TooltipContent>
@@ -679,13 +658,13 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
             aria-controls="queue-drawer"
           >
             <motion.div
-              className="flex items-center justify-center bg-white bg-opacity-10 rounded-full p-1 sm:p-2 mb-1 sm:mb-2"
+              className="flex items-center justify-center bg-white/20 rounded-full p-2 sm:p-3 mb-1 sm:mb-2"
               animate={{ y: [0, -5, 0] }}
               transition={{ repeat: Infinity, duration: 1.5 }}
             >
-              <ChevronUpIcon size={20} />
+              <ChevronUpIcon size={20} className="text-white" />
             </motion.div>
-            <span className="text-xs sm:text-sm text-white text-opacity-70">
+            <span className="text-xs sm:text-sm text-white/70">
               キューを表示
             </span>
           </motion.button>
@@ -723,10 +702,10 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
                 </TabsTrigger>
               </TabsList>
               
-              <TabsContent 
-                value="queue" 
-                className="mt-4 overflow-y-auto pb-20" 
-                style={{ height: 'calc(100vh - 300px)' }}
+              <TabsContent
+                value="queue"
+                className="mt-4 overflow-y-auto pb-20"
+                style={{ height: 'min(calc(100vh - 300px), calc(100dvh - 300px))' }}
                 id="queue-panel"
                 role="tabpanel"
               >
@@ -743,22 +722,24 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
                 />
               </TabsContent>
               
-              <TabsContent 
-                value="related" 
-                className="mt-4 overflow-y-auto space-y-4 pb-20" 
-                style={{ height: 'calc(100vh - 300px)' }}
+              <TabsContent
+                value="related"
+                className="mt-4 overflow-y-auto space-y-4 pb-20 px-2 sm:px-4"
+                style={{ height: 'min(calc(100vh - 300px), calc(100dvh - 300px))' }}
                 id="related-panel"
                 role="tabpanel"
               >
-                <div className="flex justify-between">
-                  <Button 
-                    onClick={handleAddAllToQueue} 
-                    disabled={isRelatedLoading || relatedTracks.length === 0} 
-                    className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200"
+                <div className="flex flex-wrap gap-2 justify-between">
+                  <Button
+                    onClick={handleAddAllToQueue}
+                    disabled={isRelatedLoading || relatedTracks.length === 0}
+                    size="sm"
+                    className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs sm:text-sm"
                   >
-                    <PlusIcon className="mr-2 h-4 w-4" /> 全てキューに追加
+                    <PlusIcon className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+                    <span className="hidden xs:inline">全て</span>追加
                   </Button>
-                  <Button 
+                  <Button
                     onClick={() => {
                       setIsRelatedLoading(true);
                       if (currentTrack) {
@@ -784,11 +765,13 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
                       } else {
                         setIsRelatedLoading(false);
                       }
-                    }} 
-                    disabled={isRelatedLoading} 
-                    className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200"
+                    }}
+                    disabled={isRelatedLoading}
+                    size="sm"
+                    className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs sm:text-sm"
                   >
-                    <RefreshCwIcon className={`mr-2 h-4 w-4 ${isRelatedLoading ? 'animate-spin' : ''}`} /> 再取得
+                    <RefreshCwIcon className={`mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4 ${isRelatedLoading ? 'animate-spin' : ''}`} />
+                    再取得
                   </Button>
                 </div>
                 <AnimatePresence mode="wait">

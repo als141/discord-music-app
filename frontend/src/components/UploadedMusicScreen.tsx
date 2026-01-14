@@ -49,15 +49,15 @@ interface UploadedMusicScreenProps {
 // 検索入力をメモ化
 const SearchInput = React.memo(
   ({ value, onChange }: { value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void }) => (
-    <div className="relative w-full sm:w-[200px]">
+    <div className="relative w-full">
       <input
         type="text"
         value={value}
         onChange={onChange}
-        placeholder="Search songs..."
-        className="w-full px-3 py-2 rounded-lg border bg-background shadow-sm focus:outline-none focus:ring-2 focus:ring-primary"
+        placeholder="Search..."
+        className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-sm sm:text-base rounded-lg border bg-background shadow-sm focus:outline-none focus:ring-2 focus:ring-primary pr-8"
       />
-      <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+      <Search className="absolute right-2 sm:right-3 top-1/2 transform -translate-y-1/2 w-3 h-3 sm:w-4 sm:h-4 text-muted-foreground" />
     </div>
   )
 );
@@ -231,48 +231,63 @@ export const UploadedMusicScreen: React.FC<UploadedMusicScreenProps> = ({ guildI
     <div className="h-full flex flex-col">
       {/* ヘッダー部 */}
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
-        <div className="container mx-auto px-4 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <Music2 className="w-6 h-6" />
-            <h1 className="text-2xl font-bold">ライブラリ</h1>
-            <Badge variant="secondary" className="ml-2">
-              {filteredAndSortedSongs.length} songs
-            </Badge>
-          </div>
-          <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-            <SearchInput value={searchValue} onChange={handleSearchChange} />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="gap-2">
-                  <SortAsc className="w-4 h-4" />
-                  Sort
-                  <ChevronDown className="w-4 h-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setSortBy('newest')}>
-                  Newest First
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSortBy('oldest')}>
-                  Oldest First
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSortBy('title')}>
-                  By Title
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSortBy('artist')}>
-                  By Artist
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+        <div className="container mx-auto px-2 sm:px-4 py-2 sm:py-4 flex flex-col gap-3 sm:gap-4">
+          {/* タイトル行 */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Music2 className="w-5 h-5 sm:w-6 sm:h-6" />
+              <h1 className="text-lg sm:text-2xl font-bold">ライブラリ</h1>
+              <Badge variant="secondary" className="ml-1 sm:ml-2 text-xs">
+                {filteredAndSortedSongs.length}
+              </Badge>
+            </div>
             <Button
-              variant="outline"
-              onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
+              variant="default"
+              size="sm"
+              onClick={() => setIsUploadDialogOpen(true)}
+              className="text-xs sm:text-sm h-8 sm:h-9"
             >
-              {viewMode === 'grid' ? 'リスト表示' : 'グリッド表示'}
+              <span className="hidden xs:inline">音楽を</span>アップロード
             </Button>
-            <Button variant="default" onClick={() => setIsUploadDialogOpen(true)}>
-              音楽をアップロード
-            </Button>
+          </div>
+          {/* コントロール行 */}
+          <div className="flex flex-wrap gap-2 items-center">
+            <div className="flex-grow min-w-0">
+              <SearchInput value={searchValue} onChange={handleSearchChange} />
+            </div>
+            <div className="flex gap-1 sm:gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 sm:h-9 px-2 sm:px-3">
+                    <SortAsc className="w-3 h-3 sm:w-4 sm:h-4" />
+                    <span className="hidden xs:inline ml-1 sm:ml-2">Sort</span>
+                    <ChevronDown className="w-3 h-3 sm:w-4 sm:h-4 ml-1" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setSortBy('newest')}>
+                    Newest First
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortBy('oldest')}>
+                    Oldest First
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortBy('title')}>
+                    By Title
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortBy('artist')}>
+                    By Artist
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
+                className="h-8 sm:h-9 px-2 sm:px-3 text-xs sm:text-sm"
+              >
+                {viewMode === 'grid' ? 'リスト' : 'グリッド'}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -287,14 +302,14 @@ export const UploadedMusicScreen: React.FC<UploadedMusicScreenProps> = ({ guildI
 
       {/* メインコンテンツ */}
       <ScrollArea className="flex-1">
-        <div className="container mx-auto px-4 py-6">
+        <div className="container mx-auto px-2 sm:px-4 py-3 sm:py-6">
           {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-4">
               {Array.from({ length: 12 }).map((_, i) => (
-                <div key={i} className="space-y-3">
-                  <Skeleton className="h-48 w-full" />
-                  <Skeleton className="h-4 w-3/4" />
-                  <Skeleton className="h-4 w-1/2" />
+                <div key={i} className="space-y-2 sm:space-y-3">
+                  <Skeleton className="aspect-square w-full" />
+                  <Skeleton className="h-3 sm:h-4 w-3/4" />
+                  <Skeleton className="h-3 sm:h-4 w-1/2" />
                 </div>
               ))}
             </div>
@@ -320,7 +335,7 @@ export const UploadedMusicScreen: React.FC<UploadedMusicScreenProps> = ({ guildI
                   animate="visible"
                   exit="exit"
                   variants={listItemVariants}
-                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+                  className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-4"
                 >
                   {filteredAndSortedSongs.map((song) => (
                     <motion.div
@@ -351,13 +366,13 @@ export const UploadedMusicScreen: React.FC<UploadedMusicScreenProps> = ({ guildI
                           </Button>
                         </div>
                       </div>
-                      <div className="p-4">
-                        <h3 className="font-semibold text-lg line-clamp-1">{song.title}</h3>
-                        <p className="text-muted-foreground line-clamp-1">{song.artist}</p>
-                        <div className="mt-3 flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <User className="w-4 h-4 text-muted-foreground" />
-                            <span className="text-sm text-muted-foreground">{song.uploader_name}</span>
+                      <div className="p-2 sm:p-4">
+                        <h3 className="font-semibold text-sm sm:text-lg line-clamp-1">{song.title}</h3>
+                        <p className="text-xs sm:text-base text-muted-foreground line-clamp-1">{song.artist}</p>
+                        <div className="mt-2 sm:mt-3 flex items-center justify-between">
+                          <div className="flex items-center gap-1 sm:gap-2">
+                            <User className="w-3 h-3 sm:w-4 sm:h-4 text-muted-foreground" />
+                            <span className="text-xs sm:text-sm text-muted-foreground truncate max-w-[60px] sm:max-w-none">{song.uploader_name}</span>
                           </div>
                           {session?.user?.id === song.uploader_id && (
                             <DropdownMenu>

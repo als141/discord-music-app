@@ -191,28 +191,10 @@ export function usePlayer({
     }
   }, [isOnDeviceMode, queue, guildId, toast]);
   
-  // 前の曲へ
+  // 前の曲へ（機能削除 - バグのため）
   const previous = useCallback(async () => {
-    if (isOnDeviceMode) {
-      toast({
-        title: 'デバイスモード',
-        description: '前の曲機能はデバイスモードではまだ利用できません。',
-      });
-    } else {
-      if (!guildId) return;
-      
-      try {
-        await api.previousTrack(guildId);
-      } catch (error) {
-        console.error('前の曲エラー:', error);
-        toast({
-          title: 'エラー', 
-          description: '前の曲への移動に失敗しました。',
-          variant: 'destructive',
-        });
-      }
-    }
-  }, [isOnDeviceMode, guildId, toast]);
+    // この機能はバグが多いため削除されました
+  }, []);
   // ユーザー情報取得
   const getUserInfo = useCallback((): User | null => {
     if (session && session.user) {

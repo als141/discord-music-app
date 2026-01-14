@@ -2,7 +2,6 @@
 
 # dependencies
 node_modules
-.next
 /.pnp
 .pnp.js
 .yarn/install-state.gz
@@ -12,11 +11,12 @@ package-lock.json
 /coverage
 
 # next.js
-/.next/
+.next
 /out/
 
 # production
 /build
+*.db
 
 # misc
 .DS_Store
@@ -62,3 +62,12 @@ next-env.d.ts
 /backend/cookies.txt
 
 saved_images
+
+.claude
+.venv
+
+cookies.txt
+
+backend/backend.egg-info
+__pycache__
+backend/logs/app.log

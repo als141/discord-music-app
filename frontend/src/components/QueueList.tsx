@@ -65,28 +65,28 @@ const CurrentTrackItem = memo(({
   };
 
   return (
-    <div className="flex items-center p-4 bg-card" aria-label="現在再生中の曲">
+    <div className="flex items-center p-2 sm:p-4 bg-card" aria-label="現在再生中の曲">
       <Image
         src={track.thumbnail || '/default_thumbnail.png'}
         alt={track.title || 'No track selected'}
-        width={64}
-        height={64}
-        className="rounded-md object-cover"
+        width={48}
+        height={48}
+        className="rounded-md object-cover w-12 h-12 sm:w-16 sm:h-16 flex-shrink-0"
         unoptimized
       />
-      <div className="flex-grow overflow-hidden ml-4">
-        <h3 className="font-semibold truncate">{truncateText(track.title, 25)}</h3>
-        <p className="text-sm text-muted-foreground truncate">{truncateText(track.artist, 25)}</p>
+      <div className="flex-grow overflow-hidden ml-2 sm:ml-4 min-w-0">
+        <h3 className="font-semibold truncate text-sm sm:text-base">{truncateText(track.title, 30)}</h3>
+        <p className="text-xs sm:text-sm text-muted-foreground truncate">{truncateText(track.artist, 30)}</p>
         {!isOnDeviceMode && track.added_by && (
-          <div className="flex items-center mt-2">
-            <Avatar className="h-6 w-6 mr-2">
+          <div className="flex items-center mt-1 sm:mt-2">
+            <Avatar className="h-5 w-5 sm:h-6 sm:w-6 mr-1 sm:mr-2">
               {track.added_by.image ? (
                 <AvatarImage src={track.added_by.image} alt={track.added_by.name || 'Unknown'} />
               ) : (
-                <AvatarFallback><UserIcon className="h-4 w-4" /></AvatarFallback>
+                <AvatarFallback><UserIcon className="h-3 w-3 sm:h-4 sm:w-4" /></AvatarFallback>
               )}
             </Avatar>
-            <Badge variant="outline" className="text-xs font-normal">
+            <Badge variant="outline" className="text-[10px] sm:text-xs font-normal">
               {track.added_by.name || 'Unknown'}
             </Badge>
           </div>
@@ -98,10 +98,10 @@ const CurrentTrackItem = memo(({
             onClick={onPlayPause}
             variant="ghost"
             size="icon"
-            className="ml-2"
+            className="ml-1 sm:ml-2 h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0"
             aria-label={isPlaying ? "一時停止" : "再生"}
           >
-            {isPlaying ? <PauseIcon size={24} /> : <PlayIcon size={24} />}
+            {isPlaying ? <PauseIcon className="h-5 w-5 sm:h-6 sm:w-6" /> : <PlayIcon className="h-5 w-5 sm:h-6 sm:w-6" />}
           </Button>
         </TooltipTrigger>
         <TooltipContent>
@@ -141,7 +141,7 @@ const QueueTrackItem = memo(({
     <motion.div
       variants={animations.item}
       layout
-      className="flex items-center p-4 bg-card rounded-lg shadow-sm mb-2 transition-colors duration-150 hover:bg-muted"
+      className="flex items-center p-2 sm:p-4 bg-card rounded-lg shadow-sm mb-2 transition-colors duration-150 hover:bg-muted"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       data-testid={`queue-item-${index}`}
@@ -149,34 +149,34 @@ const QueueTrackItem = memo(({
       <Image
         src={track.thumbnail || '/default_thumbnail.png'}
         alt={track.title}
-        width={48}
-        height={48}
-        className="rounded-md object-cover"
+        width={40}
+        height={40}
+        className="rounded-md object-cover w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0"
         unoptimized
       />
-      <div className="flex-grow overflow-hidden ml-4">
-        <h4 className="font-semibold truncate">{track.title}</h4>
-        <p className="text-sm text-muted-foreground truncate">{track.artist}</p>
+      <div className="flex-grow overflow-hidden ml-2 sm:ml-4 min-w-0">
+        <h4 className="font-semibold truncate text-sm sm:text-base">{track.title}</h4>
+        <p className="text-xs sm:text-sm text-muted-foreground truncate">{track.artist}</p>
         {!isOnDeviceMode && track.added_by && (
           <div className="flex items-center mt-1">
-            <Avatar className="h-4 w-4 mr-1">
+            <Avatar className="h-3 w-3 sm:h-4 sm:w-4 mr-1">
               {track.added_by.image ? (
                 <AvatarImage src={track.added_by.image} alt={track.added_by.name || 'Unknown'} />
               ) : (
                 <AvatarFallback><UserIcon className="h-2 w-2" /></AvatarFallback>
               )}
             </Avatar>
-            <span className="text-xs text-muted-foreground truncate">
+            <span className="text-[10px] sm:text-xs text-muted-foreground truncate">
               {track.added_by.name || 'Unknown'}
             </span>
           </div>
         )}
       </div>
-      <div className="flex items-center ml-4">
+      <div className="flex items-center ml-1 sm:ml-4 flex-shrink-0">
         <AnimatePresence>
           {(isHovered || true) && (
-            <motion.div 
-              className="flex space-x-1"
+            <motion.div
+              className="flex space-x-0.5 sm:space-x-1"
               initial={{ opacity: 0, width: 0 }}
               animate={{ opacity: 1, width: 'auto' }}
               exit={{ opacity: 0, width: 0 }}
@@ -190,9 +190,9 @@ const QueueTrackItem = memo(({
                     onClick={onMoveUp}
                     disabled={isFirst}
                     aria-label="上に移動"
-                    className={isFirst ? 'opacity-30 cursor-not-allowed' : ''}
+                    className={`h-7 w-7 sm:h-9 sm:w-9 ${isFirst ? 'opacity-30 cursor-not-allowed' : ''}`}
                   >
-                    <ChevronUpIcon size={20} />
+                    <ChevronUpIcon className="h-4 w-4 sm:h-5 sm:w-5" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -207,9 +207,9 @@ const QueueTrackItem = memo(({
                     onClick={onMoveDown}
                     disabled={isLast}
                     aria-label="下に移動"
-                    className={isLast ? 'opacity-30 cursor-not-allowed' : ''}
+                    className={`h-7 w-7 sm:h-9 sm:w-9 ${isLast ? 'opacity-30 cursor-not-allowed' : ''}`}
                   >
-                    <ChevronDownIcon size={20} />
+                    <ChevronDownIcon className="h-4 w-4 sm:h-5 sm:w-5" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -222,10 +222,10 @@ const QueueTrackItem = memo(({
                     variant="ghost"
                     size="icon"
                     onClick={onDelete}
-                    className="text-destructive hover:text-destructive"
+                    className="text-destructive hover:text-destructive h-7 w-7 sm:h-9 sm:w-9"
                     aria-label={`${track.title}を削除`}
                   >
-                    <TrashIcon size={20} />
+                    <TrashIcon className="h-4 w-4 sm:h-5 sm:w-5" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>

@@ -1,0 +1,63 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = "Discord Music Bot Backend API"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "aiofiles",
+    "aiohappyeyeballs",
+    "aiohttp",
+    "aiosignal",
+    "annotated-types",
+    "anyio",
+    "attrs",
+    "Brotli",
+    "certifi",
+    "charset-normalizer",
+    "click",
+    "discord",
+    "discord.py",
+    "distro",
+    "fastapi",
+    "frozenlist",
+    "h11",
+    "httpcore",
+    "httpx",
+    "idna",
+    "jiter",
+    "multidict",
+    "mutagen",
+    "openai",
+    "Pillow",
+    "propcache",
+    "pycryptodomex",
+    "pydantic",
+    "pydantic-settings",
+    "pydantic_core",
+    "pynacl>=1.5.0",
+    "python-dotenv",
+    "python-multipart",
+    "requests",
+    "sniffio",
+    "starlette",
+    "tqdm",
+    "typing_extensions",
+    "urllib3",
+    "uvicorn",
+    "websockets",
+    "yarl",
+    "yt-dlp",
+    "ytmusicapi",
+]
+
+# システム依存関係の記録（コメント）
+# Required system dependencies:
+# - ffmpeg (for audio processing)
+
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = []  # スクリプトのみのプロジェクト
