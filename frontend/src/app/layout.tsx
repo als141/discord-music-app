@@ -8,7 +8,6 @@ import { SessionProvider } from 'next-auth/react' // 追加
 import { GuildProvider } from '@/contexts/GuildContext';
 import { PlaybackProvider } from '@/contexts/PlaybackContext';
 import { VolumeProvider } from '@/contexts/VolumeContext'; // 追加
-import { MobileOptimizedMessage } from '@/components/MobileOptimizedMessage';
 
 export default function RootLayout({
   children,
@@ -18,7 +17,6 @@ export default function RootLayout({
   return (
     <html lang="ja" suppressHydrationWarning>
       <body>
-          <MobileOptimizedMessage />
         <SessionProvider>
           <ThemeProvider
             attribute="class"
