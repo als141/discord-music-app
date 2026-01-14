@@ -31,14 +31,22 @@ FROM python:3.12-slim AS runtime
 # - libsodium23: PyNaCl（暗号化ライブラリ）に必要
 # - libffi8: ctypesなどの外部関数インターフェースに必要
 # - ca-certificates: HTTPS通信用の証明書
+# - curl, unzip: denoのインストールに必要
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libopus0 \
     libsodium23 \
     libffi8 \
     ca-certificates \
+    curl \
+    unzip \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
+
+# deno のインストール（yt-dlpのYouTube署名解読を高速化）
+# yt-dlpはJavaScriptランタイムを使用してYouTubeの署名を解読する
+RUN curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh \
+    && chmod +x /usr/local/bin/deno
 
 # セキュリティ: 非rootユーザーで実行
 RUN useradd --create-home --shell /bin/bash appuser

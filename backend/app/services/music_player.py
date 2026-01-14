@@ -17,7 +17,13 @@ settings = get_settings()
 logger = get_logger(__name__)
 
 def get_ytdl_format_options() -> dict:
-    """yt-dlp の設定オプションを取得"""
+    """
+    yt-dlp の設定オプションを取得
+
+    注意: JavaScriptランタイム（deno）をインストールすることで
+    YouTube署名解読が高速化され、警告が解消されます。
+    インストール方法: https://deno.com/ または apt/brew等で deno をインストール
+    """
     # フォーマット選択: HTTPSプロトコルのオーディオフォーマットを優先
     # m3u8 (HLS) は403エラーになることがあるため避ける
     # bestaudio[protocol=https] を優先し、利用不可の場合はbestaudio/bestにフォールバック
@@ -28,22 +34,21 @@ def get_ytdl_format_options() -> dict:
         'outtmpl': f'{settings.music.directory}/%(title)s-%(id)s.%(ext)s',
         'restrictfilenames': True,
         'nocheckcertificate': True,
-        'ignoreerrors': False,  # エラーを検出するためFalseに変更
-        'no_warnings': False,  # 警告を表示してデバッグを容易にする
+        'ignoreerrors': False,  # エラーを検出するためFalseに
+        'no_warnings': True,  # 既知の警告（SABR等）を抑制
         'default_search': 'auto',
         'source_address': '0.0.0.0',
-        'retries': 5,  # ダウンロードリトライ回数を増加
-        'fragment_retries': 5,  # フラグメントリトライ回数を増加
-        'socket_timeout': 60,  # ソケットタイムアウトを延長（秒）
-        'extractor_retries': 5,  # エクストラクターリトライ回数を増加
-        # HTTPヘッダー設定（YouTube Music対応）
-        'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        },
-        # 追加の安定性オプション
-        'extract_flat': False,
-        'quiet': False,
+        'retries': 5,
+        'fragment_retries': 5,
+        'socket_timeout': 60,
+        'extractor_retries': 5,
+        # ログ出力を抑制（本番環境向け）
+        'quiet': True,
         'verbose': False,
+        # プログレス表示を無効化（サーバー環境向け）
+        'noprogress': True,
+        # プレイリスト処理を無効化（単一動画のみ）
+        'noplaylist': True,
     }
 
     # YouTube認証用クッキーファイル（環境変数COOKIES_FILEで設定）
@@ -93,7 +98,8 @@ class Song:
     thumbnail: str
     artist: str
     added_by: Optional[Any] = None  # User オブジェクトまたは None
-    
+    video_id: Optional[str] = None  # YouTubeのビデオID（キャッシュ検索用）
+
     def __post_init__(self):
         # デフォルト値の設定
         if not self.title:
@@ -266,6 +272,7 @@ class MusicPlayer:
 
     def prepare_source(self, song: Song, max_retries: int = 3) -> Song:
         """音楽ソースを準備する（リトライ機能付き）"""
+        import glob as glob_module
         last_error = None
 
         for attempt in range(max_retries):
@@ -279,23 +286,24 @@ class MusicPlayer:
                     if attempt > 0:
                         logger.info(f"ダウンロードリトライ ({attempt + 1}/{max_retries}): {song.title}")
 
+                    # キャッシュチェック: video_idを使ってファイルを検索（extract_info不要）
+                    if song.video_id:
+                        cache_pattern = os.path.join(
+                            settings.music.directory,
+                            f"*-{song.video_id}.*"
+                        )
+                        cached_files = glob_module.glob(cache_pattern)
+                        if cached_files:
+                            # 最新のキャッシュファイルを使用
+                            cached_file = cached_files[0]
+                            logger.info(f"キャッシュを使用: {cached_file}")
+                            song.source = cached_file
+                            return song
+
                     logger.debug(f"音楽をダウンロード中: {song.title} ({song.url})")
 
-                    # ダウンロード前に既存ファイルをチェック（キャッシュとして利用）
-                    try:
-                        info = ytdl.extract_info(song.url, download=False)
-                        if info and 'entries' in info:
-                            info = info['entries'][0] if info['entries'] else None
-                        if info:
-                            potential_filename = ytdl.prepare_filename(info)
-                            if os.path.exists(potential_filename):
-                                logger.debug(f"キャッシュされたファイルを使用: {potential_filename}")
-                                song.source = potential_filename
-                                return song
-                    except Exception:
-                        pass  # キャッシュチェック失敗は無視してダウンロードを試行
-
-                    info = ytdl.extract_info(song.url, download=True)  # ダウンロード実行
+                    # ダウンロード実行（1回のextract_info呼び出しのみ）
+                    info = ytdl.extract_info(song.url, download=True)
                     if info is None:
                         raise Exception("動画情報の取得に失敗しました")
 
@@ -426,13 +434,15 @@ class MusicPlayer:
         webpage_url = info.get('webpage_url', '')
         thumbnail = info.get('thumbnail', '')
         artist = info.get('uploader', 'Unknown Artist')
+        video_id = info.get('id', '')  # YouTubeのビデオIDを保存
         return Song(
             source=None,
             title=title,
             url=webpage_url,
             thumbnail=thumbnail,
             artist=artist,
-            added_by=added_by
+            added_by=added_by,
+            video_id=video_id
         )
 
     async def remove_from_queue(self, position: int) -> None:
