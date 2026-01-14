@@ -72,6 +72,14 @@ def get_ytdl_format_options() -> dict:
         if actual_cookies_path:
             options['cookiefile'] = actual_cookies_path
             logger.info(f"YouTube cookies file loaded: {actual_cookies_path}")
+            # デバッグ: cookiesファイルの最初の行を表示
+            try:
+                with open(actual_cookies_path, 'r') as f:
+                    first_line = f.readline().strip()
+                    file_size = os.path.getsize(actual_cookies_path)
+                    logger.info(f"Cookies file size: {file_size} bytes, first line: {first_line[:80]}...")
+            except Exception as e:
+                logger.warning(f"Could not read cookies file: {e}")
         else:
             logger.warning(f"Cookies file NOT FOUND at: {cookies_path}")
     else:
