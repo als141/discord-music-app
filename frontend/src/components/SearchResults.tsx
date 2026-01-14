@@ -4,14 +4,16 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PlayableItem, SearchItem, Track } from '@/utils/api';
-import { X, Search, Music, Disc, PlaySquare, ListMusic, Plus, Loader2, User } from 'lucide-react';
+import { X, Search, Music, Disc, PlaySquare, ListMusic, Plus, Loader2, User, Music2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import {
   TooltipProvider,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent
 } from "@/components/ui/tooltip";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import Image from 'next/image';
 import { api } from '@/utils/api';
@@ -24,7 +26,7 @@ interface SearchResultsProps {
   onAddTrackToQueue: (track: Track) => Promise<void>;
   onClose: () => void;
   onSearch: (query: string) => Promise<void>;
-  isOnDeviceMode: boolean; // 追加
+  isOnDeviceMode: boolean;
 }
 
 export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQueue, onAddTrackToQueue, onClose, onSearch }) => {
@@ -80,87 +82,156 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
   return (
     <TooltipProvider>
       <motion.div
-        className="fixed inset-0 bg-background/95 backdrop-blur-sm z-50 overflow-hidden flex flex-col"
+        className="fixed inset-0 bg-background z-50 overflow-hidden flex flex-col"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
+        transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
       >
-        <div className="bg-background/80 backdrop-blur-md py-3 sm:py-4 px-3 sm:px-6 shadow-md z-10">
-          {/* 既存のヘッダー部分 */}
-          <div className="flex justify-between items-center mb-3 sm:mb-4">
-            <h2 className="text-lg sm:text-2xl font-bold">検索結果</h2>
-            <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 sm:h-10 sm:w-10">
-              <X className="h-5 w-5 sm:h-6 sm:w-6" />
-            </Button>
-          </div>
-          {/* 検索フォーム */}
-          <form onSubmit={handleSearch} className="mb-3 sm:mb-4">
-            <div className="flex items-center bg-input rounded-full overflow-hidden shadow-lg">
-              <Input
-                type="text"
-                placeholder="曲名、アーティスト名を入力..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="flex-grow border-none text-sm sm:text-base"
-              />
-              <Button type="submit" disabled={isLoading} size="sm" className="h-8 sm:h-10 px-3 sm:px-4">
-                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4 sm:h-5 sm:w-5" />}
-              </Button>
+        {/* Header - Apple Music style frosted glass */}
+        <div className="glass border-b border-border/50 py-4 px-4 sm:px-6 z-10">
+          <div className="max-w-screen-xl mx-auto">
+            {/* Title and close */}
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">検索結果</h2>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={onClose}
+                    className="h-9 w-9 rounded-full hover:bg-black/5"
+                  >
+                    <X className="h-5 w-5 text-muted-foreground" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="bg-white/95 backdrop-blur-xl border-black/10">
+                  <p>閉じる</p>
+                </TooltipContent>
+              </Tooltip>
             </div>
-          </form>
+
+            {/* Search form - Apple Music style */}
+            <form onSubmit={handleSearch}>
+              <div className="relative max-w-xl mx-auto">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="曲名、アーティスト名を入力..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full h-10 pl-10 pr-20 bg-secondary/80 border-0 rounded-full text-sm placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/20"
+                />
+                <Button
+                  type="submit"
+                  disabled={isLoading}
+                  size="sm"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-8 px-4 bg-primary hover:bg-primary/90 text-white rounded-full text-xs font-medium"
+                >
+                  {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : '検索'}
+                </Button>
+              </div>
+            </form>
+          </div>
         </div>
 
+        {/* Results area */}
         <ScrollArea className="flex-grow">
-          <div className="p-3 sm:p-6">
-            <Tabs defaultValue="all" className="w-full">
-              <div className="relative mb-4">
-                <div className="overflow-x-auto scrollbar-thin pb-2">
-                  <TabsList className="inline-flex h-8 sm:h-9 items-center justify-start rounded-lg p-1 text-muted-foreground min-w-max">
-                    <TabsTrigger
-                      value="all"
-                      className="inline-flex items-center justify-center whitespace-nowrap rounded-md px-2 sm:px-3 py-1 text-xs sm:text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow"
-                    >
-                      {categoryLabels.all}
-                    </TabsTrigger>
-                    {Object.entries(categorizedResults).map(([category, items]) => (
-                      items.length > 0 && (
-                        <TabsTrigger
-                          key={category}
-                          value={category}
-                          className="inline-flex items-center justify-center whitespace-nowrap rounded-md px-2 sm:px-3 py-1 text-xs sm:text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow"
-                        >
-                          {categoryLabels[category]} <span className="hidden xs:inline ml-1">({items.length})</span>
-                        </TabsTrigger>
-                      )
-                    ))}
-                  </TabsList>
+          <div className="p-4 sm:p-6 max-w-screen-xl mx-auto">
+            {results.length === 0 ? (
+              <motion.div
+                className="flex flex-col items-center justify-center py-20"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                <div className="w-20 h-20 rounded-full bg-secondary/50 flex items-center justify-center mb-4">
+                  <Music2 className="w-10 h-10 text-muted-foreground/50" />
                 </div>
-              </div>
-
-              <TabsContent value="all">
-                {Object.entries(categorizedResults).map(([category, items]) => {
-                  if (items.length === 0) return null;
-
-                  return (
-                    <div key={category} className="mb-6 sm:mb-8">
-                      <div className="flex justify-between items-center mb-3 sm:mb-4">
-                        <h3 className="text-base sm:text-xl font-semibold">{categoryLabels[category]}</h3>
-                        {items.length > (category === 'artists' ? 1 : 5) && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setShowMore(prev => ({
-                              ...prev,
-                              [category]: !prev[category]
-                            }))}
-                            className="text-xs sm:text-sm h-7 sm:h-9"
+                <p className="text-muted-foreground text-center">
+                  検索結果がありません
+                </p>
+                <p className="text-muted-foreground/60 text-sm text-center mt-1">
+                  キーワードを入力して検索してください
+                </p>
+              </motion.div>
+            ) : (
+              <Tabs defaultValue="all" className="w-full">
+                {/* Tab navigation - Apple Music pill style */}
+                <div className="relative mb-6">
+                  <div className="overflow-x-auto scrollbar-thin pb-2">
+                    <TabsList className="inline-flex p-1 rounded-full bg-secondary/60 min-w-max">
+                      <TabsTrigger
+                        value="all"
+                        className="rounded-full px-4 py-1.5 text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-foreground text-muted-foreground transition-all"
+                      >
+                        {categoryLabels.all}
+                      </TabsTrigger>
+                      {Object.entries(categorizedResults).map(([category, items]) => (
+                        items.length > 0 && (
+                          <TabsTrigger
+                            key={category}
+                            value={category}
+                            className="rounded-full px-4 py-1.5 text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-foreground text-muted-foreground transition-all"
                           >
-                            {showMore[category] ? "折りたたむ" : `もっと見る`}
-                          </Button>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-1 gap-2">
-                        {getVisibleItems(category, items).map((item, index) => (
+                            {categoryLabels[category]}
+                            <span className="ml-1.5 text-xs opacity-60">({items.length})</span>
+                          </TabsTrigger>
+                        )
+                      ))}
+                    </TabsList>
+                  </div>
+                </div>
+
+                {/* All results tab */}
+                <TabsContent value="all" className="space-y-8">
+                  {Object.entries(categorizedResults).map(([category, items]) => {
+                    if (items.length === 0) return null;
+
+                    return (
+                      <section key={category}>
+                        <div className="flex justify-between items-center mb-4">
+                          <h3 className="text-lg sm:text-xl font-bold text-foreground">
+                            {categoryLabels[category]}
+                          </h3>
+                          {items.length > (category === 'artists' ? 1 : 5) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setShowMore(prev => ({
+                                ...prev,
+                                [category]: !prev[category]
+                              }))}
+                              className="text-primary hover:text-primary/80 hover:bg-primary/5 rounded-full text-sm"
+                            >
+                              {showMore[category] ? "折りたたむ" : "もっと見る"}
+                            </Button>
+                          )}
+                        </div>
+                        <div className="space-y-2">
+                          {getVisibleItems(category, items).map((item, index) => (
+                            <SearchResultCard
+                              key={`${item.url}-${index}`}
+                              item={item}
+                              onAddToQueue={onAddToQueue}
+                              onAddTrackToQueue={onAddTrackToQueue}
+                              playlistTracks={playlistTracks}
+                              setPlaylistTracks={setPlaylistTracks}
+                              setSelectedArtistId={setSelectedArtistId}
+                              setIsArtistDialogOpen={setIsArtistDialogOpen}
+                            />
+                          ))}
+                        </div>
+                      </section>
+                    );
+                  })}
+                </TabsContent>
+
+                {/* Category-specific tabs */}
+                {Object.entries(categorizedResults).map(([category, items]) => (
+                  items.length > 0 && (
+                    <TabsContent key={category} value={category}>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {items.map((item, index) => (
                           <SearchResultCard
                             key={`${item.url}-${index}`}
                             item={item}
@@ -173,35 +244,15 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
                           />
                         ))}
                       </div>
-                    </div>
-                  );
-                })}
-              </TabsContent>
-
-              {Object.entries(categorizedResults).map(([category, items]) => (
-                items.length > 0 && (
-                  <TabsContent key={category} value={category}>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {items.map((item, index) => (
-                        <SearchResultCard
-                          key={`${item.url}-${index}`}
-                          item={item}
-                          onAddToQueue={onAddToQueue}
-                          onAddTrackToQueue={onAddTrackToQueue}
-                          playlistTracks={playlistTracks}
-                          setPlaylistTracks={setPlaylistTracks}
-                          setSelectedArtistId={setSelectedArtistId}
-                          setIsArtistDialogOpen={setIsArtistDialogOpen}
-                        />
-                      ))}
-                    </div>
-                  </TabsContent>
-                )
-              ))}
-            </Tabs>
+                    </TabsContent>
+                  )
+                ))}
+              </Tabs>
+            )}
           </div>
         </ScrollArea>
 
+        {/* Artist Dialog */}
         {selectedArtistId && (
           <ArtistDialog
             artistId={selectedArtistId}
@@ -216,7 +267,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
   );
 };
 
-// SearchResultCard コンポーネントを分離して可読性を向上
+// Search result card component - Apple Music style
 interface SearchResultCardProps {
   item: SearchItem;
   onAddToQueue: (item: PlayableItem) => Promise<void>;
@@ -238,10 +289,10 @@ const SearchResultCard: React.FC<SearchResultCardProps> = ({
 }) => {
   const { toast } = useToast();
   const [isExpanded, setIsExpanded] = useState(false);
-  
+
   const fetchPlaylistTracks = async (item: SearchItem) => {
     if (playlistTracks[item.browseId!]) return;
-    
+
     try {
       let tracks: Track[] = [];
       if (item.type === 'playlist') {
@@ -262,47 +313,66 @@ const SearchResultCard: React.FC<SearchResultCardProps> = ({
 
   const getItemIcon = (type: string) => {
     switch(type) {
-      case 'song': return <Music className="w-4 h-4" />;
-      case 'video': return <PlaySquare className="w-4 h-4" />;
-      case 'album': return <Disc className="w-4 h-4" />;
-      case 'playlist': return <ListMusic className="w-4 h-4" />;
-      case 'artist': return <User className="w-4 h-4" />;
-      default: return <Music className="w-4 h-4" />;
+      case 'song': return <Music className="w-3.5 h-3.5" />;
+      case 'video': return <PlaySquare className="w-3.5 h-3.5" />;
+      case 'album': return <Disc className="w-3.5 h-3.5" />;
+      case 'single': return <Disc className="w-3.5 h-3.5" />;
+      case 'ep': return <Disc className="w-3.5 h-3.5" />;
+      case 'playlist': return <ListMusic className="w-3.5 h-3.5" />;
+      case 'artist': return <User className="w-3.5 h-3.5" />;
+      default: return <Music className="w-3.5 h-3.5" />;
+    }
+  };
+
+  const getTypeLabel = (type: string) => {
+    switch(type) {
+      case 'song': return '曲';
+      case 'video': return '動画';
+      case 'album': return 'アルバム';
+      case 'single': return 'シングル';
+      case 'ep': return 'EP';
+      case 'playlist': return 'プレイリスト';
+      case 'artist': return 'アーティスト';
+      default: return type;
     }
   };
 
   return (
     <motion.div
-      className="bg-card rounded-lg shadow hover:shadow-md transition-all duration-300"
-      initial={{ opacity: 0, y: 20 }}
+      className="bg-secondary/40 rounded-xl overflow-hidden transition-all duration-200 hover:bg-secondary/60"
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
+      transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
     >
-      <div className="flex p-2 items-center">
-        <div className="relative w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0">
+      <div className="flex p-3 items-center">
+        {/* Thumbnail */}
+        <div className="relative w-12 h-12 sm:w-14 sm:h-14 flex-shrink-0">
           <Image
             src={item.thumbnail}
             alt={item.title}
             fill
             style={{ objectFit: 'cover' }}
-            className="rounded-md"
+            className={`${item.type === 'artist' ? 'rounded-full' : 'rounded-lg'} shadow-sm`}
             unoptimized
           />
-          <Badge
-            variant="secondary"
-            className="absolute -top-1 -right-1 text-[8px] sm:text-[10px] font-semibold px-1 py-0.5 flex items-center gap-0.5 bg-black/50 text-white"
-          >
-            {getItemIcon(item.type)}
-            <span className="hidden sm:inline">{item.type.toUpperCase()}</span>
-          </Badge>
         </div>
 
-        <div className="flex-grow px-2 sm:px-3 min-w-0">
-          <h3 className="font-bold text-sm sm:text-base line-clamp-1">{item.title}</h3>
-          <p className="text-xs sm:text-sm text-muted-foreground line-clamp-1">{item.artist}</p>
+        {/* Info */}
+        <div className="flex-grow px-3 min-w-0">
+          <h3 className="font-semibold text-sm sm:text-base text-foreground line-clamp-1">
+            {item.title}
+          </h3>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-secondary/80 px-1.5 py-0.5 rounded-full">
+              {getItemIcon(item.type)}
+              {getTypeLabel(item.type)}
+            </span>
+            <p className="text-xs text-muted-foreground truncate">{item.artist}</p>
+          </div>
         </div>
 
-        <div className="flex-shrink-0 ml-1 sm:ml-2">
+        {/* Actions */}
+        <div className="flex-shrink-0 ml-2">
           {item.type === 'artist' ? (
             <Button
               size="sm"
@@ -310,41 +380,56 @@ const SearchResultCard: React.FC<SearchResultCardProps> = ({
                 setSelectedArtistId(item.browseId!);
                 setIsArtistDialogOpen(true);
               }}
+              className="h-8 px-4 bg-primary/10 hover:bg-primary/20 text-primary rounded-full text-xs font-medium"
               variant="ghost"
-              className="h-7 sm:h-8 text-xs sm:text-sm px-2 sm:px-3"
             >
-              <span className="hidden xs:inline">詳細</span><span className="xs:hidden">見る</span>
+              詳細
             </Button>
           ) : item.type === 'song' || item.type === 'video' ? (
-            <Button
-              size="sm"
-              onClick={() => onAddToQueue(item)}
-              variant="ghost"
-              className="h-7 sm:h-8 px-2 sm:px-3"
-            >
-              <Plus className="w-3 h-3 sm:w-4 sm:h-4 mr-0.5 sm:mr-1" />
-              <span className="hidden xs:inline text-xs sm:text-sm">追加</span>
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="sm"
+                  onClick={() => onAddToQueue(item)}
+                  className="h-8 w-8 rounded-full bg-primary hover:bg-primary/90 text-white"
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="bg-white/95 backdrop-blur-xl border-black/10">
+                <p>キューに追加</p>
+              </TooltipContent>
+            </Tooltip>
           ) : (
-            <div className="flex items-center gap-1 sm:gap-2">
-              <Button
-                size="sm"
-                onClick={async () => {
-                  if (!playlistTracks[item.browseId!]) {
-                    await fetchPlaylistTracks(item);
-                  }
-                  if (playlistTracks[item.browseId!]) {
-                    for (const track of playlistTracks[item.browseId!]) {
-                      await onAddTrackToQueue(track);
-                    }
-                  }
-                }}
-                variant="ghost"
-                className="h-7 sm:h-8 px-1.5 sm:px-2"
-              >
-                <Plus className="w-3 h-3 sm:w-4 sm:h-4" />
-                <span className="hidden sm:inline ml-1 text-xs">全曲</span>
-              </Button>
+            <div className="flex items-center gap-1.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      if (!playlistTracks[item.browseId!]) {
+                        await fetchPlaylistTracks(item);
+                      }
+                      if (playlistTracks[item.browseId!]) {
+                        for (const track of playlistTracks[item.browseId!]) {
+                          await onAddTrackToQueue(track);
+                        }
+                        toast({
+                          title: "追加しました",
+                          description: "全曲をキューに追加しました。",
+                        });
+                      }
+                    }}
+                    className="h-8 px-3 bg-primary hover:bg-primary/90 text-white rounded-full text-xs font-medium"
+                  >
+                    <Plus className="w-3.5 h-3.5 mr-1" />
+                    全曲
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="bg-white/95 backdrop-blur-xl border-black/10">
+                  <p>全曲をキューに追加</p>
+                </TooltipContent>
+              </Tooltip>
               <Button
                 size="sm"
                 variant="ghost"
@@ -354,16 +439,16 @@ const SearchResultCard: React.FC<SearchResultCardProps> = ({
                     fetchPlaylistTracks(item);
                   }
                 }}
-                className="h-7 sm:h-8 px-1.5 sm:px-2 text-xs"
+                className="h-8 px-3 rounded-full text-xs hover:bg-black/5"
               >
-                <span className="hidden xs:inline">トラック</span><span className="xs:hidden">表示</span>
+                {isExpanded ? '閉じる' : 'トラック'}
               </Button>
             </div>
           )}
         </div>
       </div>
 
-      {/* アルバム/プレイリストのトラックリスト */}
+      {/* Expanded track list */}
       {(item.type === 'album' || item.type === 'playlist' || ['album', 'single', 'ep'].includes(item.type)) && (
         <AnimatePresence>
           {isExpanded && (
@@ -371,33 +456,49 @@ const SearchResultCard: React.FC<SearchResultCardProps> = ({
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              className="border-t border-border"
+              transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
+              className="border-t border-border/50"
             >
-              <div className="p-2">
+              <div className="p-3">
                 {playlistTracks[item.browseId!] ? (
                   <ScrollArea className="h-64">
-                    {playlistTracks[item.browseId!].map((track, index) => (
-                      <div 
-                        key={index}
-                        className="flex items-center p-2 hover:bg-muted rounded-lg"
-                      >
-                        <div className="flex-grow min-w-0">
-                          <p className="font-semibold text-sm line-clamp-1">{track.title}</p>
-                          <p className="text-xs text-muted-foreground line-clamp-1">{track.artist}</p>
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => onAddTrackToQueue(track)}
-                          className="h-8"
+                    <div className="space-y-1">
+                      {playlistTracks[item.browseId!].map((track, index) => (
+                        <motion.div
+                          key={index}
+                          className="flex items-center p-2.5 rounded-lg hover:bg-black/5 transition-colors"
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.03 }}
                         >
-                          <Plus className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    ))}
+                          <span className="w-6 text-center text-xs text-muted-foreground mr-2">
+                            {index + 1}
+                          </span>
+                          <div className="flex-grow min-w-0">
+                            <p className="font-medium text-sm text-foreground line-clamp-1">{track.title}</p>
+                            <p className="text-xs text-muted-foreground line-clamp-1">{track.artist}</p>
+                          </div>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => onAddTrackToQueue(track)}
+                                className="h-8 w-8 rounded-full hover:bg-primary/10 text-muted-foreground hover:text-primary"
+                              >
+                                <Plus className="w-4 h-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent className="bg-white/95 backdrop-blur-xl border-black/10">
+                              <p>追加</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </motion.div>
+                      ))}
+                    </div>
                   </ScrollArea>
                 ) : (
-                  <div className="flex justify-center items-center p-4">
+                  <div className="flex justify-center items-center py-8">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
                   </div>
                 )}

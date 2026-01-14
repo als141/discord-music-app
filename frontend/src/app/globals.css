@@ -1,5 +1,13 @@
-/* Tailwind CSS v4 - CSS-first configuration */
+/* Tailwind CSS v4 - Apple Music Inspired Light Theme */
 @import "tailwindcss";
+
+/*
+ * Apple Music Design System
+ * ========================
+ * A clean, minimal aesthetic inspired by Apple Music's refined interface.
+ * Features: SF Pro typography, signature red accent (#FA243C),
+ * frosted glass effects, and generous white space.
+ */
 
 /* Theme configuration using @theme directive */
 @theme {
@@ -11,33 +19,45 @@
   --breakpoint-xl: 1280px;
   --breakpoint-2xl: 1536px;
 
-  /* Colors - Dark theme */
-  --color-background: oklch(0.145 0.02 270);
-  --color-foreground: oklch(0.985 0 0);
-  --color-card: oklch(0.145 0.02 270);
-  --color-card-foreground: oklch(0.985 0 0);
-  --color-popover: oklch(0.145 0.02 270);
-  --color-popover-foreground: oklch(0.985 0 0);
-  --color-primary: oklch(0.985 0 0);
-  --color-primary-foreground: oklch(0.205 0.015 270);
-  --color-secondary: oklch(0.27 0.01 270);
-  --color-secondary-foreground: oklch(0.985 0 0);
-  --color-muted: oklch(0.27 0.01 270);
-  --color-muted-foreground: oklch(0.71 0.01 270);
-  --color-accent: oklch(0.27 0.01 270);
-  --color-accent-foreground: oklch(0.985 0 0);
-  --color-destructive: oklch(0.45 0.18 25);
-  --color-destructive-foreground: oklch(0.985 0 0);
-  --color-border: oklch(0.27 0.01 270);
-  --color-input: oklch(0.27 0.01 270);
-  --color-ring: oklch(0.87 0.01 270);
+  /* Colors - Apple Music Light Theme */
+  --color-background: #FFFFFF;
+  --color-foreground: #1D1D1F;
+  --color-card: #FFFFFF;
+  --color-card-foreground: #1D1D1F;
+  --color-popover: #FFFFFF;
+  --color-popover-foreground: #1D1D1F;
 
-  /* Border radius */
-  --radius-sm: 0.25rem;
-  --radius-md: calc(0.5rem - 2px);
-  --radius-lg: 0.5rem;
-  --radius-xl: 0.75rem;
-  --radius-2xl: 1rem;
+  /* Primary - Apple Music Signature Red */
+  --color-primary: #FA243C;
+  --color-primary-foreground: #FFFFFF;
+
+  /* Secondary - Apple Light Gray */
+  --color-secondary: #F5F5F7;
+  --color-secondary-foreground: #1D1D1F;
+
+  /* Muted - Subtle Gray for backgrounds */
+  --color-muted: #F5F5F7;
+  --color-muted-foreground: #86868B;
+
+  /* Accent */
+  --color-accent: #F5F5F7;
+  --color-accent-foreground: #1D1D1F;
+
+  /* Destructive - Apple Red for errors */
+  --color-destructive: #FF3B30;
+  --color-destructive-foreground: #FFFFFF;
+
+  /* Border & Input */
+  --color-border: #E8E8ED;
+  --color-input: #F5F5F7;
+  --color-ring: #FA243C;
+
+  /* Border radius - Apple's signature rounded corners */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
   --radius-full: 9999px;
 
   /* Animations */
@@ -56,234 +76,6 @@
   to { height: 0; }
 }
 
-/* Base styles */
-@layer base {
-  * {
-    border-color: var(--color-border);
-  }
-
-  body {
-    background-color: var(--color-background);
-    color: var(--color-foreground);
-    overscroll-behavior: contain;
-  }
-
-  html, body {
-    /* Allow normal touch scrolling on all devices */
-    touch-action: pan-x pan-y;
-    -webkit-overflow-scrolling: touch;
-  }
-}
-
-/* Component styles */
-@layer components {
-  /* Mobile player */
-  .mobile-player {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background-color: var(--color-card);
-    border-top: 1px solid var(--color-border);
-    padding: 1rem;
-    transition: all 0.3s ease-in-out;
-  }
-
-  /* Full screen player */
-  .full-screen-player {
-    position: fixed;
-    inset: 0;
-    background: linear-gradient(to bottom, var(--color-background), var(--color-card));
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.3s ease-in-out;
-  }
-
-  /* Queue list */
-  .queue-list {
-    position: fixed;
-    inset: 0;
-    background-color: color-mix(in oklch, var(--color-background) 95%, transparent);
-    backdrop-filter: blur(4px);
-    overflow-y: auto;
-    transition: all 0.3s ease-in-out;
-  }
-
-  /* Search results */
-  .search-results {
-    position: fixed;
-    inset: 0;
-    background-color: color-mix(in oklch, var(--color-background) 95%, transparent);
-    backdrop-filter: blur(4px);
-    overflow-y: auto;
-    padding-top: 4rem;
-    transition: all 0.3s ease-in-out;
-  }
-
-  /* Drawer styles */
-  .drawer {
-    background-color: var(--color-card);
-    color: var(--color-card-foreground);
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    box-shadow: 0 -10px 30px -10px rgba(0, 0, 0, 0.3);
-  }
-
-  .drawer-content {
-    padding: 1.5rem;
-  }
-
-  .drawer-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 1rem;
-  }
-
-  .drawer-title {
-    font-size: 1.125rem;
-    font-weight: 600;
-  }
-
-  .drawer-description {
-    font-size: 0.875rem;
-    color: var(--color-muted-foreground);
-  }
-
-  /* Tab styles */
-  .tabs {
-    margin-bottom: 1rem;
-  }
-
-  .tab-trigger {
-    padding: 0.5rem 1rem;
-    border-radius: var(--radius-md);
-    transition: colors 0.2s;
-  }
-
-  .tab-trigger:hover {
-    background-color: var(--color-muted);
-  }
-
-  .tab-trigger[data-state="active"] {
-    background-color: var(--color-primary);
-    color: var(--color-primary-foreground);
-  }
-
-  .tab-content {
-    margin-top: 1rem;
-  }
-}
-
-/* Utility styles */
-@layer utilities {
-  /* Animation utilities */
-  .animate-fade-in {
-    animation: fade-in 0.3s ease-in-out;
-  }
-
-  .animate-fade-out {
-    animation: fade-out 0.3s ease-in-out;
-  }
-
-  .animate-slide-in-bottom {
-    animation: slide-in-from-bottom 0.3s ease-in-out;
-  }
-
-  .animate-slide-out-bottom {
-    animation: slide-out-to-bottom 0.3s ease-in-out;
-  }
-
-  /* Responsive utilities for scroll areas */
-  .scrollbar-thin {
-    scrollbar-width: thin;
-  }
-
-  .scrollbar-thin::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-
-  .scrollbar-thin::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: var(--color-border);
-    border-radius: 3px;
-  }
-
-  /* Horizontal scroll container for cards */
-  .horizontal-scroll-container {
-    display: flex;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scroll-snap-type: x proximity;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
-    padding-bottom: 8px;
-    /* タッチスクロールを有効化 */
-    touch-action: pan-x;
-    /* スクロールの慣性を有効化 */
-    scroll-behavior: smooth;
-  }
-
-  .horizontal-scroll-container::-webkit-scrollbar {
-    height: 4px;
-  }
-
-  .horizontal-scroll-container::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .horizontal-scroll-container::-webkit-scrollbar-thumb {
-    background: var(--color-border);
-    border-radius: 2px;
-  }
-
-  .horizontal-scroll-container > * {
-    scroll-snap-align: start;
-    flex-shrink: 0;
-  }
-
-  /* モバイルでスクロールバーを非表示 */
-  @media (max-width: 640px) {
-    .horizontal-scroll-container {
-      scrollbar-width: none;
-      -ms-overflow-style: none;
-    }
-
-    .horizontal-scroll-container::-webkit-scrollbar {
-      display: none;
-    }
-  }
-
-  /* Hide scrollbar on mobile but keep functionality */
-  @media (max-width: 640px) {
-    .hide-scrollbar-mobile {
-      -ms-overflow-style: none;
-      scrollbar-width: none;
-    }
-
-    .hide-scrollbar-mobile::-webkit-scrollbar {
-      display: none;
-    }
-  }
-
-  /* Ensure touch scrolling works in scroll areas */
-  [data-radix-scroll-area-viewport] {
-    touch-action: pan-x pan-y;
-    -webkit-overflow-scrolling: touch;
-  }
-}
-
-/* External service styles */
-#dify-chatbot-bubble-button {
-  background-color: #1C64F2 !important;
-}
-
-/* Animation keyframes */
 @keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -302,4 +94,539 @@
 @keyframes slide-out-to-bottom {
   from { transform: translateY(0); }
   to { transform: translateY(100%); }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Base styles */
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: 'kern' 1;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    overscroll-behavior: contain;
+    line-height: 1.47059;
+    letter-spacing: -0.022em;
+  }
+
+  html, body {
+    touch-action: pan-x pan-y;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Apple-style Typography */
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    color: var(--color-foreground);
+  }
+
+  h1 { font-size: 2.5rem; line-height: 1.1; font-weight: 700; }
+  h2 { font-size: 1.5rem; line-height: 1.2; font-weight: 700; }
+  h3 { font-size: 1.25rem; line-height: 1.3; font-weight: 600; }
+
+  /* Focus styles with Apple Music red */
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  /* Selection color */
+  ::selection {
+    background-color: rgba(250, 36, 60, 0.15);
+    color: var(--color-foreground);
+  }
+
+  /* Smooth scrolling */
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
+    }
+  }
+}
+
+/* Component styles */
+@layer components {
+  /* Frosted Glass Header - Apple Music style */
+  .apple-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-bottom: 0.5px solid rgba(0, 0, 0, 0.1);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    transition: background 0.3s ease;
+  }
+
+  /* Mobile player - Apple Music Now Playing bar */
+  .mobile-player {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-top: 0.5px solid rgba(0, 0, 0, 0.1);
+    padding: 12px 16px;
+    transition: all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+    box-shadow: 0 -1px 0 rgba(0, 0, 0, 0.04);
+  }
+
+  /* Full screen player - Apple Music style with adaptive background */
+  .full-screen-player {
+    position: fixed;
+    inset: 0;
+    background: linear-gradient(180deg,
+      #FAFAFA 0%,
+      #F5F5F7 30%,
+      #EFEFEF 60%,
+      #E8E8ED 100%
+    );
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.4s cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+
+  /* Queue list - Frosted glass sheet */
+  .queue-list {
+    position: fixed;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.88);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    overflow-y: auto;
+    transition: all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+
+  /* Search results overlay */
+  .search-results {
+    position: fixed;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    overflow-y: auto;
+    padding-top: 64px;
+    transition: all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+
+  /* Drawer styles - Apple Music bottom sheet */
+  .drawer {
+    background: var(--color-card);
+    color: var(--color-card-foreground);
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.12);
+  }
+
+  .drawer-content {
+    padding: 20px;
+  }
+
+  .drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 0.5px solid var(--color-border);
+  }
+
+  .drawer-title {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+  }
+
+  .drawer-description {
+    font-size: 14px;
+    color: var(--color-muted-foreground);
+    letter-spacing: -0.01em;
+  }
+
+  /* Tab styles - Apple Music segmented control */
+  .tabs {
+    margin-bottom: 16px;
+  }
+
+  .tab-trigger {
+    padding: 8px 16px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-muted-foreground);
+    transition: all 0.2s ease;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    letter-spacing: -0.01em;
+  }
+
+  .tab-trigger:hover {
+    color: var(--color-foreground);
+    background-color: rgba(0, 0, 0, 0.04);
+  }
+
+  .tab-trigger[data-state="active"] {
+    background: var(--color-card);
+    color: var(--color-foreground);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08), 0 0 1px rgba(0, 0, 0, 0.04);
+  }
+
+  .tab-content {
+    margin-top: 16px;
+  }
+
+  /* Apple Music Play Button - Signature red with glow */
+  .apple-play-button {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 20px rgba(250, 36, 60, 0.35);
+    transition: all 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+    cursor: pointer;
+    border: none;
+  }
+
+  .apple-play-button:hover {
+    transform: scale(1.06);
+    box-shadow: 0 6px 28px rgba(250, 36, 60, 0.45);
+  }
+
+  .apple-play-button:active {
+    transform: scale(0.96);
+  }
+
+  /* Apple Music Card - Album/Track card */
+  .apple-card {
+    background: var(--color-card);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    transition: all 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+
+  .apple-card:hover {
+    transform: scale(1.02);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+  }
+
+  .apple-card:active {
+    transform: scale(0.98);
+  }
+
+  /* Section header - Apple Music style */
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    padding: 0 4px;
+  }
+
+  .section-title {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    color: var(--color-foreground);
+  }
+
+  .section-link {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--color-primary);
+    text-decoration: none;
+    transition: opacity 0.15s ease;
+  }
+
+  .section-link:hover {
+    opacity: 0.7;
+  }
+
+  /* Track item - List row style */
+  .track-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    transition: background 0.15s ease;
+    cursor: pointer;
+  }
+
+  .track-item:hover {
+    background: rgba(0, 0, 0, 0.04);
+  }
+
+  .track-item:active {
+    background: rgba(0, 0, 0, 0.08);
+  }
+
+  /* Search input - Apple style */
+  .apple-search {
+    position: relative;
+    width: 100%;
+    max-width: 280px;
+  }
+
+  .apple-search-input {
+    width: 100%;
+    height: 36px;
+    padding: 0 12px 0 36px;
+    background: rgba(0, 0, 0, 0.04);
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 15px;
+    color: var(--color-foreground);
+    transition: all 0.2s ease;
+    letter-spacing: -0.01em;
+  }
+
+  .apple-search-input::placeholder {
+    color: var(--color-muted-foreground);
+  }
+
+  .apple-search-input:focus {
+    background: var(--color-card);
+    box-shadow: 0 0 0 4px rgba(250, 36, 60, 0.12);
+    outline: none;
+  }
+
+  /* Progress bar - Apple Music style */
+  .progress-bar {
+    width: 100%;
+    height: 4px;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 2px;
+    overflow: hidden;
+    cursor: pointer;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    background: var(--color-primary);
+    border-radius: 2px;
+    transition: width 0.1s linear;
+  }
+
+  /* Badge - Apple style pill */
+  .apple-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    background: rgba(250, 36, 60, 0.1);
+    color: var(--color-primary);
+    border-radius: var(--radius-full);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  /* Connected badge */
+  .connected-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: rgba(52, 199, 89, 0.12);
+    color: #34C759;
+    border-radius: var(--radius-full);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .connected-badge::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    background: #34C759;
+    border-radius: 50%;
+    animation: pulse-subtle 2s infinite;
+  }
+}
+
+/* Utility styles */
+@layer utilities {
+  /* Animation utilities */
+  .animate-fade-in {
+    animation: fade-in 0.3s ease-out;
+  }
+
+  .animate-fade-out {
+    animation: fade-out 0.3s ease-out;
+  }
+
+  .animate-slide-in-bottom {
+    animation: slide-in-from-bottom 0.4s cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+
+  .animate-slide-out-bottom {
+    animation: slide-out-to-bottom 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+
+  .animate-slide-up {
+    animation: slide-up 0.4s cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+
+  .animate-scale-in {
+    animation: scale-in 0.2s ease-out;
+  }
+
+  /* Scrollbar - Minimal Apple style */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.35);
+  }
+
+  /* Horizontal scroll container - Apple Music carousel */
+  .horizontal-scroll-container {
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 8px;
+    touch-action: pan-x;
+    scroll-behavior: smooth;
+    gap: 16px;
+  }
+
+  .horizontal-scroll-container::-webkit-scrollbar {
+    display: none;
+  }
+
+  .horizontal-scroll-container > * {
+    scroll-snap-align: start;
+    flex-shrink: 0;
+  }
+
+  @media (max-width: 640px) {
+    .horizontal-scroll-container {
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    .hide-scrollbar-mobile {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    .hide-scrollbar-mobile::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
+  [data-radix-scroll-area-viewport] {
+    touch-action: pan-x pan-y;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Glass effect utilities */
+  .glass {
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+  }
+
+  .glass-subtle {
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  /* Hover lift effect */
+  .hover-lift {
+    transition: transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+                box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+  }
+
+  /* Text utilities */
+  .text-primary-gradient {
+    background: linear-gradient(135deg, var(--color-primary) 0%, #FF6B6B 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Loading shimmer */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.04) 0%,
+      rgba(0, 0, 0, 0.08) 50%,
+      rgba(0, 0, 0, 0.04) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+}
+
+/* External service styles */
+#dify-chatbot-bubble-button {
+  background-color: var(--color-primary) !important;
 }
