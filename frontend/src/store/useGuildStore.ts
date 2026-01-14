@@ -24,6 +24,10 @@ interface GuildState {
   botVoiceChannelId: string | null;
   isBotConnected: boolean;
 
+  // 自動接続状態
+  hasCheckedAutoConnect: boolean;
+  isAutoConnecting: boolean;
+
   // 読み込み状態
   isLoadingServers: boolean;
   serversError: string | null;
@@ -42,6 +46,9 @@ interface GuildState {
   joinVoiceChannel: (serverId: string, channelId: string) => Promise<void>;
   disconnectVoiceChannel: (serverId: string) => Promise<void>;
   resetErrors: () => void;
+  // 自動接続: ユーザーがボットと同じVCにいる場合、自動的にそのサーバー/チャンネルをアクティブ化
+  checkAutoConnect: (userId: string) => Promise<boolean>;
+  resetAutoConnectCheck: () => void;
 }
 
 // 永続化対応のGuildストア
@@ -58,6 +65,10 @@ export const useGuildStore = create<GuildState>()(
       // ボットの実際のボイスチャンネル状態
       botVoiceChannelId: null,
       isBotConnected: false,
+
+      // 自動接続状態
+      hasCheckedAutoConnect: false,
+      isAutoConnecting: false,
 
       isLoadingServers: false,
       serversError: null,
@@ -271,6 +282,56 @@ export const useGuildStore = create<GuildState>()(
       // エラーのリセット
       resetErrors: () => {
         set({ serversError: null });
+      },
+
+      // 自動接続チェック
+      // ユーザーがボットと同じVCにいる場合、そのサーバー/チャンネルを自動的にアクティブ化する
+      checkAutoConnect: async (userId: string) => {
+        // 既にチェック済み or チェック中の場合はスキップ
+        if (get().hasCheckedAutoConnect || get().isAutoConnecting) {
+          return false;
+        }
+
+        set({ isAutoConnecting: true });
+
+        try {
+          // バックエンドから自動接続情報を取得
+          const { guildId, channelId } = await api.getAutoConnectInfo(userId);
+
+          if (guildId && channelId) {
+            console.log(`自動接続: ユーザーがボットと同じVCにいます (guild: ${guildId}, channel: ${channelId})`);
+
+            // サーバーとチャンネルをアクティブ化
+            // setActiveServerIdを直接呼ぶと初期化処理が走るので、直接stateを設定
+            set({
+              activeServerId: guildId,
+              activeChannelId: channelId,
+              botVoiceChannelId: channelId,
+              isBotConnected: true,
+              hasCheckedAutoConnect: true,
+              isAutoConnecting: false
+            });
+
+            // ボイスチャンネル一覧を取得
+            get().fetchVoiceChannels(guildId);
+            // ポーリングを開始
+            get().startVoiceStatusPolling(guildId);
+
+            return true;
+          }
+
+          set({ hasCheckedAutoConnect: true, isAutoConnecting: false });
+          return false;
+        } catch (error) {
+          console.error('自動接続チェック中にエラーが発生しました:', error);
+          set({ hasCheckedAutoConnect: true, isAutoConnecting: false });
+          return false;
+        }
+      },
+
+      // 自動接続チェックをリセット（ログアウト時などに使用）
+      resetAutoConnectCheck: () => {
+        set({ hasCheckedAutoConnect: false, isAutoConnecting: false });
       }
     }),
     {

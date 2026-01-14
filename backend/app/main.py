@@ -760,6 +760,64 @@ async def get_bot_voice_status(guild_id: str):
         return {"channel_id": str(guild.voice_client.channel.id)}
     return {"channel_id": None}
 
+@app.get("/user-voice-status/{guild_id}/{user_id}")
+async def get_user_voice_status(guild_id: str, user_id: str):
+    """
+    指定されたギルドでユーザーが接続しているボイスチャンネルのIDを返す。
+    ユーザーがボイスチャンネルに接続していない場合はnullを返す。
+    """
+    guild = client.get_guild(int(guild_id))
+    if not guild:
+        return {"channel_id": None}
+
+    member = guild.get_member(int(user_id))
+    if not member:
+        # メンバーがキャッシュにない場合はfetch
+        try:
+            member = await guild.fetch_member(int(user_id))
+        except Exception:
+            return {"channel_id": None}
+
+    if member and member.voice and member.voice.channel:
+        return {"channel_id": str(member.voice.channel.id)}
+    return {"channel_id": None}
+
+@app.get("/auto-connect-info/{user_id}")
+async def get_auto_connect_info(user_id: str):
+    """
+    ユーザーがボットと同じボイスチャンネルにいるサーバーとチャンネルの情報を返す。
+    自動接続機能で使用する。
+
+    Returns:
+        guild_id: ボットとユーザーが同じVCにいるギルドID（なければnull）
+        channel_id: そのチャンネルID（なければnull）
+    """
+    # ボットが接続しているすべてのギルドをチェック
+    for guild in client.guilds:
+        # ボットがボイスチャンネルに接続しているか確認
+        if not guild.voice_client or not guild.voice_client.channel:
+            continue
+
+        bot_channel_id = guild.voice_client.channel.id
+
+        # ユーザーがこのギルドにいるか確認
+        member = guild.get_member(int(user_id))
+        if not member:
+            try:
+                member = await guild.fetch_member(int(user_id))
+            except Exception:
+                continue
+
+        # ユーザーがボットと同じチャンネルにいるか確認
+        if member and member.voice and member.voice.channel:
+            if member.voice.channel.id == bot_channel_id:
+                return {
+                    "guild_id": str(guild.id),
+                    "channel_id": str(bot_channel_id)
+                }
+
+    return {"guild_id": None, "channel_id": None}
+
 @app.get("/current-track/{guild_id}", response_model=Optional[Track])
 async def get_current_track(guild_id: str):
     player = music_players.get(guild_id)

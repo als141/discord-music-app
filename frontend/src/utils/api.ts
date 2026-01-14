@@ -433,6 +433,30 @@ export const api = {
     return null; // エラーハンドリング後の空の戻り値
   },
 
+  getUserVoiceStatus: async (serverId: string, userId: string): Promise<string | null> => {
+    try {
+      const response = await apiClient.get(`/user-voice-status/${serverId}/${userId}`);
+      return response.data.channel_id;
+    } catch (error) {
+      // ユーザーのボイス状態取得はサイレントに失敗可能
+      console.warn('ユーザーのボイス状態を取得できませんでした:', error);
+    }
+    return null;
+  },
+
+  getAutoConnectInfo: async (userId: string): Promise<{ guildId: string | null; channelId: string | null }> => {
+    try {
+      const response = await apiClient.get(`/auto-connect-info/${userId}`);
+      return {
+        guildId: response.data.guild_id,
+        channelId: response.data.channel_id
+      };
+    } catch (error) {
+      console.warn('自動接続情報を取得できませんでした:', error);
+    }
+    return { guildId: null, channelId: null };
+  },
+
   getRecommendations: async (): Promise<Section[]> => {
     try {
       const response = await apiClient.get('/recommendations');

@@ -47,7 +47,8 @@ export const MainApp: React.FC = () => {
     activeServerId, activeChannelId, voiceChannels, setActiveServerId, setActiveChannelId,
     fetchMutualServers, fetchVoiceChannels, inviteBot,
     joinVoiceChannel, disconnectVoiceChannel,
-    fetchBotVoiceStatus, stopVoiceStatusPolling
+    fetchBotVoiceStatus, stopVoiceStatusPolling,
+    checkAutoConnect, hasCheckedAutoConnect, isAutoConnecting
   } = useGuildStore();
   
   const {
@@ -80,16 +81,35 @@ export const MainApp: React.FC = () => {
     }
   }, [fetchMutualServers, status]);
 
+  // 自動接続チェック: ユーザーがボットと同じVCにいる場合、自動的にそのサーバー/チャンネルをアクティブ化
+  // これにより、ユーザーBが既にユーザーAと同じVCにいる場合、手動でチャンネルを選択する必要がなくなる
+  useEffect(() => {
+    const performAutoConnect = async () => {
+      if (status === 'authenticated' && session?.user?.id && !hasCheckedAutoConnect && !isAutoConnecting) {
+        const autoConnected = await checkAutoConnect(session.user.id);
+        if (autoConnected) {
+          toast({
+            title: "自動接続",
+            description: "ボイスチャンネルに自動的に接続しました。",
+          });
+        }
+      }
+    };
+
+    performAutoConnect();
+  }, [status, session?.user?.id, hasCheckedAutoConnect, isAutoConnecting, checkAutoConnect, toast]);
+
   // 初回マウント時に保存されているactiveServerIdのボイス状態を取得
+  // 自動接続が成功しなかった場合のみ実行
   const initialLoadRef = useRef(false);
   useEffect(() => {
-    if (status === 'authenticated' && activeServerId && !initialLoadRef.current) {
+    if (status === 'authenticated' && activeServerId && !initialLoadRef.current && hasCheckedAutoConnect) {
       initialLoadRef.current = true;
       // 保存されているactiveServerIdがある場合、ボイスチャンネルとボットステータスを取得
       fetchVoiceChannels(activeServerId);
       fetchBotVoiceStatus(activeServerId);
     }
-  }, [status, activeServerId, fetchVoiceChannels, fetchBotVoiceStatus]);
+  }, [status, activeServerId, fetchVoiceChannels, fetchBotVoiceStatus, hasCheckedAutoConnect]);
 
   // ローカルストレージから状態を復元
   useEffect(() => {

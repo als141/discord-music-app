@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Search, Link as LinkIcon, Menu, Clipboard, X, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useToast } from '@/hooks/use-toast'
 import { useSession, signIn, signOut } from 'next-auth/react'
+import { useGuildStore } from '@/store'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import {
   DropdownMenu,
@@ -41,6 +42,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [searchHistory, setSearchHistory] = useState<string[]>([])
   const { toast } = useToast()
   const { data: session } = useSession()
+  const { resetAutoConnectCheck } = useGuildStore()
 
   useEffect(() => {
     const history = localStorage.getItem('searchHistory')
@@ -48,6 +50,12 @@ export const Header: React.FC<HeaderProps> = ({
       setSearchHistory(JSON.parse(history))
     }
   }, [])
+
+  // ログアウト時に自動接続チェックをリセット
+  const handleSignOut = useCallback(() => {
+    resetAutoConnectCheck()
+    signOut()
+  }, [resetAutoConnectCheck])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -237,7 +245,7 @@ export const Header: React.FC<HeaderProps> = ({
                   </div>
                   <DropdownMenuSeparator className="bg-black/5" />
                   <DropdownMenuItem
-                    onClick={() => signOut()}
+                    onClick={handleSignOut}
                     className="text-destructive focus:text-destructive cursor-pointer"
                   >
                     ログアウト
