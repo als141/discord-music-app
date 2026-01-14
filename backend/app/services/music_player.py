@@ -55,10 +55,23 @@ def get_ytdl_format_options() -> dict:
     cookies_path = settings.music.cookies_file
     logger.info(f"COOKIES_FILE env value: '{cookies_path}'")
     if cookies_path:
-        logger.info(f"Checking if cookies file exists at: {cookies_path}")
-        if os.path.exists(cookies_path):
-            options['cookiefile'] = cookies_path
-            logger.info(f"YouTube cookies file loaded: {cookies_path}")
+        actual_cookies_path = None
+
+        if os.path.isfile(cookies_path):
+            # 直接ファイルが指定された場合
+            actual_cookies_path = cookies_path
+        elif os.path.isdir(cookies_path):
+            # ディレクトリの場合（Cloud Run Secret Manager）
+            # ディレクトリ内のファイルを探す
+            for filename in os.listdir(cookies_path):
+                file_path = os.path.join(cookies_path, filename)
+                if os.path.isfile(file_path):
+                    actual_cookies_path = file_path
+                    break
+
+        if actual_cookies_path:
+            options['cookiefile'] = actual_cookies_path
+            logger.info(f"YouTube cookies file loaded: {actual_cookies_path}")
         else:
             logger.warning(f"Cookies file NOT FOUND at: {cookies_path}")
     else:
