@@ -120,6 +120,8 @@
 @layer base {
   * {
     border-color: var(--color-border);
+    /* モバイルタップハイライトを無効化 */
+    -webkit-tap-highlight-color: transparent;
   }
 
   html {
@@ -579,6 +581,21 @@
   [data-radix-scroll-area-viewport] {
     touch-action: pan-x pan-y;
     -webkit-overflow-scrolling: touch;
+  }
+
+  /* Force width constraints on scroll area content - Override Radix UI inline styles */
+  [data-radix-scroll-area-viewport] > div {
+    display: block !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  /* Search results specific container fix */
+  .search-result-card-container {
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
   }
 
   /* Glass effect utilities */

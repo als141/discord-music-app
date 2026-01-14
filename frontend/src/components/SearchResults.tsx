@@ -14,7 +14,6 @@ import {
   TooltipTrigger,
   TooltipContent
 } from "@/components/ui/tooltip";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import Image from 'next/image';
 import { api } from '@/utils/api';
 import ArtistDialog from '@/components/ArtistDialog';
@@ -80,7 +79,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
   };
 
   return (
-    <TooltipProvider>
+    <TooltipProvider delayDuration={300} skipDelayDuration={100}>
       <motion.div
         className="fixed inset-0 bg-background z-50 overflow-hidden flex flex-col"
         initial={{ opacity: 0 }}
@@ -92,7 +91,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
         <div className="glass border-b border-border/50 py-4 px-4 sm:px-6 z-10">
           <div className="max-w-screen-xl mx-auto">
             {/* Title and close */}
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex justify-between items-center mb-4 pl-12 sm:pl-0">
               <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">検索結果</h2>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -135,9 +134,9 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
           </div>
         </div>
 
-        {/* Results area */}
-        <ScrollArea className="flex-grow">
-          <div className="p-4 sm:p-6 max-w-screen-xl mx-auto">
+        {/* Results area - 通常のネイティブスクロール */}
+        <div className="flex-grow overflow-y-auto overflow-x-hidden">
+          <div className="p-4 sm:p-6 w-full">
             {results.length === 0 ? (
               <motion.div
                 className="flex flex-col items-center justify-center py-20"
@@ -157,12 +156,12 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
             ) : (
               <Tabs defaultValue="all" className="w-full">
                 {/* Tab navigation - Apple Music pill style */}
-                <div className="relative mb-6">
-                  <div className="overflow-x-auto scrollbar-thin pb-2">
-                    <TabsList className="inline-flex p-1 rounded-full bg-secondary/60 min-w-max">
+                <div className="relative mb-6 -mx-4 sm:-mx-6 px-4 sm:px-6">
+                  <div className="overflow-x-auto scrollbar-thin pb-2 -mx-4 px-4">
+                    <TabsList className="inline-flex p-1 rounded-full bg-secondary/60 whitespace-nowrap">
                       <TabsTrigger
                         value="all"
-                        className="rounded-full px-4 py-1.5 text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-foreground text-muted-foreground transition-all"
+                        className="rounded-full px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-foreground text-muted-foreground transition-all flex-shrink-0"
                       >
                         {categoryLabels.all}
                       </TabsTrigger>
@@ -171,10 +170,10 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
                           <TabsTrigger
                             key={category}
                             value={category}
-                            className="rounded-full px-4 py-1.5 text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-foreground text-muted-foreground transition-all"
+                            className="rounded-full px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-foreground text-muted-foreground transition-all flex-shrink-0"
                           >
                             {categoryLabels[category]}
-                            <span className="ml-1.5 text-xs opacity-60">({items.length})</span>
+                            <span className="ml-1 sm:ml-1.5 text-[10px] sm:text-xs opacity-60">({items.length})</span>
                           </TabsTrigger>
                         )
                       ))}
@@ -207,7 +206,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
                             </Button>
                           )}
                         </div>
-                        <div className="space-y-2">
+                        <div className="space-y-2 w-full overflow-hidden">
                           {getVisibleItems(category, items).map((item, index) => (
                             <SearchResultCard
                               key={`${item.url}-${index}`}
@@ -250,7 +249,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
               </Tabs>
             )}
           </div>
-        </ScrollArea>
+        </div>
 
         {/* Artist Dialog */}
         {selectedArtistId && (
@@ -339,14 +338,14 @@ const SearchResultCard: React.FC<SearchResultCardProps> = ({
 
   return (
     <motion.div
-      className="bg-secondary/40 rounded-xl overflow-hidden transition-all duration-200 hover:bg-secondary/60"
+      className="bg-secondary/40 rounded-xl overflow-hidden transition-all duration-200 hover:bg-secondary/60 w-full"
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
     >
-      <div className="flex p-3 items-center">
-        {/* Thumbnail */}
-        <div className="relative w-12 h-12 sm:w-14 sm:h-14 flex-shrink-0">
+      <div className="flex items-center gap-2 sm:gap-3 p-2.5 sm:p-3 w-full">
+        {/* Thumbnail - fixed size */}
+        <div className="relative w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0">
           <Image
             src={item.thumbnail}
             alt={item.title}
@@ -357,22 +356,22 @@ const SearchResultCard: React.FC<SearchResultCardProps> = ({
           />
         </div>
 
-        {/* Info */}
-        <div className="flex-grow px-3 min-w-0">
-          <h3 className="font-semibold text-sm sm:text-base text-foreground line-clamp-1">
+        {/* Info - MUST shrink with min-w-0 */}
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-xs sm:text-sm text-foreground truncate leading-tight">
             {item.title}
           </h3>
-          <div className="flex items-center gap-2 mt-0.5">
-            <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-secondary/80 px-1.5 py-0.5 rounded-full">
+          <div className="flex items-center gap-1 mt-0.5">
+            <span className="inline-flex items-center gap-0.5 text-[9px] sm:text-[10px] text-muted-foreground bg-secondary/80 px-1 sm:px-1.5 py-0.5 rounded-full flex-shrink-0">
               {getItemIcon(item.type)}
               {getTypeLabel(item.type)}
             </span>
-            <p className="text-xs text-muted-foreground truncate">{item.artist}</p>
+            <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{item.artist}</p>
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex-shrink-0 ml-2">
+        {/* Actions - fixed size, never shrink */}
+        <div className="flex-shrink-0">
           {item.type === 'artist' ? (
             <Button
               size="sm"
@@ -380,7 +379,7 @@ const SearchResultCard: React.FC<SearchResultCardProps> = ({
                 setSelectedArtistId(item.browseId!);
                 setIsArtistDialogOpen(true);
               }}
-              className="h-8 px-4 bg-primary/10 hover:bg-primary/20 text-primary rounded-full text-xs font-medium"
+              className="h-7 sm:h-8 px-3 sm:px-4 bg-primary/10 hover:bg-primary/20 text-primary rounded-full text-xs font-medium"
               variant="ghost"
             >
               詳細
@@ -391,9 +390,9 @@ const SearchResultCard: React.FC<SearchResultCardProps> = ({
                 <Button
                   size="sm"
                   onClick={() => onAddToQueue(item)}
-                  className="h-8 w-8 rounded-full bg-primary hover:bg-primary/90 text-white"
+                  className="h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-primary hover:bg-primary/90 text-white"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent className="bg-white/95 backdrop-blur-xl border-black/10">
@@ -401,7 +400,7 @@ const SearchResultCard: React.FC<SearchResultCardProps> = ({
               </TooltipContent>
             </Tooltip>
           ) : (
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -420,9 +419,9 @@ const SearchResultCard: React.FC<SearchResultCardProps> = ({
                         });
                       }
                     }}
-                    className="h-8 px-3 bg-primary hover:bg-primary/90 text-white rounded-full text-xs font-medium"
+                    className="h-7 sm:h-8 px-2 sm:px-3 bg-primary hover:bg-primary/90 text-white rounded-full text-[10px] sm:text-xs font-medium"
                   >
-                    <Plus className="w-3.5 h-3.5 mr-1" />
+                    <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-0.5 sm:mr-1" />
                     全曲
                   </Button>
                 </TooltipTrigger>
@@ -439,7 +438,7 @@ const SearchResultCard: React.FC<SearchResultCardProps> = ({
                     fetchPlaylistTracks(item);
                   }
                 }}
-                className="h-8 px-3 rounded-full text-xs hover:bg-black/5"
+                className="h-7 sm:h-8 px-2 sm:px-3 rounded-full text-[10px] sm:text-xs hover:bg-black/5"
               >
                 {isExpanded ? '閉じる' : 'トラック'}
               </Button>
@@ -461,7 +460,7 @@ const SearchResultCard: React.FC<SearchResultCardProps> = ({
             >
               <div className="p-3">
                 {playlistTracks[item.browseId!] ? (
-                  <ScrollArea className="h-64">
+                  <div className="h-64 overflow-y-auto">
                     <div className="space-y-1">
                       {playlistTracks[item.browseId!].map((track, index) => (
                         <motion.div
@@ -496,7 +495,7 @@ const SearchResultCard: React.FC<SearchResultCardProps> = ({
                         </motion.div>
                       ))}
                     </div>
-                  </ScrollArea>
+                  </div>
                 ) : (
                   <div className="flex justify-center items-center py-8">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />

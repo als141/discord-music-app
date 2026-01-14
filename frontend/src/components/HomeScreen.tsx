@@ -8,11 +8,14 @@ import {
   Play,
   User,
   Clock,
-  Sparkles,
   Home,
   ExternalLink,
   Info,
   Music2,
+  Disc3,
+  ListMusic,
+  Radio,
+  Headphones,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useInView } from 'react-intersection-observer';
@@ -377,16 +380,21 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     return (
       <div className="h-full overflow-y-auto overflow-x-hidden bg-background">
         <div className="py-4 sm:py-6 space-y-8 sm:space-y-10">
-          {/* Recently Played */}
+          {/* Recently Played - Apple Music Style */}
           {reversedHistory.length > 0 && guildId && (
             <section key="section-history" className="w-full" aria-labelledby="history-heading">
-              <div className="flex items-center gap-3 mb-4 sm:mb-5 px-4 sm:px-6">
-                <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Clock className="w-[18px] h-[18px] text-primary" />
+              <div className="flex items-center justify-between mb-4 sm:mb-5 px-4 sm:px-6">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary to-pink-500 flex items-center justify-center shadow-sm">
+                    <Clock className="w-4 h-4 text-white" />
+                  </div>
+                  <h2 id="history-heading" className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
+                    最近再生した曲
+                  </h2>
                 </div>
-                <h2 id="history-heading" className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
-                  最近再生した曲
-                </h2>
+                <button className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">
+                  すべて見る
+                </button>
               </div>
 
               {/* Horizontal scroll container */}
@@ -405,16 +413,42 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </section>
           )}
 
-          {/* Recommendation sections */}
-          {sections.map((section, index) => (
+          {/* Recommendation sections - Apple Music Style */}
+          {sections.map((section, index) => {
+            // セクションごとに異なるグラデーションカラーを使用
+            const gradients = [
+              'from-rose-500 to-orange-400',      // 温かみのあるレッド→オレンジ
+              'from-violet-500 to-purple-400',    // バイオレット→パープル
+              'from-cyan-500 to-blue-400',        // シアン→ブルー
+              'from-emerald-500 to-teal-400',     // エメラルド→ティール
+              'from-amber-500 to-yellow-400',     // アンバー→イエロー
+            ];
+            const gradient = gradients[index % gradients.length];
+
+            // セクションごとのアイコン
+            const icons = [
+              <Music2 key="music" className="w-4 h-4 text-white" />,
+              <Disc3 key="disc" className="w-4 h-4 text-white" />,
+              <ListMusic key="list" className="w-4 h-4 text-white" />,
+              <Radio key="radio" className="w-4 h-4 text-white" />,
+              <Headphones key="headphones" className="w-4 h-4 text-white" />,
+            ];
+            const icon = icons[index % icons.length];
+
+            return (
             <section key={`section-${index}`} className="w-full" aria-labelledby={`section-heading-${index}`}>
-              <div className="flex items-center gap-3 mb-4 sm:mb-5 px-4 sm:px-6">
-                <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Sparkles className="w-[18px] h-[18px] text-primary" />
+              <div className="flex items-center justify-between mb-4 sm:mb-5 px-4 sm:px-6">
+                <div className="flex items-center gap-2.5">
+                  <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${gradient} flex items-center justify-center shadow-sm`}>
+                    {icon}
+                  </div>
+                  <h2 id={`section-heading-${index}`} className="text-lg sm:text-xl font-bold tracking-tight text-foreground line-clamp-1">
+                    {section.title}
+                  </h2>
                 </div>
-                <h2 id={`section-heading-${index}`} className="text-xl sm:text-2xl font-bold tracking-tight text-foreground line-clamp-1">
-                  {section.title}
-                </h2>
+                <button className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">
+                  すべて見る
+                </button>
               </div>
 
               {/* Horizontal scroll container */}
@@ -435,7 +469,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 <div className="w-4 sm:w-6 flex-shrink-0" aria-hidden="true" />
               </div>
             </section>
-          ))}
+            );
+          })}
 
           {/* Empty state */}
           {sections.length === 0 && !loading && (

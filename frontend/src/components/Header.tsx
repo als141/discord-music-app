@@ -110,7 +110,7 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <TooltipProvider>
       {/* Apple Music Style Frosted Glass Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 h-14 glass border-b border-black/5">
+      <header className="fixed top-0 left-0 right-0 z-[100] h-14 glass border-b border-black/5">
         <div className="flex items-center justify-between h-full px-4 max-w-screen-2xl mx-auto">
           {/* Left Section - Menu Button */}
           <div className="flex items-center gap-2">
@@ -264,9 +264,10 @@ export const Header: React.FC<HeaderProps> = ({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
-              className="absolute top-full left-0 right-0 glass border-b border-black/5 shadow-lg"
+              className="absolute top-full left-0 right-0 bg-white border-b border-black/10 z-[101]"
+              style={{ boxShadow: '0 8px 40px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.08)' }}
             >
-              <form onSubmit={handleSearch} className="max-w-screen-2xl mx-auto px-4 py-3">
+              <form onSubmit={handleSearch} className="max-w-screen-2xl mx-auto px-4 pt-4 pb-5">
                 <div className="relative max-w-xl mx-auto">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -321,9 +322,10 @@ export const Header: React.FC<HeaderProps> = ({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
-              className="absolute top-full left-0 right-0 glass border-b border-black/5 shadow-lg"
+              className="absolute top-full left-0 right-0 bg-white border-b border-black/10 z-[101]"
+              style={{ boxShadow: '0 8px 40px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.08)' }}
             >
-              <form onSubmit={handleAddUrl} className="max-w-screen-2xl mx-auto px-4 py-3">
+              <form onSubmit={handleAddUrl} className="max-w-screen-2xl mx-auto px-4 py-4 pb-6">
                 <div className="relative max-w-xl mx-auto">
                   <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -366,19 +368,6 @@ export const Header: React.FC<HeaderProps> = ({
         </AnimatePresence>
       </header>
 
-      {/* Backdrop overlay when panels are open */}
-      <AnimatePresence>
-        {(isSearchActive || isUrlActive) && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-black/20 z-40"
-            onClick={closeAllPanels}
-          />
-        )}
-      </AnimatePresence>
     </TooltipProvider>
   )
 }

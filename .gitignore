@@ -9,7 +9,7 @@ package-lock.json
 image
 # testing
 /coverage
-
+.playwright-mcp
 # next.js
 .next
 /out/
