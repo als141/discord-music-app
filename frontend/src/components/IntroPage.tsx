@@ -1,151 +1,56 @@
+'use client';
+
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { signIn } from 'next-auth/react';
-import { motion } from 'framer-motion';
-import { Music2, Headphones, Users, Wind } from 'lucide-react';
+import { Music } from 'lucide-react';
 
 export const IntroPage = () => {
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.3
-      }
-    }
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 30 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: {
-        duration: 0.6,
-        ease: "easeOut"
-      }
-    }
-  };
-
-  const floatAnimation = {
-    y: [-10, 10],
-    transition: {
-      duration: 3,
-      repeat: Infinity,
-      repeatType: "reverse" as const,
-      ease: "easeInOut"
-    }
-  };
-
   return (
-    <div className="h-screen overflow-auto bg-gradient-to-br from-slate-900 via-indigo-900 to-purple-900 text-white relative">
-      {/* 背景のデコレーション要素 - position: fixed に変更 */}
-      <motion.div
-        animate={{ rotate: 360 }}
-        transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
-        className="fixed top-1/4 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl"
-      />
-      <motion.div
-        animate={{ rotate: -360 }}
-        transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
-        className="fixed bottom-1/4 left-1/4 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl"
-      />
-  
-      <div className="relative z-10 container mx-auto px-4 py-20">
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          className="flex flex-col items-center"
-        >
-          {/* ヘッドライン */}
-          <motion.div
-            variants={itemVariants}
-            className="text-center mb-16 pt-8 md:pt-16"
-          >
-            <motion.div animate={floatAnimation}>
-              <h1 className="text-4xl md:text-6xl font-bold mb-6 tracking-tight">
-                <span className="bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-300">
-                  音楽の調べが紡ぐ
-                </span>
-              </h1>
-              <h2 className="text-3xl md:text-5xl font-bold mb-8">新しい交流の形</h2>
-            </motion.div>
-            <p className="text-lg md:text-xl text-gray-300 leading-relaxed max-w-2xl mx-auto px-4">
-              空間を超えて響き合う音楽の世界へ。
-              <br />
-              仲間と共に奏でる新しい音楽体験が、
-              <br className="hidden md:block" />
-              あなたのDiscordサーバーで始まります。
-            </p>
-          </motion.div>
+    <div className="min-h-screen bg-neutral-950 text-white flex flex-col">
+      {/* メインコンテンツ */}
+      <main className="flex-1 flex flex-col items-center justify-center px-6">
+        <div className="w-full max-w-md mx-auto text-center">
+          {/* アイコン */}
+          <div className="mb-8 flex justify-center">
+            <div className="w-20 h-20 bg-emerald-500/10 rounded-2xl flex items-center justify-center">
+              <Music className="w-10 h-10 text-emerald-400" />
+            </div>
+          </div>
 
-          {/* 機能カード */}
-          <motion.div
-            variants={itemVariants}
-            className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 mb-16 w-full max-w-6xl px-4"
-          >
-            <FeatureCard
-              icon={<Music2 />}
-              title="無限の音楽空間"
-              description="Youtube Musicから様々な音源に対応し、あなたの音楽体験を広げます"
-            />
-            <FeatureCard
-              icon={<Headphones />}
-              title="極上のインターフェース"
-              description="シンプルで使いやすいUIで、音楽を楽しむことに集中できます"
-            />
-            <FeatureCard
-              icon={<Users />}
-              title="みんなで創る"
-              description="プレイリストの共同編集で新しい発見を"
-            />
-          </motion.div>
+          {/* タイトル */}
+          <h1 className="text-3xl sm:text-4xl font-bold mb-4 tracking-tight">
+            Discord Music Player
+          </h1>
 
-          {/* CTAボタン */}
-          <motion.div
-            variants={itemVariants}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="mb-8"
+          {/* 説明文 */}
+          <p className="text-neutral-400 text-base sm:text-lg mb-10 leading-relaxed">
+            サーバーのみんなと一緒に音楽を楽しもう
+          </p>
+
+          {/* ログインボタン */}
+          <Button
+            onClick={() => signIn('discord')}
+            className="w-full sm:w-auto bg-[#5865F2] hover:bg-[#4752C4] text-white font-medium py-6 px-10 rounded-lg text-base transition-colors duration-200"
           >
-            <Button
-              onClick={() => signIn('discord')}
-              className="bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white font-medium py-6 px-12 rounded-full text-lg shadow-lg hover:shadow-xl transform transition-all duration-300"
+            <svg
+              className="w-5 h-5 mr-3"
+              viewBox="0 0 24 24"
+              fill="currentColor"
             >
-              <Wind className="w-5 h-5 mr-2" />
-              Discord で始める
-            </Button>
-          </motion.div>
-        </motion.div>
-      </div>
+              <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
+            </svg>
+            Discordでログイン
+          </Button>
+
+          {/* 補足テキスト */}
+          <p className="text-neutral-500 text-sm mt-6">
+            ログインするとサーバーの音楽を操作できます
+          </p>
+        </div>
+      </main>
     </div>
   );
 };
-
-const FeatureCard = ({ icon, title, description }: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-}) => (
-  <motion.div
-    whileHover={{ y: -5 }}
-    className="bg-white/5 backdrop-blur-lg rounded-2xl p-6 md:p-8 border border-white/10 hover:border-purple-500/50 transition-colors duration-300"
-  >
-    <motion.div
-      whileHover={{ rotate: [0, -10, 10, 0] }}
-      transition={{ duration: 0.5 }}
-      className="bg-gradient-to-br from-purple-500 to-indigo-500 text-white rounded-xl p-4 w-14 h-14 md:w-16 md:h-16 flex items-center justify-center mb-6"
-    >
-      {icon}
-    </motion.div>
-    <h3 className="text-xl font-bold mb-3 bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-300">
-      {title}
-    </h3>
-    <p className="text-gray-400 leading-relaxed text-sm md:text-base">
-      {description}
-    </p>
-  </motion.div>
-);
 
 export default IntroPage;
