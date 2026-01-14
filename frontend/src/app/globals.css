@@ -27,8 +27,8 @@
   --color-popover: #FFFFFF;
   --color-popover-foreground: #1D1D1F;
 
-  /* Primary - Apple Music Signature Red */
-  --color-primary: #FA243C;
+  /* Primary - Refined Rose (Apple Music inspired) */
+  --color-primary: #FF2D55;
   --color-primary-foreground: #FFFFFF;
 
   /* Secondary - Apple Light Gray */
@@ -50,7 +50,7 @@
   /* Border & Input */
   --color-border: #E8E8ED;
   --color-input: #F5F5F7;
-  --color-ring: #FA243C;
+  --color-ring: #FF2D55;
 
   /* Border radius - Apple's signature rounded corners */
   --radius-sm: 6px;
@@ -164,7 +164,7 @@
 
   /* Selection color */
   ::selection {
-    background-color: rgba(250, 36, 60, 0.15);
+    background-color: rgba(255, 45, 85, 0.15);
     color: var(--color-foreground);
   }
 
@@ -317,7 +317,7 @@
     margin-top: 16px;
   }
 
-  /* Apple Music Play Button - Signature red with glow */
+  /* Apple Music Play Button - Signature rose with glow */
   .apple-play-button {
     width: 64px;
     height: 64px;
@@ -327,7 +327,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 20px rgba(250, 36, 60, 0.35);
+    box-shadow: 0 4px 20px rgba(255, 45, 85, 0.32);
     transition: all 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
     cursor: pointer;
     border: none;
@@ -335,7 +335,7 @@
 
   .apple-play-button:hover {
     transform: scale(1.06);
-    box-shadow: 0 6px 28px rgba(250, 36, 60, 0.45);
+    box-shadow: 0 6px 28px rgba(255, 45, 85, 0.42);
   }
 
   .apple-play-button:active {
@@ -431,7 +431,7 @@
 
   .apple-search-input:focus {
     background: var(--color-card);
-    box-shadow: 0 0 0 4px rgba(250, 36, 60, 0.12);
+    box-shadow: 0 0 0 4px rgba(255, 45, 85, 0.12);
     outline: none;
   }
 
@@ -457,7 +457,7 @@
     display: inline-flex;
     align-items: center;
     padding: 4px 10px;
-    background: rgba(250, 36, 60, 0.1);
+    background: rgba(255, 45, 85, 0.1);
     color: var(--color-primary);
     border-radius: var(--radius-full);
     font-size: 12px;
