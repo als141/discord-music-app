@@ -18,20 +18,32 @@ logger = get_logger(__name__)
 
 def get_ytdl_format_options() -> dict:
     """yt-dlp の設定オプションを取得"""
+    # フォーマット選択: HTTPSプロトコルのオーディオフォーマットを優先
+    # m3u8 (HLS) は403エラーになることがあるため避ける
+    # bestaudio[protocol=https] を優先し、利用不可の場合はbestaudio/bestにフォールバック
+    format_string = 'bestaudio[protocol=https][ext=m4a]/bestaudio[protocol=https][ext=webm]/bestaudio[protocol=https]/bestaudio/best'
+
     options = {
-        'format': settings.music.ytdl_format,
+        'format': format_string,
         'outtmpl': f'{settings.music.directory}/%(title)s-%(id)s.%(ext)s',
         'restrictfilenames': True,
         'nocheckcertificate': True,
-        'ignoreerrors': True,  # プレイリスト内で一部の動画が利用不可でも継続
-        'no_warnings': True,
+        'ignoreerrors': False,  # エラーを検出するためFalseに変更
+        'no_warnings': False,  # 警告を表示してデバッグを容易にする
         'default_search': 'auto',
         'source_address': '0.0.0.0',
-        'retries': 3,  # ダウンロードリトライ回数
-        'fragment_retries': 3,  # フラグメントリトライ回数
-        'socket_timeout': 30,  # ソケットタイムアウト（秒）
-        'extractor_retries': 3,  # エクストラクターリトライ回数
-        # postprocessorsを削除し、MP3への変換を行わないようにする
+        'retries': 5,  # ダウンロードリトライ回数を増加
+        'fragment_retries': 5,  # フラグメントリトライ回数を増加
+        'socket_timeout': 60,  # ソケットタイムアウトを延長（秒）
+        'extractor_retries': 5,  # エクストラクターリトライ回数を増加
+        # HTTPヘッダー設定（YouTube Music対応）
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+        # 追加の安定性オプション
+        'extract_flat': False,
+        'quiet': False,
+        'verbose': False,
     }
 
     # YouTube認証用クッキーファイル（環境変数COOKIES_FILEで設定）
@@ -331,40 +343,82 @@ class MusicPlayer:
 
     def get_song_info(self, url: str, added_by=None) -> List[Song]:
         """URLから楽曲情報を取得する"""
+        logger.info(f"楽曲情報を取得中: {url}")
+
         # 検索用URLの場合、"ytsearch:"スキームを"ytsearch1:"に置換する
         if url.startswith("ytsearch:"):
             # "ytsearch:"の場合、結果数が1件になるように変更
             if not url.startswith("ytsearch1:"):
                 url = "ytsearch1:" + url[len("ytsearch:"):]
-            search_result = ytdl.extract_info(url, download=False)
-            if 'entries' in search_result and search_result['entries']:
-                info = search_result['entries'][0]
-            else:
-                raise Exception("検索結果が見つかりません")
-            return [self.build_song(info, added_by)]
-        else:
-            # 通常の処理
-            if self.is_local_path(url):
-                filename = os.path.basename(url)
-                return [Song(
-                    source=None,
-                    title=filename,
-                    url=url,
-                    thumbnail="",
-                    artist="LocalFile",
-                    added_by=added_by
-                )]
-            else:
-                info = ytdl.extract_info(url, download=False)
-                if 'entries' in info:
-                    songs = []
-                    for entry in info['entries']:
-                        if entry is None:
-                            continue
-                        songs.append(self.build_song(entry, added_by))
-                    return songs
+            try:
+                search_result = ytdl.extract_info(url, download=False)
+                if search_result is None:
+                    raise Exception(f"検索結果が取得できません: {url}")
+                if 'entries' in search_result and search_result['entries']:
+                    info = search_result['entries'][0]
+                    if info is None:
+                        raise Exception("検索結果のエントリが無効です")
                 else:
-                    return [self.build_song(info, added_by)]
+                    raise Exception("検索結果が見つかりません")
+                return [self.build_song(info, added_by)]
+            except Exception as e:
+                logger.error(f"検索エラー: {e}", exc_info=True)
+                raise
+
+        # 通常の処理
+        if self.is_local_path(url):
+            filename = os.path.basename(url)
+            return [Song(
+                source=None,
+                title=filename,
+                url=url,
+                thumbnail="",
+                artist="LocalFile",
+                added_by=added_by
+            )]
+
+        # YouTube/外部URLの処理
+        try:
+            logger.debug(f"yt-dlpで情報を取得中: {url}")
+            info = ytdl.extract_info(url, download=False)
+
+            if info is None:
+                logger.error(f"yt-dlpがNoneを返しました: {url}")
+                raise Exception(f"動画情報の取得に失敗しました: {url}")
+
+            # プレイリストの場合
+            if 'entries' in info:
+                songs = []
+                entries = info.get('entries', [])
+                if not entries:
+                    raise Exception("プレイリストに有効なエントリがありません")
+
+                for entry in entries:
+                    if entry is None:
+                        logger.warning("プレイリスト内の無効なエントリをスキップ")
+                        continue
+                    try:
+                        songs.append(self.build_song(entry, added_by))
+                    except Exception as e:
+                        logger.warning(f"エントリの処理に失敗: {e}")
+                        continue
+
+                if not songs:
+                    raise Exception("プレイリストから有効な曲を取得できませんでした")
+
+                logger.info(f"プレイリストから {len(songs)} 曲を取得")
+                return songs
+            else:
+                # 単一の動画
+                logger.info(f"単一動画を取得: {info.get('title', 'Unknown')}")
+                return [self.build_song(info, added_by)]
+
+        except yt_dlp.utils.DownloadError as e:
+            logger.error(f"yt-dlp ダウンロードエラー: {e}", exc_info=True)
+            raise Exception(f"動画のダウンロードに失敗しました: {str(e)}")
+        except Exception as e:
+            logger.error(f"楽曲情報取得エラー: {e}", exc_info=True)
+            raise
 
     def build_song(self, info: dict, added_by=None) -> Song:
         """yt-dlp の情報から Song オブジェクトを構築する"""
