@@ -48,6 +48,7 @@ dependencies = [
     "websockets",
     "yarl",
     "yt-dlp",
+    "yt-dlp-ejs>=0.3.2",
     "ytmusicapi",
 ]
 

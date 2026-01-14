@@ -24,10 +24,10 @@ def get_ytdl_format_options() -> dict:
     YouTube署名解読が高速化され、警告が解消されます。
     インストール方法: https://deno.com/ または apt/brew等で deno をインストール
     """
-    # フォーマット選択: HTTPSプロトコルのオーディオフォーマットを優先
-    # m3u8 (HLS) は403エラーになることがあるため避ける
-    # bestaudio[protocol=https] を優先し、利用不可の場合はbestaudio/bestにフォールバック
-    format_string = 'bestaudio[protocol=https][ext=m4a]/bestaudio[protocol=https][ext=webm]/bestaudio[protocol=https]/bestaudio/best'
+    # フォーマット選択: 確実に取得できるようにフォールバックを多く設定
+    # 139: 低品質AAC (48k) - 常に利用可能
+    # bestaudio: 最高品質オーディオ
+    format_string = 'bestaudio/best/139'
 
     options = {
         'format': format_string,
