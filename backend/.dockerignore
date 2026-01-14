@@ -1,0 +1,73 @@
+# .dockerignore - Docker buildから除外するファイル
+
+# Python関連
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+.eggs/
+*.egg-info/
+*.egg
+
+# 開発環境
+.env
+.env.local
+.env.*.local
+.python-version
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# テスト
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# ドキュメント
+README.md
+docs/
+*.md
+
+# ビルド関連
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# データファイル（本番環境では永続ストレージを使用）
+music/
+uploaded_music/
+saved_images/
+logs/
+*.db
+*.sqlite
+*.sqlite3
+
+# 認証情報（絶対に含めない）
+cookies.txt
+oauth.json
+*.pem
+*.key
+
+# その他
+*.log
+.DS_Store
+Thumbs.db
+scripts/
+setup_dev.sh
