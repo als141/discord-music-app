@@ -437,10 +437,47 @@ async def on_message(message: discord.Message):
 
         try:
             async with message.channel.typing():
+                # ユーザーメッセージを構築（画像対応）
+                user_content = []
+
+                # テキストがある場合は追加
+                if message.content:
+                    user_content.append({"type": "text", "text": message.content})
+
+                # 画像添付がある場合はbase64エンコードして追加
+                for attachment in message.attachments:
+                    if attachment.content_type and attachment.content_type.startswith('image/'):
+                        try:
+                            image_data = await attachment.read()
+                            image_base64 = base64.b64encode(image_data).decode('utf-8')
+                            # MIMEタイプを取得（jpeg, pngのみサポート）
+                            mime_type = attachment.content_type
+                            if mime_type not in ['image/jpeg', 'image/png']:
+                                mime_type = 'image/jpeg'  # 非対応形式はjpegとして扱う
+                            user_content.append({
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:{mime_type};base64,{image_base64}"
+                                }
+                            })
+                            print(f"画像を追加: {attachment.filename} ({mime_type})")
+                        except Exception as img_error:
+                            print(f"画像の読み込みエラー: {img_error}")
+
+                # コンテンツがない場合はスキップ
+                if not user_content:
+                    return
+
+                # 単一テキストの場合は文字列、それ以外はリスト形式
+                if len(user_content) == 1 and user_content[0]["type"] == "text":
+                    user_message_content = user_content[0]["text"]
+                else:
+                    user_message_content = user_content
+
                 messages = [
                     {"role": "system", "content": system_prompt},
                     *chat_histories[channel_id],
-                    {"role": "user", "content": message.content}
+                    {"role": "user", "content": user_message_content}
                 ]
 
                 # x.ai (Grok) クライアントを使用
@@ -464,7 +501,9 @@ async def on_message(message: discord.Message):
 
                 reply = response.choices[0].message.content
 
-                chat_histories[channel_id].append({"role": "user", "content": message.content})
+                # 履歴にはテキストのみ保存（画像は含めない）
+                history_content = message.content if message.content else "[画像]"
+                chat_histories[channel_id].append({"role": "user", "content": history_content})
                 chat_histories[channel_id].append({"role": "assistant", "content": reply})
 
                 if len(chat_histories[channel_id]) > 20:
