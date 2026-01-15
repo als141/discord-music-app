@@ -444,10 +444,22 @@ async def on_message(message: discord.Message):
                 ]
 
                 # x.ai (Grok) クライアントを使用
+                # grok-4-1-fast-reasoning + Web検索・X検索を有効化 (search_parameters)
                 response = await asyncio.to_thread(
                      client_openai_chat.chat.completions.create,
-                     model="grok-3-mini-latest",
+                     model="grok-4-1-fast-reasoning",
                      messages=messages,
+                     extra_body={
+                         "search_parameters": {
+                             "mode": "auto",
+                             "sources": [
+                                 {"type": "web"},
+                                 {"type": "x"},
+                                 {"type": "news"}
+                             ],
+                             "return_citations": True
+                         }
+                     }
                 )
 
                 reply = response.choices[0].message.content

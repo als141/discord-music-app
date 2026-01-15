@@ -41,7 +41,7 @@ class OpenAISettings(BaseSettings):
 class XAISettings(BaseSettings):
     """X.AI (Grok) 関連の設定"""
     api_key: Optional[str] = Field(None, env="XAI_API_KEY")
-    model: str = Field("grok-3-mini-latest", env="XAI_MODEL")
+    model: str = Field("grok-4-1-fast-reasoning", env="XAI_MODEL")
     base_url: str = Field("https://api.x.ai/v1", env="XAI_BASE_URL")
 
     model_config = {"env_prefix": "XAI_"}
