@@ -16,6 +16,9 @@ async def get_ephemeral_session():
     if not OPENAI_API_KEY:
         raise HTTPException(status_code=500, detail="OPENAI_API_KEY is not set on the server.")
 
+    if not instructions:
+        instructions = "You are a helpful assistant."
+
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
         "Content-Type": "application/json"

@@ -883,16 +883,12 @@ async def play_track(guild_id: str, request: PlayTrackRequest, background_tasks:
 
 @app.post("/pause/{guild_id}")
 async def pause(guild_id: str):
-    try:
-        player = music_players.get(guild_id)
-        if player:
-            await player.pause()
-            await notify_clients(guild_id)
-            return {"message": "Playback paused"}
-        raise HTTPException(status_code=404, detail="No active music player found")
-    except Exception as e:
-        print(f"一時停止エラー (guild: {guild_id}): {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+    player = music_players.get(guild_id)
+    if player:
+        await player.pause()
+        await notify_clients(guild_id)
+        return {"message": "Playback paused"}
+    raise HTTPException(status_code=404, detail="No active music player found")
 
 @app.post("/resume/{guild_id}")
 async def resume(guild_id: str):
