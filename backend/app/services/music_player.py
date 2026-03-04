@@ -450,7 +450,7 @@ class MusicPlayer:
             info = get_ytdl().extract_info(url, download=False)
 
             if info is None:
-                logger.error(f"yt-dlpがNoneを返しました: {url}")
+                logger.error(f"yt-dlpがNoneを返しました: {url} (プレイリストやラジオURLの場合、個別の曲URLを使用してください)")
                 raise Exception(f"動画情報の取得に失敗しました: {url}")
 
             # プレイリストの場合

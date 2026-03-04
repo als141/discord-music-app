@@ -754,7 +754,12 @@ async def join_voice_channel(guild_id: str, channel_id: str):
             await channel.connect()
         else:
             await guild.voice_client.move_to(channel)
-        music_players[guild_id] = MusicPlayer(client, guild, guild_id, notify_clients)
+        # 既存プレイヤーがあればそのまま使い、なければ新規作成
+        if guild_id not in music_players:
+            music_players[guild_id] = MusicPlayer(client, guild, guild_id, notify_clients)
+        else:
+            # voice_client参照を更新
+            music_players[guild_id].voice_client = guild.voice_client
         await notify_clients(guild_id)
         return {"message": "Joined voice channel"}
     raise HTTPException(status_code=404, detail="Guild or Channel not found")

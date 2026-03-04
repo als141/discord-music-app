@@ -744,7 +744,8 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
 
     # ユーザーがボイスチャンネルに参加した場合で、
     # ボットがまだどのボイスチャンネルにも接続していなければ、自動的に参加する
-    if after.channel is not None and guild.voice_client is None:
+    # 既にプレイヤーが存在する場合はスキップ（重複作成防止）
+    if after.channel is not None and guild.voice_client is None and guild_id not in music_players:
         now = _time.time()
         cooldown_info = _voice_auto_join_cooldowns.get(guild_id, (0, 0))
         last_attempt, failure_count = cooldown_info
