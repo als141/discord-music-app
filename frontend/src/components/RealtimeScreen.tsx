@@ -19,11 +19,8 @@ export const RealtimeScreen: React.FC = () => {
 
   const userMessageCreatedRef = useRef<boolean>(false);
 
-  const NIJI_API_KEY = process.env.NEXT_PUBLIC_NIJI_API_KEY;
-  const VOICE_ACTOR_ID = process.env.NEXT_PUBLIC_VOICE_ACTOR_ID;
-  if (!NIJI_API_KEY || !VOICE_ACTOR_ID) {
-    throw new Error("環境変数が設定されていません");
-  }
+  const NIJI_API_KEY = process.env.NEXT_PUBLIC_NIJI_API_KEY ?? '';
+  const VOICE_ACTOR_ID = process.env.NEXT_PUBLIC_VOICE_ACTOR_ID ?? '';
 
   // handleStopは通常関数として定義し、useEffectは含めない
   const handleStop = useCallback(() => {

@@ -1,19 +1,18 @@
-# realtimeapi.py
 from fastapi import APIRouter, HTTPException
 import os
-import requests
+import httpx
 
 router = APIRouter()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 VOICE_SYSTEM = os.getenv("VOICE_SYSTEM")
+
 @router.get("/realtime-session")
 async def get_ephemeral_session():
-    model = "gpt-4o-mini-realtime-preview-2024-12-17"  # 使用するRealtimeモデル
-    voice = "sage" # 使用するボイス
-    instructions = VOICE_SYSTEM # 指示
+    model = "gpt-4o-mini-realtime-preview-2024-12-17"
+    voice = "sage"
+    instructions = VOICE_SYSTEM
 
-    
     if not OPENAI_API_KEY:
         raise HTTPException(status_code=500, detail="OPENAI_API_KEY is not set on the server.")
 
@@ -25,11 +24,18 @@ async def get_ephemeral_session():
         "model": model,
         "voice": voice,
         "instructions": instructions,
-        "modalities": ["text"], # テキストのみを使用
+        "modalities": ["text"],
         "max_response_output_tokens": 100,
     }
 
-    response = requests.post("https://api.openai.com/v1/realtime/sessions", headers=headers, json=json_data)
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "https://api.openai.com/v1/realtime/sessions",
+            headers=headers,
+            json=json_data,
+            timeout=30.0,
+        )
+
     if response.status_code == 200:
         return response.json()
     else:

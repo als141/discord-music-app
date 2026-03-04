@@ -1,4 +1,4 @@
-# app_logging.py
+# logging.py
 """
 ログシステム管理モジュール
 

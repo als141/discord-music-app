@@ -25,6 +25,12 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
+const CodeBlock: React.FC<{ language: string; value: string }> = ({ language, value }) => (
+  <SyntaxHighlighter style={vscDarkPlus} language={language} PreTag="div">
+    {value}
+  </SyntaxHighlighter>
+);
+
 interface Message {
   role: 'user' | 'assistant';
   content: string;
@@ -35,8 +41,13 @@ export const ChatScreen: React.FC = () => {
   const { toast } = useToast();
   const [messages, setMessages] = useState<Message[]>(() => {
     if (typeof window !== 'undefined') {
-      const storedMessages = localStorage.getItem('chatMessages');
-      return storedMessages ? JSON.parse(storedMessages) : [];
+      try {
+        const storedMessages = localStorage.getItem('chatMessages');
+        return storedMessages ? JSON.parse(storedMessages) : [];
+      } catch {
+        localStorage.removeItem('chatMessages');
+        return [];
+      }
     }
     return [];
   });
@@ -70,7 +81,10 @@ export const ChatScreen: React.FC = () => {
         throw new Error('エラーが発生しました。');
       }
 
-      const reader = response.body!.getReader();
+      if (!response.body) {
+        throw new Error('レスポンスボディが空です。');
+      }
+      const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');
 
       let assistantMessage: Message = { role: 'assistant', content: '' };
@@ -102,14 +116,6 @@ export const ChatScreen: React.FC = () => {
   const handleClear = () => {
     setMessages([]);
     localStorage.removeItem('chatMessages');
-  };
-
-  const CodeBlock: React.FC<{ language: string; value: string }> = ({ language, value }) => {
-    return (
-      <SyntaxHighlighter style={vscDarkPlus} language={language} PreTag="div">
-        {value}
-      </SyntaxHighlighter>
-    );
   };
 
   return (
