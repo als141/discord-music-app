@@ -56,6 +56,11 @@ def get_ytdl_format_options() -> dict:
         'noprogress': True,
         # プレイリスト処理を無効化（単一動画のみ）
         'noplaylist': True,
+        # YouTube署名解読用のJavaScriptランタイム設定
+        'js_runtimes': {
+            'node': {},
+            'deno': {},
+        },
     }
 
     # bgutil-ytdlp-pot-provider のスクリプトパス設定
