@@ -203,13 +203,17 @@ class MusicPlayer:
                 self.voice_client = self.guild.voice_client
 
             if not self.voice_client or not self.voice_client.is_connected():
-                logger.warning("Voice clientが接続されていません")
+                # 初回のみログ出力（スパム防止）
+                if not hasattr(self, '_vc_wait_logged'):
+                    logger.warning("Voice clientが接続されていません。接続待機中...")
+                    self._vc_wait_logged = True
                 # 接続待機（最大30秒）
                 for _ in range(30):
                     await asyncio.sleep(1)
                     if self.guild.voice_client and self.guild.voice_client.is_connected():
                         self.voice_client = self.guild.voice_client
                         logger.info("Voice client接続を検出")
+                        self._vc_wait_logged = False
                         break
                     if self.shutdown_flag:
                         break

@@ -138,6 +138,15 @@ tree = app_commands.CommandTree(client)
 music_players = {}
 active_connections = {}
 
+# ボイスチャンネル自動参加のクールダウン管理
+# guild_id -> (最終試行時刻, 連続失敗回数)
+import time as _time
+_voice_auto_join_cooldowns: Dict[str, tuple] = {}
+_VOICE_AUTO_JOIN_COOLDOWN_SEC = 30  # クールダウン秒数
+_VOICE_AUTO_JOIN_MAX_FAILURES = 3   # 最大連続失敗回数（超えたら自動参加停止）
+# ボット切断イベントの重複防止
+_voice_disconnect_processing: set = set()
+
 # 画像をローカルに保存するヘルパー関数 (変更なし)
 async def save_image(image_data, prefix="img"):
     """
@@ -688,29 +697,35 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
 
     # ボット自身の状態変化を処理（チャンネル移動・切断への対応）
     if member.id == client.user.id:
-        player = music_players.get(guild_id)
-
         # ボットが切断された場合（Discord側からの強制切断など）
         if before.channel is not None and after.channel is None:
-            print(f"Bot was disconnected from voice channel in {guild.name}")
-            if player:
-                await player.shutdown()
-                del music_players[guild_id]
-            await notify_clients_local(guild_id)
+            # 重複イベント防止: 同一ギルドの切断処理が既に進行中なら無視
+            if guild_id in _voice_disconnect_processing:
+                return
+            _voice_disconnect_processing.add(guild_id)
+            try:
+                print(f"Bot was disconnected from voice channel in {guild.name}")
+                player = music_players.get(guild_id)
+                if player:
+                    await player.shutdown()
+                    music_players.pop(guild_id, None)
+                await notify_clients_local(guild_id)
+            finally:
+                # 少し待ってからフラグ解除（連続イベントを吸収）
+                await asyncio.sleep(2)
+                _voice_disconnect_processing.discard(guild_id)
             return
 
         # ボットが別のチャンネルに移動された場合
         if before.channel is not None and after.channel is not None and before.channel.id != after.channel.id:
             print(f"Bot was moved from {before.channel.name} to {after.channel.name} in {guild.name}")
+            player = music_players.get(guild_id)
             if player:
-                # voice_client の参照を更新
                 player.voice_client = guild.voice_client
-
-                # 再生中の場合、pause/resume で再生を復旧（discord.py のチャンネル移動バグ対策）
                 if player.voice_client and player.voice_client.is_playing():
                     try:
                         player.voice_client.pause()
-                        await asyncio.sleep(0.5)  # 短い待機
+                        await asyncio.sleep(0.5)
                         player.voice_client.resume()
                         print(f"Playback recovered after channel move in {guild.name}")
                     except Exception as e:
@@ -720,31 +735,61 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
 
         return  # ボット自身のその他の状態変化（ミュート等）は無視
 
-    # ★新規追加★
     # ユーザーがボイスチャンネルに参加した場合で、
     # ボットがまだどのボイスチャンネルにも接続していなければ、自動的に参加する
     if after.channel is not None and guild.voice_client is None:
+        now = _time.time()
+        cooldown_info = _voice_auto_join_cooldowns.get(guild_id, (0, 0))
+        last_attempt, failure_count = cooldown_info
+
+        # 連続失敗回数が上限を超えている場合はスキップ（手動joinのみ許可）
+        if failure_count >= _VOICE_AUTO_JOIN_MAX_FAILURES:
+            # 5分経過でリセット
+            if now - last_attempt > 300:
+                _voice_auto_join_cooldowns[guild_id] = (0, 0)
+            else:
+                return
+
+        # クールダウン中はスキップ
+        if now - last_attempt < _VOICE_AUTO_JOIN_COOLDOWN_SEC:
+            return
+
         try:
-            await after.channel.connect()
+            _voice_auto_join_cooldowns[guild_id] = (now, failure_count)
+            vc = await after.channel.connect(timeout=10.0)
+            # 接続が安定するまで少し待つ
+            await asyncio.sleep(1)
+            if not vc.is_connected():
+                raise Exception("Voice connection was lost immediately after connect")
             music_players[guild_id] = MusicPlayer(client, guild, guild_id, notify_clients_local)
             await notify_clients_local(guild_id)
+            # 成功したらカウンターリセット
+            _voice_auto_join_cooldowns[guild_id] = (now, 0)
             print(f"Auto-joined voice channel {after.channel.name} in guild {guild.name} because user {member.display_name} joined.")
         except Exception as e:
-            print(f"Error auto-joining voice channel: {e}")
+            print(f"Error auto-joining voice channel in {guild.name}: {e}")
+            _voice_auto_join_cooldowns[guild_id] = (now, failure_count + 1)
+            # 失敗した場合、残留voice_clientをクリーンアップ
+            if guild.voice_client:
+                try:
+                    await guild.voice_client.disconnect(force=True)
+                except Exception:
+                    pass
 
     # 既存の退室処理：ボイスチャンネル内のユーザーが全員退出した場合、ボットも切断する
     if before.channel is not None and guild.voice_client is not None and before.channel.id == guild.voice_client.channel.id:
-        # ボット以外のメンバー数をカウント
         remaining_members = sum(1 for m in before.channel.members if not m.bot)
         if remaining_members == 0:
-            await asyncio.sleep(5) # 5秒待って再確認
-            # 再度メンバー数をカウント
-            current_members = sum(1 for m in before.channel.members if not m.bot)
-            if current_members == 0:
-                await guild.voice_client.disconnect()
-                if guild_id in music_players:
-                    del music_players[guild_id]
-                print(f"Left voice channel in {guild.name}: {before.channel.name} (no users remaining)")
+            await asyncio.sleep(5)
+            # 再度チャンネルとメンバー数を確認（チャンネルが消えている可能性もある）
+            if guild.voice_client and guild.voice_client.channel:
+                current_members = sum(1 for m in guild.voice_client.channel.members if not m.bot)
+                if current_members == 0:
+                    await guild.voice_client.disconnect()
+                    music_players.pop(guild_id, None)
+                    # 自動参加カウンターもリセット
+                    _voice_auto_join_cooldowns.pop(guild_id, None)
+                    print(f"Left voice channel in {guild.name}: {before.channel.name} (no users remaining)")
 
 
 # ===== スラッシュコマンド実装 =====
