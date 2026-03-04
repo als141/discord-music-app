@@ -1,4 +1,11 @@
 # bot.py
+import logging
+logging.basicConfig(level=logging.INFO)
+# Voice接続のデバッグログを有効化
+logging.getLogger('discord.voice_state').setLevel(logging.DEBUG)
+logging.getLogger('discord.voice_client').setLevel(logging.DEBUG)
+logging.getLogger('discord.gateway').setLevel(logging.WARNING)
+
 import discord
 from discord import app_commands
 import asyncio
@@ -704,7 +711,7 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
                 return
             _voice_disconnect_processing.add(guild_id)
             try:
-                print(f"Bot was disconnected from voice channel in {guild.name}")
+                print(f"Bot was disconnected from voice channel in {guild.name} (before: {before.channel}, after: {after.channel}, vc: {guild.voice_client})")
                 player = music_players.get(guild_id)
                 if player:
                     await player.shutdown()
@@ -767,7 +774,9 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
             _voice_auto_join_cooldowns[guild_id] = (now, 0)
             print(f"Auto-joined voice channel {after.channel.name} in guild {guild.name} because user {member.display_name} joined.")
         except Exception as e:
-            print(f"Error auto-joining voice channel in {guild.name}: {e}")
+            import traceback
+            print(f"Error auto-joining voice channel in {guild.name}: {type(e).__name__}: {e}")
+            traceback.print_exc()
             _voice_auto_join_cooldowns[guild_id] = (now, failure_count + 1)
             # 失敗した場合、残留voice_clientをクリーンアップ
             if guild.voice_client:
