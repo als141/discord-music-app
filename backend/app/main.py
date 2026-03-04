@@ -139,6 +139,7 @@ app.mount("/uploaded_music", StaticFiles(directory=UPLOAD_DIR), name="uploaded_m
 origins = [
     "http://localhost:3000",
     "https://discord-music-app.vercel.app",
+    "https://api.atoriba.jp",
     "http://localhost:8000",
 ]
 
