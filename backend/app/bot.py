@@ -3,23 +3,26 @@ import discord
 from discord import app_commands
 import asyncio
 from .services.music_player import MusicPlayer
-from openai import OpenAI # OpenAIライブラリをインポート
+from openai import OpenAI  # Grok用（レガシー）
 import os
 from dotenv import load_dotenv
-# google.genai は不要になったためコメントアウトまたは削除
-# from google import genai
-# from google.genai import types
+# Nano Banana Pro (Gemini 3 Pro Image Preview) 用
+from google import genai
+from google.genai import types
+# xAI SDK (Grok 4.1 Agent Tools API)
+from xai_sdk import Client as XAIClient
+from xai_sdk.chat import user as xai_user, assistant as xai_assistant, system as xai_system
+from xai_sdk.tools import web_search, x_search
 from PIL import Image
 from io import BytesIO
 import base64
 from typing import Optional, Dict, List, Any, Union
 import json
-# urllib.request は不要になったためコメントアウトまたは削除
-# import urllib.request
 from datetime import datetime
 import aiohttp
 import uuid
-import traceback # トレースバック出力用に追加
+import traceback
+import re
 
 # 画像保存ディレクトリ
 IMAGE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_images")
@@ -96,18 +99,19 @@ client_openai_chat = OpenAI( # 変数名を変更して区別
 )
 PROMPT = os.getenv("PROMPT")
 
-# OpenAI Image Generation 用のクライアント設定
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") # OpenAIのAPIキーを環境変数から取得
-if not OPENAI_API_KEY:
-    print("警告: OPENAI_API_KEY が設定されていません。画像生成機能は利用できません。")
-    openai_image_client = None
+# Nano Banana Pro (Gemini 3 Pro Image Preview) 用のクライアント設定
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if not GEMINI_API_KEY:
+    print("警告: GEMINI_API_KEY が設定されていません。画像生成機能は利用できません。")
+    gemini_client = None
 else:
-    # 標準のOpenAI APIエンドポイントを使用
-    openai_image_client = OpenAI(api_key=OPENAI_API_KEY)
+    gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+    print("Nano Banana Pro (gemini-3-pro-image-preview) クライアントを初期化しました。")
 
-# Gemini関連のクライアント設定は不要になったためコメントアウトまたは削除
-# GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-# gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+# Nano Banana Pro モデル設定
+NANO_BANANA_PRO_MODEL = "gemini-3-pro-image-preview"
+DEFAULT_IMAGE_SIZE = "2K"  # 1K, 2K, 4K から選択可能
+DEFAULT_ASPECT_RATIO = "auto"  # auto で自動判定
 
 ALLOWED_CHANNELS = [
     1080511818658762755,
@@ -202,222 +206,376 @@ async def download_image_from_url(url):
         traceback.print_exc()
         return None
 
-# --- OpenAI 画像生成関数 (複数枚生成対応) ---
-async def generate_openai_image(prompt: str, image_url: Optional[str] = None, n: int = 1):
+# --- Nano Banana Pro 画像生成関数 ---
+async def generate_nano_banana_image(
+    prompt: str,
+    reference_images: Optional[List[bytes]] = None,
+    image_size: str = DEFAULT_IMAGE_SIZE,
+    aspect_ratio: str = DEFAULT_ASPECT_RATIO
+) -> Dict[str, Any]:
     """
-    OpenAI API (gpt-image-1) を使用して画像を生成または編集する (size/quality自動, 複数枚対応)
+    Nano Banana Pro (gemini-3-pro-image-preview) を使用して画像を生成・編集する
 
     Parameters:
     prompt (str): 生成または編集の指示テキスト
-    image_url (str, optional): 編集の元となる画像のURL
-    n (int): 生成する画像の枚数 (デフォルト1)
+    reference_images (List[bytes], optional): 参照画像のバイトデータリスト（最大14枚）
+    image_size (str): 画像サイズ ("1K", "2K", "4K")
+    aspect_ratio (str): アスペクト比 ("1:1", "16:9", "9:16", "4:3", "3:4")
 
     Returns:
-    dict: 生成結果を含む辞書 {"success": bool, "image_data_list": List[bytes] | None, "error": str | None}
+    dict: 生成結果を含む辞書 {"success": bool, "image_data_list": List[bytes] | None, "text": str | None, "error": str | None}
     """
-    if not openai_image_client:
-        return {"success": False, "image_data_list": None, "error": "OpenAI Image Clientが初期化されていません。"}
-    if not (1 <= n <= 4): # 枚数制限 (APIの制限に合わせて調整が必要な場合あり)
-        print(f"警告: 要求された画像枚数({n})が範囲外です。1枚生成します。")
-        n = 1
+    if not gemini_client:
+        return {"success": False, "image_data_list": None, "text": None, "error": "Gemini Clientが初期化されていません。GEMINI_API_KEYを確認してください。"}
 
     try:
-        image_bytes = None
-        if image_url:
-            # 元画像がある場合はダウンロード
-            print(f"元画像をダウンロードします: {image_url}")
-            image_bytes = await download_image_from_url(image_url)
-            if not image_bytes:
-                # ダウンロード失敗時はエラーとする
-                return {"success": False, "image_data_list": None, "error": "元画像のダウンロードに失敗しました。"}
-            else:
-                print("元画像のダウンロード成功")
+        # コンテンツを構築
+        contents = []
 
-        if image_bytes:
-            # 元画像がある場合 -> images.edit を使用
-            # 注意: edit エンドポイントが n > 1 をサポートしているか要確認。
-            #       サポートしていない場合、n=1 として動作する可能性がある。
-            print(f"OpenAI images.edit を呼び出します (n={n})。プロンプト: {prompt[:50]}...")
-            image_file = BytesIO(image_bytes)
-            image_file.name = f"input_{uuid.uuid4().hex[:6]}.png"
+        # 参照画像がある場合は追加
+        if reference_images:
+            for i, img_data in enumerate(reference_images):
+                # PIL Imageに変換
+                img = Image.open(BytesIO(img_data))
+                contents.append(img)
+                print(f"参照画像 {i+1} を追加: {img.size}")
 
-            response = await asyncio.to_thread(
-                openai_image_client.images.edit,
-                model="gpt-image-1",
-                image=image_file,
-                prompt=prompt,
-                n=n # 生成枚数を指定
+        # プロンプトを追加
+        contents.append(prompt)
+
+        print(f"Nano Banana Pro を呼び出します。プロンプト: {prompt[:80]}...")
+        print(f"設定: image_size={image_size}, aspect_ratio={aspect_ratio}")
+
+        # image_config を構築（aspect_ratio が auto の場合は指定しない）
+        if aspect_ratio and aspect_ratio.lower() != "auto":
+            image_config = types.ImageConfig(
+                aspect_ratio=aspect_ratio,
+                image_size=image_size
             )
         else:
-            # 元画像がない場合 -> images.generate を使用
-            print(f"OpenAI images.generate を呼び出します (n={n})。プロンプト: {prompt[:50]}...")
-            response = await asyncio.to_thread(
-                openai_image_client.images.generate,
-                model="gpt-image-1",
-                prompt=prompt,
-                n=n # 生成枚数を指定
+            image_config = types.ImageConfig(
+                image_size=image_size
             )
 
-        # レスポンスから画像データを取得
+        # Gemini API呼び出し
+        response = await asyncio.to_thread(
+            gemini_client.models.generate_content,
+            model=NANO_BANANA_PRO_MODEL,
+            contents=contents,
+            config=types.GenerateContentConfig(
+                response_modalities=["TEXT", "IMAGE"],
+                image_config=image_config
+            )
+        )
+
+        # レスポンスから画像とテキストを抽出
         generated_image_data_list = []
-        if response.data:
-            print(f"APIから {len(response.data)} 枚の画像データを受信しました。")
-            for image_object in response.data:
-                if image_object.b64_json:
-                    b64_data = image_object.b64_json
-                    generated_image_data = base64.b64decode(b64_data)
-                    generated_image_data_list.append(generated_image_data)
-                    # 生成された画像を保存 (デバッグや確認用)
-                    await save_image(generated_image_data, f"generated_openai_n{n}")
-                else:
-                    print("警告: レスポンス内の画像オブジェクトにb64_jsonが含まれていません。")
-        else:
-             print("警告: APIからの応答に画像データが含まれていません。")
+        response_text = None
 
+        if response.candidates and response.candidates[0].content:
+            for part in response.candidates[0].content.parts:
+                if part.inline_data and part.inline_data.mime_type.startswith("image/"):
+                    # 画像データを取得
+                    image_data = part.inline_data.data
+                    generated_image_data_list.append(image_data)
+                    # 画像を保存
+                    await save_image(image_data, "generated_nano_banana")
+                    print(f"画像を抽出しました (MIME: {part.inline_data.mime_type})")
+                elif part.text:
+                    response_text = part.text
+                    print(f"テキストを抽出しました: {response_text[:100]}...")
+
+        if generated_image_data_list:
+            print(f"Nano Banana Pro から {len(generated_image_data_list)} 枚の画像を生成しました。")
+            return {
+                "success": True,
+                "image_data_list": generated_image_data_list,
+                "text": response_text,
+                "error": None
+            }
+        else:
+            error_msg = "APIからの応答に画像が含まれていません。"
+            if response_text:
+                error_msg += f" テキスト応答: {response_text}"
+            print(f"警告: {error_msg}")
+            return {"success": False, "image_data_list": None, "text": response_text, "error": error_msg}
+
+    except Exception as e:
+        print(f"Nano Banana Pro API エラー: {e}")
+        traceback.print_exc()
+        return {
+            "success": False,
+            "image_data_list": None,
+            "text": None,
+            "error": str(e)
+        }
+
+
+# --- Nano Banana Pro 会話形式画像生成（スレッド用） ---
+async def generate_nano_banana_with_history(
+    prompt: str,
+    history: List[Dict[str, Any]],
+    current_image: Optional[bytes] = None,
+    image_size: str = DEFAULT_IMAGE_SIZE,
+    aspect_ratio: str = DEFAULT_ASPECT_RATIO
+) -> Dict[str, Any]:
+    """
+    会話履歴を考慮したNano Banana Pro画像生成（スレッド内の継続的な編集用）
+
+    Parameters:
+    prompt (str): 現在の指示テキスト
+    history (List[Dict]): 会話履歴 [{"role": "user/model", "content": str, "image_data": bytes | None}, ...]
+    current_image (bytes, optional): 現在のユーザーが添付した画像
+    image_size (str): 画像サイズ
+    aspect_ratio (str): アスペクト比
+
+    Returns:
+    dict: 生成結果
+    """
+    if not gemini_client:
+        return {"success": False, "image_data_list": None, "text": None, "error": "Gemini Clientが初期化されていません。"}
+
+    try:
+        # Gemini用のコンテンツリストを構築
+        contents = []
+
+        # 履歴からコンテンツを構築
+        for entry in history:
+            parts = []
+
+            # 画像があれば追加
+            if entry.get("image_data"):
+                img = Image.open(BytesIO(entry["image_data"]))
+                parts.append(img)
+
+            # テキストを追加
+            if entry.get("content"):
+                parts.append(entry["content"])
+
+            if parts:
+                contents.append(types.Content(
+                    role=entry["role"],
+                    parts=[types.Part.from_text(p) if isinstance(p, str) else types.Part.from_image(p) for p in parts]
+                ))
+
+        # 現在のユーザーメッセージを追加
+        current_parts = []
+        if current_image:
+            img = Image.open(BytesIO(current_image))
+            current_parts.append(img)
+        current_parts.append(prompt)
+
+        # 簡略化: contentsにはプロンプトと画像を直接渡す
+        final_contents = []
+
+        # 最後の生成画像があれば参照として使用
+        last_generated_image = None
+        for entry in reversed(history):
+            if entry.get("role") == "model" and entry.get("image_data"):
+                last_generated_image = entry["image_data"]
+                break
+
+        # 参照画像を追加
+        if current_image:
+            img = Image.open(BytesIO(current_image))
+            final_contents.append(img)
+        elif last_generated_image:
+            img = Image.open(BytesIO(last_generated_image))
+            final_contents.append(img)
+
+        # プロンプトを追加
+        final_contents.append(prompt)
+
+        print(f"Nano Banana Pro (会話モード) を呼び出します。プロンプト: {prompt[:80]}...")
+
+        # image_config を構築（aspect_ratio が auto の場合は指定しない）
+        if aspect_ratio and aspect_ratio.lower() != "auto":
+            image_config = types.ImageConfig(
+                aspect_ratio=aspect_ratio,
+                image_size=image_size
+            )
+        else:
+            image_config = types.ImageConfig(
+                image_size=image_size
+            )
+
+        response = await asyncio.to_thread(
+            gemini_client.models.generate_content,
+            model=NANO_BANANA_PRO_MODEL,
+            contents=final_contents,
+            config=types.GenerateContentConfig(
+                response_modalities=["TEXT", "IMAGE"],
+                image_config=image_config
+            )
+        )
+
+        # レスポンスから画像とテキストを抽出
+        generated_image_data_list = []
+        response_text = None
+
+        if response.candidates and response.candidates[0].content:
+            for part in response.candidates[0].content.parts:
+                if part.inline_data and part.inline_data.mime_type.startswith("image/"):
+                    image_data = part.inline_data.data
+                    generated_image_data_list.append(image_data)
+                    await save_image(image_data, "generated_nano_banana_thread")
+                elif part.text:
+                    response_text = part.text
 
         if generated_image_data_list:
             return {
                 "success": True,
                 "image_data_list": generated_image_data_list,
+                "text": response_text,
                 "error": None
             }
         else:
-            # レスポンス構造が予期しないものだったか、データが空だった場合
-            print(f"予期しないAPIレスポンスまたは空のデータ: {response}")
-            return {"success": False, "image_data_list": None, "error": "APIからの応答に有効な画像データが含まれていません。"}
+            return {
+                "success": False,
+                "image_data_list": None,
+                "text": response_text,
+                "error": "画像が生成されませんでした。" + (f" 応答: {response_text}" if response_text else "")
+            }
 
     except Exception as e:
-        print(f"OpenAI API エラー: {e}")
-        traceback.print_exc() # 詳細なトレースバックを出力
-        error_message = str(e)
-        if hasattr(e, 'response') and e.response:
-             try:
-                 error_details = e.response.json()
-                 error_message = f"{error_message} - Details: {error_details}"
-             except:
-                 pass
+        print(f"Nano Banana Pro (会話モード) エラー: {e}")
+        traceback.print_exc()
         return {
             "success": False,
             "image_data_list": None,
-            "error": error_message
+            "text": None,
+            "error": str(e)
         }
 
-# --- スレッド内メッセージ処理 (複数枚生成対応) ---
+# --- スレッド内メッセージ処理 (Nano Banana Pro対応) ---
 async def handle_thread_message(message):
     """
-    スレッド内のメッセージを処理するハンドラー関数 (OpenAI対応・履歴考慮・複数枚生成対応版)
+    スレッド内のメッセージを処理するハンドラー関数 (Nano Banana Pro対応・会話履歴考慮版)
     """
     thread_id = message.channel.id
 
     if thread_id not in thread_histories:
         thread_histories[thread_id] = []
 
+    # プロンプトが空の場合はスキップ
+    if not message.content.strip():
+        await message.reply("画像を生成するにはテキストプロンプトを入力してください。")
+        return
+
     try:
         async with message.channel.typing():
-            current_message_image_url = None
+            # 現在のメッセージに添付された画像を取得
+            current_image_data = None
             if message.attachments:
                 for attachment in message.attachments:
                     if attachment.content_type and attachment.content_type.startswith('image/'):
-                        current_message_image_url = attachment.url
-                        print(f"現在のメッセージから添付画像URLを取得: {current_message_image_url}")
+                        current_image_data = await attachment.read()
+                        print(f"添付画像を取得: {attachment.filename}")
                         break
 
-            base_image_url = None
-            if current_message_image_url:
-                base_image_url = current_message_image_url
-                print("ユーザー添付画像を元画像として使用します。")
-            else:
-                history = thread_histories.get(thread_id, [])
-                for i in range(len(history) - 1, -1, -1):
-                    prev_msg = history[i]
-                    if prev_msg.get("image_url"):
-                        base_image_url = prev_msg["image_url"]
-                        print(f"履歴から元画像URLを発見: {base_image_url} (履歴インデックス: {i})")
+            # 履歴から最後の生成画像を参照として使用
+            reference_image = current_image_data
+            if not reference_image:
+                for entry in reversed(thread_histories[thread_id]):
+                    if entry.get("role") == "model" and entry.get("image_data"):
+                        reference_image = entry["image_data"]
+                        print("履歴から参照画像を取得しました。")
                         break
-                if base_image_url:
-                     print("履歴の画像を元画像として使用します。")
-                else:
-                     print("元画像は見つかりませんでした。新規生成を行います。")
 
-            # --- OpenAI 画像生成を実行 (n=1 で固定、コマンドでのみ複数枚指定可能とする) ---
-            # スレッド内の会話では、煩雑さを避けるため常に1枚生成とする
-            # もしスレッド内でも複数枚生成したい場合は、n を変更する
-            result = await generate_openai_image(
-                message.content,
-                base_image_url,
-                n=3 # スレッド内では常に1枚生成
+            # Nano Banana Pro で画像生成
+            reference_images = [reference_image] if reference_image else None
+            result = await generate_nano_banana_image(
+                prompt=message.content,
+                reference_images=reference_images,
+                image_size=DEFAULT_IMAGE_SIZE,
+                aspect_ratio=DEFAULT_ASPECT_RATIO
             )
-            # --- ---
 
             if not result["success"]:
-                await message.reply(f"画像生成に失敗しました: {result['error']}")
+                error_msg = result.get("error", "不明なエラー")
+                if result.get("text"):
+                    error_msg += f"\n\nAI応答: {result['text']}"
+                await message.reply(f"画像生成に失敗しました: {error_msg}")
                 return
 
-            # --- 会話履歴にユーザーメッセージを追加 ---
+            # 会話履歴にユーザーメッセージを追加
             thread_histories[thread_id].append({
                 "role": "user",
                 "content": message.content,
-                "image_url": current_message_image_url
+                "image_data": current_image_data
             })
 
-            # --- 埋め込みを作成 ---
+            # 埋め込みを作成
             embed = discord.Embed(
-                title="画像生成結果 (OpenAI)",
+                title="🍌 Nano Banana Pro 画像生成",
                 description=f"**プロンプト:** {message.content}",
-                color=0x10A37F
+                color=0x4285F4  # Google Blue
             )
 
-            if base_image_url:
-                embed.set_thumbnail(url=base_image_url)
-                embed.add_field(name="元画像", value=f"[表示]({base_image_url})", inline=True)
+            if result.get("text"):
+                embed.add_field(name="AI応答", value=result["text"][:1024], inline=False)
 
             reply_message = None
-            generated_image_urls = [] # 生成された画像のURLリスト
+            generated_image_data = None
 
             # 画像データがある場合
             if result["image_data_list"]:
                 files_to_send = []
                 for i, img_data in enumerate(result["image_data_list"]):
-                    files_to_send.append(discord.File(BytesIO(img_data), filename=f"generated_openai_{i+1}.png"))
+                    files_to_send.append(discord.File(BytesIO(img_data), filename=f"nano_banana_{i+1}.png"))
+                    if i == 0:
+                        generated_image_data = img_data  # 最初の画像を履歴用に保存
 
-                # 応答を送信 (複数のファイルを添付)
                 if files_to_send:
                     reply_message = await message.reply(embed=embed, files=files_to_send)
-
-                    # 生成された画像の添付ファイルURLを取得
-                    if reply_message and reply_message.attachments:
-                        generated_image_urls = [att.url for att in reply_message.attachments]
-                        print(f"生成画像のURLを保存: {generated_image_urls}")
+                    print(f"画像を送信しました: {len(files_to_send)}枚")
                 else:
-                     # 画像データリストはあるがファイル作成に失敗した場合など
-                     embed.description += "\n\n(画像の送信に失敗しました)"
-                     reply_message = await message.reply(embed=embed)
-
+                    embed.description += "\n\n(画像の送信に失敗しました)"
+                    reply_message = await message.reply(embed=embed)
             else:
-                # 画像データがない場合はテキストのみ (通常はエラー時)
                 embed.description += "\n\n(画像は生成されませんでした)"
                 reply_message = await message.reply(embed=embed)
 
-            # --- 応答を会話履歴に追加 (最初の画像のURLのみ保存) ---
-            first_generated_url = generated_image_urls[0] if generated_image_urls else None
+            # 応答を会話履歴に追加
             thread_histories[thread_id].append({
                 "role": "model",
-                "content": f"{len(generated_image_urls)}枚の画像を生成しました。" if generated_image_urls else "画像を生成しました。",
-                "image_url": first_generated_url # 最初の画像のURLのみ履歴に保存
+                "content": result.get("text", "画像を生成しました。"),
+                "image_data": generated_image_data
             })
+
+            # 履歴が長くなりすぎないように制限（画像データはメモリを消費するため）
+            if len(thread_histories[thread_id]) > 10:
+                thread_histories[thread_id] = thread_histories[thread_id][-10:]
 
             print(f"スレッド {thread_id} の会話履歴: {len(thread_histories[thread_id])} メッセージ")
 
     except Exception as e:
         print(f"スレッド内メッセージ処理エラー: {e}")
-        traceback.print_exc() # 詳細なトレースバックを出力
-        await message.reply("申し訳ありません。スレッド処理中にエラーが発生しました。")
+        traceback.print_exc()
+        try:
+            await message.reply("申し訳ありません。画像生成中にエラーが発生しました。")
+        except:
+            pass
 
 
 @client.event
 async def on_ready():
     await client.change_presence(status=discord.Status.online, activity=discord.CustomActivity(name='開発中'))
+
+    # 各ギルドにグローバルコマンドをコピーして即座に同期
+    for guild in client.guilds:
+        try:
+            # グローバルコマンドをこのギルドにコピー
+            tree.copy_global_to(guild=guild)
+            # ギルドに同期（即時反映）
+            await tree.sync(guild=guild)
+            print(f"スラッシュコマンドを同期しました: {guild.name}")
+        except Exception as e:
+            print(f"ギルド {guild.name} への同期に失敗: {e}")
+
+    # グローバル同期も実行（新しいサーバー用）
     await tree.sync()
+
     print(f"Logged in as {client.user}")
 
 @client.event
@@ -619,160 +777,169 @@ async def join_channel(interaction: discord.Interaction, channel: discord.VoiceC
     await notify_clients_local(guild_id)
     await interaction.response.send_message(f"ボイスチャンネル {channel.name} に参加しました。")
 
-# --- 画像生成コマンド (複数枚生成対応) ---
-@tree.command(name="generate_image", description="テキストから画像を生成します。(OpenAI, 複数枚可)")
+# --- 画像生成コマンド (Nano Banana Pro対応) ---
+@tree.command(name="generate_image", description="🍌 Nano Banana Proでテキストから画像を生成します")
 @app_commands.describe(
     prompt="生成したい画像の説明テキスト",
-    image="オプション: 生成の元となる画像",
-    num_images="生成する画像の枚数 (1-4)"
+    image="オプション: 参照画像（編集のベースとなる画像）",
+    size="画像サイズ (デフォルト: 2K)",
+    aspect_ratio="アスペクト比 (デフォルト: 1:1)"
 )
+@app_commands.choices(size=[
+    app_commands.Choice(name="1K (1024px)", value="1K"),
+    app_commands.Choice(name="2K (2048px) - 推奨", value="2K"),
+    app_commands.Choice(name="4K (4096px)", value="4K"),
+])
+@app_commands.choices(aspect_ratio=[
+    app_commands.Choice(name="自動 (推奨)", value="auto"),
+    app_commands.Choice(name="1:1 (正方形)", value="1:1"),
+    app_commands.Choice(name="16:9 (横長)", value="16:9"),
+    app_commands.Choice(name="9:16 (縦長)", value="9:16"),
+    app_commands.Choice(name="4:3", value="4:3"),
+    app_commands.Choice(name="3:4", value="3:4"),
+])
 async def generate_image_command(
     interaction: discord.Interaction,
     prompt: str,
     image: Optional[discord.Attachment] = None,
-    num_images: app_commands.Range[int, 1, 4] = 1 # 枚数オプション追加 (デフォルト1, 範囲1-4)
+    size: str = "2K",
+    aspect_ratio: str = "auto"
 ):
     """
-    テキストプロンプトと任意の画像から新しい画像を生成し、スレッドを作成するスラッシュコマンド (OpenAI対応・複数枚生成版)
+    Nano Banana Pro (Gemini 3 Pro Image Preview) を使用して画像を生成するスラッシュコマンド
     """
-    await interaction.response.defer(thinking=True) # 生成には時間がかかるため、応答を遅延します
+    await interaction.response.defer(thinking=True)
 
     try:
         if not interaction.guild:
             await interaction.followup.send("このコマンドはサーバー内でのみ使用できます。")
             return
 
-        image_url = None
+        # 参照画像を取得
+        reference_images = None
+        reference_image_data = None
         if image:
             if not image.content_type or not image.content_type.startswith('image/'):
-                 await interaction.followup.send("画像ファイルではないようです。画像ファイルを添付してください。")
-                 return
-            image_url = image.url
-            print(f"コマンドから画像URLを取得しました: {image_url}")
+                await interaction.followup.send("画像ファイルではないようです。画像ファイルを添付してください。")
+                return
+            reference_image_data = await image.read()
+            reference_images = [reference_image_data]
+            print(f"参照画像を取得: {image.filename}")
 
-        # --- OpenAI 画像生成を実行 (枚数指定) ---
-        result = await generate_openai_image(prompt, image_url, n=num_images)
-        # --- ---
+        # Nano Banana Pro で画像生成
+        result = await generate_nano_banana_image(
+            prompt=prompt,
+            reference_images=reference_images,
+            image_size=size,
+            aspect_ratio=aspect_ratio
+        )
 
         if not result["success"]:
-            await interaction.followup.send(f"画像生成に失敗しました: {result['error']}")
+            error_msg = result.get("error", "不明なエラー")
+            if result.get("text"):
+                error_msg += f"\n\nAI応答: {result['text']}"
+            await interaction.followup.send(f"画像生成に失敗しました: {error_msg}")
             return
 
-        # --- 埋め込みを作成 ---
+        # 埋め込みを作成
         embed = discord.Embed(
-            title="画像生成結果 (OpenAI)",
-            description=f"**プロンプト:** {prompt}\n**生成枚数:** {len(result.get('image_data_list', []))}", # 実際に生成された枚数を表示
-            color=0x10A37F
+            title="🍌 Nano Banana Pro 画像生成",
+            description=f"**プロンプト:** {prompt}",
+            color=0x4285F4  # Google Blue
         )
+        embed.add_field(name="サイズ", value=size, inline=True)
+        embed.add_field(name="アスペクト比", value=aspect_ratio, inline=True)
+
+        if result.get("text"):
+            embed.add_field(name="AI応答", value=result["text"][:1024], inline=False)
 
         if image:
             embed.set_thumbnail(url=image.url)
-            embed.add_field(name="元画像", value=f"[{image.filename}]({image.url})", inline=True)
+            embed.add_field(name="参照画像", value=f"[{image.filename}]({image.url})", inline=True)
 
         response_message = None
-        generated_image_urls = [] # 生成された画像のURLリスト
+        generated_image_data = None
 
-        # 生成された画像があるかどうかで処理を分岐
+        # 画像があれば送信
         if result["image_data_list"]:
             files_to_send = []
             for i, img_data in enumerate(result["image_data_list"]):
-                 files_to_send.append(discord.File(BytesIO(img_data), filename=f"generated_openai_{i+1}.png"))
+                files_to_send.append(discord.File(BytesIO(img_data), filename=f"nano_banana_{i+1}.png"))
+                if i == 0:
+                    generated_image_data = img_data
 
-            # 画像付きメッセージを送信 (複数のファイルを添付)
             if files_to_send:
                 response_message = await interaction.followup.send(embed=embed, files=files_to_send)
-
-                # 生成された画像の添付ファイルURLを取得
-                if response_message and response_message.attachments:
-                    generated_image_urls = [att.url for att in response_message.attachments]
-                    print(f"生成画像のURLを保存: {generated_image_urls}")
-                else:
-                    print("警告: followup.send の応答から添付ファイルを取得できませんでした。")
+                print(f"画像を送信しました: {len(files_to_send)}枚")
             else:
-                # 画像データリストはあるがファイル作成に失敗した場合など
                 embed.description += "\n\n(画像の送信に失敗しました)"
                 response_message = await interaction.followup.send(embed=embed)
-
         else:
-            # 画像が生成されなかった場合はテキストのみ (通常エラー時)
             embed.description += "\n\n(画像は生成されませんでした)"
             response_message = await interaction.followup.send(embed=embed)
 
-        # --- スレッド作成処理 ---
+        # スレッド作成処理
         try:
             if response_message:
                 channel = response_message.channel
             else:
-                 channel = interaction.channel
+                channel = interaction.channel
 
             if not isinstance(channel, (discord.TextChannel, discord.ForumChannel)):
-                 print(f"スレッドを作成できないチャンネルタイプです: {type(channel)}")
-                 return
+                print(f"スレッドを作成できないチャンネルタイプです: {type(channel)}")
+                return
 
-            thread_name = f"画像生成: {prompt[:50]}..." if len(prompt) > 50 else f"画像生成: {prompt}"
+            thread_name = f"🍌 {prompt[:45]}..." if len(prompt) > 45 else f"🍌 {prompt}"
 
             if response_message:
                 thread = await channel.create_thread(
                     name=thread_name,
                     message=response_message,
                     auto_archive_duration=60,
-                    reason="画像生成スレッド (OpenAI)"
+                    reason="Nano Banana Pro 画像生成スレッド"
                 )
             else:
-                 thread = await channel.create_thread(
+                thread = await channel.create_thread(
                     name=thread_name,
                     type=discord.ChannelType.public_thread,
                     auto_archive_duration=60,
-                    reason="画像生成スレッド (OpenAI)"
+                    reason="Nano Banana Pro 画像生成スレッド"
                 )
-                 await thread.send(embed=embed)
+                await thread.send(embed=embed)
 
-
-            thread_message = f"画像生成を続けるには、このスレッドにメッセージを送信してください。\n（元画像を指定する場合は、メッセージに画像を添付してください）"
+            thread_message = "🍌 **Nano Banana Pro** で画像生成を続けるには、このスレッドにメッセージを送信してください。\n（画像を添付すると、その画像をベースに編集できます）"
             await thread.send(thread_message)
 
-            # --- スレッドの会話履歴を初期化 (最初の画像のURLのみ保存) ---
-            first_generated_url = generated_image_urls[0] if generated_image_urls else None
+            # スレッドの会話履歴を初期化
             thread_histories[thread.id] = [
                 {
                     "role": "user",
                     "content": prompt,
-                    "image_url": image_url
+                    "image_data": reference_image_data
                 },
                 {
                     "role": "model",
-                    "content": f"{len(generated_image_urls)}枚の画像を生成しました。" if generated_image_urls else "画像を生成しました。",
-                    "image_url": first_generated_url # 最初の画像のURLのみ履歴に保存
+                    "content": result.get("text", "画像を生成しました。"),
+                    "image_data": generated_image_data
                 }
             ]
 
-            print(f"スレッド {thread.id} の会話履歴を初期化しました: {len(thread_histories[thread.id])} メッセージ")
+            print(f"スレッド {thread.id} の会話履歴を初期化しました")
 
         except discord.Forbidden:
-             print("エラー: スレッド作成権限がありません。")
-             await interaction.edit_original_response(content="スレッドの作成権限がないため、スレッドを開始できませんでした。画像は生成されています。")
+            print("エラー: スレッド作成権限がありません。")
+            await interaction.edit_original_response(content="スレッドの作成権限がないため、スレッドを開始できませんでした。画像は生成されています。")
         except Exception as thread_error:
-            print(f"スレッド作成またはメッセージ送信エラー: {thread_error}")
+            print(f"スレッド作成エラー: {thread_error}")
             traceback.print_exc()
-            try:
-                 await interaction.edit_original_response(content="スレッドの作成中にエラーが発生しましたが、画像生成は完了しています。")
-            except discord.NotFound:
-                 await interaction.channel.send("スレッドの作成中にエラーが発生しましたが、画像生成は完了しています。")
-
 
     except Exception as e:
         print(f"画像生成コマンドエラー: {e}")
         traceback.print_exc()
         try:
-            # followup.sendは一度しか使えないのでedit_original_responseを試す
             await interaction.edit_original_response(content=f"画像生成コマンドの実行中にエラーが発生しました: {str(e)}")
-        except discord.NotFound:
-             print("Interaction not found, cannot send error message.")
-        except discord.InteractionResponded:
-             # 既に編集などで応答済みの場合
-             await interaction.channel.send(f"画像生成コマンドの実行中にエラーが発生しました: {str(e)}")
-        except Exception as followup_error:
-             print(f"Error sending error message: {followup_error}")
+        except:
+            pass
 
 # --- 他のスラッシュコマンド (変更なし、ただしapi.pyからのインポートに注意) ---
 

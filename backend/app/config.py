@@ -47,8 +47,12 @@ class XAISettings(BaseSettings):
     model_config = {"env_prefix": "XAI_"}
 
 class GeminiSettings(BaseSettings):
-    """Gemini関連の設定"""
+    """Gemini関連の設定 (Nano Banana Pro画像生成を含む)"""
     api_key: Optional[str] = Field(None, env="GEMINI_API_KEY")
+    # Nano Banana Pro (画像生成)
+    image_model: str = Field("gemini-3-pro-image-preview", env="GEMINI_IMAGE_MODEL")
+    default_image_size: str = Field("2K", env="GEMINI_IMAGE_SIZE")  # 1K, 2K, 4K
+    default_aspect_ratio: str = Field("auto", env="GEMINI_ASPECT_RATIO")  # auto で自動判定
 
     model_config = {"env_prefix": "GEMINI_"}
 
