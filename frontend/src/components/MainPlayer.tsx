@@ -139,14 +139,21 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
       navigator.mediaSession.metadata = new MediaMetadata({
         title: currentTrack.title,
         artist: currentTrack.artist,
-        album: 'Album Name',
-        artwork: [{ src: currentTrack.thumbnail, sizes: '512x512', type: 'image/png' }],
+        artwork: currentTrack.thumbnail ? [{ src: currentTrack.thumbnail, sizes: '512x512', type: 'image/png' }] : [],
       });
 
       navigator.mediaSession.setActionHandler('play', onPlay);
       navigator.mediaSession.setActionHandler('pause', onPause);
       navigator.mediaSession.setActionHandler('nexttrack', onSkip);
     }
+
+    return () => {
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.setActionHandler('play', null);
+        navigator.mediaSession.setActionHandler('pause', null);
+        navigator.mediaSession.setActionHandler('nexttrack', null);
+      }
+    };
   }, [currentTrack, onPlay, onPause, onSkip]);
 
   const handleArtistClick = async (artistName: string) => {
@@ -534,16 +541,16 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
                   >
                     <motion.div
                       className="absolute top-0 left-0 h-full bg-primary rounded-full"
-                      style={{ width: `${(currentTime / duration) * 100}%` }}
+                      style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
                       initial={{ width: 0 }}
-                      animate={{ width: `${(currentTime / duration) * 100}%` }}
+                      animate={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
                       transition={{ duration: 0.1 }}
                     />
                     <motion.div
                       className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
-                      style={{ left: `calc(${(currentTime / duration) * 100}% - 6px)` }}
+                      style={{ left: `calc(${duration > 0 ? (currentTime / duration) * 100 : 0}% - 6px)` }}
                       initial={{ left: 0 }}
-                      animate={{ left: `calc(${(currentTime / duration) * 100}% - 6px)` }}
+                      animate={{ left: `calc(${duration > 0 ? (currentTime / duration) * 100 : 0}% - 6px)` }}
                       transition={{ duration: 0.1 }}
                     />
                   </div>

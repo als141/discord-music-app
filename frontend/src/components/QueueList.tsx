@@ -210,7 +210,7 @@ const QueueTrackItem = memo(({
 
       <div className="flex items-center ml-2 flex-shrink-0">
         <AnimatePresence>
-          {(isHovered || true) && (
+          {isHovered && (
             <motion.div
               className="flex items-center gap-0.5"
               initial={{ opacity: 0, width: 0 }}
@@ -308,12 +308,7 @@ export const QueueList: React.FC<QueueListProps> = ({
 
   const handleDelete = useCallback((index: number) => {
     onDelete(index);
-
-    toast({
-      title: "曲を削除しました",
-      description: "キューから曲を削除しました。",
-    });
-  }, [onDelete, toast]);
+  }, [onDelete]);
 
   return (
     <TooltipProvider>

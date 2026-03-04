@@ -218,16 +218,6 @@ const handleApiError = (error: unknown): never => {
 };
 
 export const api = {
-  getServers: async (): Promise<Server[]> => {
-    try {
-      const response = await apiClient.get('/bot-guilds');
-      return response.data;
-    } catch (error) {
-      handleApiError(error);
-    }
-    return []; // エラーハンドリング後の空の戻り値
-  },
-
   getUserGuilds: async (): Promise<Server[]> => {
     try {
       const response = await fetch('/api/discord/userGuilds');
@@ -566,82 +556,3 @@ export const api = {
     },
   },
 };
-
-// Improved WebSocket connection with reconnection logic
-export function setupWebSocket(guildId: string, onMessage: (data: WebSocketData) => void): WebSocket {
-  if (!API_URL) {
-    throw new Error('API URL is not defined. Please set NEXT_PUBLIC_API_URL environment variable.');
-  }
-  
-  const wsUrl = `${API_URL.replace(/^http/, 'ws')}/ws/${guildId}`;
-  let ws: WebSocket | null = new WebSocket(wsUrl);
-  let reconnectTimer: NodeJS.Timeout | null = null;
-  let reconnectAttempts = 0;
-  const MAX_RECONNECT_ATTEMPTS = 5;
-  const RECONNECT_DELAY = 3000;
-
-  const connect = () => {
-    ws = new WebSocket(wsUrl);
-
-    ws.onopen = () => {
-      console.log("WebSocket connected");
-      reconnectAttempts = 0; // Reset counter on successful connection
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === "update") {
-          onMessage(data.data);
-        }
-      } catch (error) {
-        console.error("WebSocket message parse error:", error);
-      }
-    };
-
-    ws.onclose = (event) => {
-      console.log(`WebSocket closed. Code: ${event.code}, Reason: ${event.reason}`);
-      
-      // Don't reconnect if it was a clean closure
-      if (event.wasClean) {
-        return;
-      }
-      
-      // Try to reconnect with exponential backoff
-      if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-        reconnectAttempts++;
-        const delay = RECONNECT_DELAY * Math.pow(1.5, reconnectAttempts - 1);
-        console.log(`Attempting to reconnect (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}) in ${delay}ms...`);
-        
-        reconnectTimer = setTimeout(connect, delay);
-      } else {
-        console.error(`WebSocket reconnection failed after ${MAX_RECONNECT_ATTEMPTS} attempts`);
-      }
-    };
-
-    ws.onerror = (error) => {
-      console.error("WebSocket error:", error);
-    };
-  };
-
-  // Initial connection
-  connect();
-
-  // Return an extended WebSocket with proper cleanup methods
-  const extendedWs = {
-    send: (data: string) => ws?.send(data),
-    close: () => {
-      if (reconnectTimer) {
-        clearTimeout(reconnectTimer);
-        reconnectTimer = null;
-      }
-      if (ws) {
-        ws.close();
-        ws = null;
-      }
-    }
-  };
-
-  // We need to cast this to WebSocket as we're extending the interface
-  return extendedWs as unknown as WebSocket;
-}

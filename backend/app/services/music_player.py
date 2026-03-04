@@ -1,5 +1,6 @@
 import asyncio
 import os
+import threading
 import yt_dlp
 import discord
 from concurrent.futures import ThreadPoolExecutor
@@ -118,17 +119,19 @@ def get_ffmpeg_options(is_local_file: bool = False) -> dict:
             'options': '-vn'
         }
 
-# yt-dlp インスタンス（遅延初期化）
+# yt-dlp インスタンス（遅延初期化、スレッドセーフ）
 _ytdl_instance = None
+_ytdl_lock = threading.Lock()
 
 def get_ytdl():
-    """yt-dlpインスタンスを遅延初期化して取得"""
+    """yt-dlpインスタンスを遅延初期化して取得（スレッドセーフ）"""
     global _ytdl_instance
     if _ytdl_instance is None:
-        options = get_ytdl_format_options()
-        _ytdl_instance = yt_dlp.YoutubeDL(options)
-        # 起動時に必ず出力
-        print(f"[STARTUP] yt-dlp initialized with cookiefile: {options.get('cookiefile', 'NOT SET')}")
+        with _ytdl_lock:
+            if _ytdl_instance is None:
+                options = get_ytdl_format_options()
+                _ytdl_instance = yt_dlp.YoutubeDL(options)
+                print(f"[STARTUP] yt-dlp initialized with cookiefile: {options.get('cookiefile', 'NOT SET')}")
     return _ytdl_instance
 
 # 後方互換性のための定数
@@ -166,7 +169,7 @@ class MusicPlayer:
         self.notify_clients = notify_clients
 
         self.queue: deque[Song] = deque()
-        self.history: deque[Song] = deque()
+        self.history: deque[Song] = deque(maxlen=50)
         self.next = asyncio.Event()
         self.current: Optional[Song] = None
         self.volume: float = 1.0  # ボリューム（0.0 - 1.0）

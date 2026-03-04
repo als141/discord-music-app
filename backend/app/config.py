@@ -1,4 +1,4 @@
-# settings.py
+# config.py
 """
 アプリケーション設定管理モジュール
 

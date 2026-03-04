@@ -1,13 +1,9 @@
-// layout.tsx
 'use client'
 
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
-import { SessionProvider } from 'next-auth/react' // 追加
-import { GuildProvider } from '@/contexts/GuildContext';
-import { PlaybackProvider } from '@/contexts/PlaybackContext';
-import { VolumeProvider } from '@/contexts/VolumeContext'; // 追加
+import { SessionProvider } from 'next-auth/react'
 
 export default function RootLayout({
   children,
@@ -24,14 +20,8 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
-            <GuildProvider>
-              <PlaybackProvider>
-                <VolumeProvider> {/* VolumeProvider を追加 */}
-                  {children}
-                  <Toaster />
-                </VolumeProvider>
-              </PlaybackProvider>
-            </GuildProvider>
+            {children}
+            <Toaster />
           </ThemeProvider>
         </SessionProvider>
       </body>
