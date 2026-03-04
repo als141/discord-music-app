@@ -155,6 +155,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ヘルスチェック用ルートエンドポイント
+@app.get("/")
+async def health_check():
+    return {"status": "ok"}
+
 # ルーターを追加
 app.include_router(chat.router)
 app.include_router(valorant_router)
