@@ -29,8 +29,8 @@ def get_ytdl_format_options() -> dict:
     参考: https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide
     """
     # フォーマット選択: 確実に取得できるようにフォールバックを多く設定
-    # YouTube Premiumユーザーは高品質フォーマットにアクセス可能
-    format_string = 'bestaudio/best/139'
+    # bestaudio* はフィルター付きベストオーディオ、bestaudioはフィルターなし、bestは全形式
+    format_string = 'bestaudio*/bestaudio/best'
 
     # bgutil-ytdlp-pot-provider のスクリプトパス
     # Docker環境: /opt/bgutil-pot/server/build/generate_once.js
