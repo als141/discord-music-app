@@ -1,5 +1,5 @@
 # Dockerfile for Discord Music App Backend
-# Cloud Run用に最適化
+# Cloud Run / Railway 対応
 
 # ========================================
 # Stage 1: Builder
@@ -96,18 +96,21 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     UV_PROJECT_ENVIRONMENT="/app/.venv"
 
-# Cloud Runのポート設定（デフォルト8080、環境変数で上書き可能）
+# ポート設定（Railway/Cloud Runが$PORTを自動設定）
 ENV PORT=8080
 EXPOSE ${PORT}
 
-# ヘルスチェック（Cloud Runはこれを使用）
+# ヘルスチェック
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:${PORT}/')" || exit 1
 
-# アプリケーションの起動
-# uvicornを直接使用してFastAPIアプリを起動
-# - --host 0.0.0.0: 全てのネットワークインターフェースでリッスン
-# - --port: Cloud RunのPORT環境変数を使用
-# - --workers 1: Cloud Runでは1 workerが推奨
-# - --timeout-keep-alive 30: コネクションタイムアウト
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers 1 --timeout-keep-alive 30"]
+# 起動スクリプト
+# 1. YOUTUBE_COOKIES_BASE64が設定されていればcookies.txtを生成
+# 2. uvicornでFastAPIアプリを起動
+CMD ["sh", "-c", "\
+  if [ -n \"$YOUTUBE_COOKIES_BASE64\" ]; then \
+    echo \"$YOUTUBE_COOKIES_BASE64\" | base64 -d > /app/cookies.txt && \
+    export MUSIC_COOKIES_FILE=/app/cookies.txt && \
+    echo '[STARTUP] cookies.txt restored from YOUTUBE_COOKIES_BASE64'; \
+  fi && \
+  uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers 1 --timeout-keep-alive 30"]

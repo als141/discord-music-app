@@ -1,0 +1,12 @@
+[build]
+# Dockerfileを使ってビルド
+dockerfilePath = "Dockerfile"
+
+[deploy]
+# Railwayが自動設定する$PORTを使用
+# ヘルスチェック: ルートエンドポイントに対してHTTPチェック
+healthcheckPath = "/"
+healthcheckTimeout = 30
+# 再起動ポリシー
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
