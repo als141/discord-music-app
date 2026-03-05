@@ -13,10 +13,20 @@ declare global {
 declare const self: ServiceWorkerGlobalScope & typeof globalThis;
 
 const serwist = new Serwist({
-  precacheEntries: self.__SW_MANIFEST,
+  precacheEntries: [...(self.__SW_MANIFEST || []), "/offline"],
   skipWaiting: true,
   clientsClaim: true,
   navigationPreload: true,
+  fallbacks: {
+    entries: [
+      {
+        url: "/offline",
+        matcher({ request }) {
+          return request.destination === "document";
+        },
+      },
+    ],
+  },
   runtimeCaching: [
     // API requests - network only (no caching)
     {
@@ -71,8 +81,8 @@ self.addEventListener("push", (event) => {
     const data = event.data.json();
     const options = {
       body: data.body,
-      icon: data.icon || "/icon-192x192.png",
-      badge: "/badge.png",
+      icon: data.icon || "/icons/icon-192x192.png",
+      badge: "/icons/badge.png",
       vibrate: [100, 50, 100],
       data: {
         dateOfArrival: Date.now(),
