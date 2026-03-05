@@ -227,7 +227,7 @@ const InfoPanel = memo(() => (
 
 InfoPanel.displayName = 'InfoPanel';
 
-export const SideMenu: React.FC<SideMenuProps> = ({
+export const SideMenu: React.FC<SideMenuProps> = React.memo(({
   isOpen,
   onClose,
   activeServerId,
@@ -513,4 +513,6 @@ export const SideMenu: React.FC<SideMenuProps> = ({
       </AnimatePresence>
     </TooltipProvider>
   );
-};
+});
+
+SideMenu.displayName = 'SideMenu';

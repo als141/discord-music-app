@@ -467,30 +467,29 @@ export const MainApp: React.FC = () => {
           </motion.div>
         )}
         
-        {/* オーディオ要素 */}
-        {isOnDeviceMode && (
-          <audio
-            ref={audioRef}
-            src={
-              deviceCurrentTrack?.url
-                ? `${API_URL}/stream?url=${encodeURIComponent(deviceCurrentTrack.url)}`
-                : undefined
-            }
-            onEnded={skip}
-            onPlay={() => usePlayerStore.getState().setIsPlaying(true)}
-            onPause={() => usePlayerStore.getState().setIsPlaying(false)}
-            onError={(e) => {
-              console.error('オーディオエラー:', e);
-              toast({
-                title: "再生エラー",
-                description: "音声の再生中にエラーが発生しました。",
-                variant: "destructive",
-              });
-              skip();
-            }}
-            autoPlay
-          />
-        )}
+        {/* オーディオ要素（常時レンダリング。isOnDeviceModeトグル時にDOMを破棄しない） */}
+        <audio
+          ref={audioRef}
+          src={
+            isOnDeviceMode && deviceCurrentTrack?.url
+              ? `${API_URL}/stream?url=${encodeURIComponent(deviceCurrentTrack.url)}`
+              : undefined
+          }
+          onEnded={skip}
+          onPlay={() => usePlayerStore.getState().setIsPlaying(true)}
+          onPause={() => usePlayerStore.getState().setIsPlaying(false)}
+          onError={(e) => {
+            if (!isOnDeviceMode || !deviceCurrentTrack) return;
+            console.error('オーディオエラー:', e);
+            toast({
+              title: "再生エラー",
+              description: "音声の再生中にエラーが発生しました。",
+              variant: "destructive",
+            });
+            skip();
+          }}
+          autoPlay={isOnDeviceMode}
+        />
       </div>
     </ErrorBoundary>
   );

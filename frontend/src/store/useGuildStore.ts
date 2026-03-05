@@ -10,7 +10,7 @@ let lastServersFetchAt = 0;
 
 // ボイスステータスポーリング用タイマー
 let voiceStatusPollingTimer: NodeJS.Timeout | null = null;
-const VOICE_STATUS_POLLING_INTERVAL_MS = 10000; // 10秒間隔でポーリング
+const VOICE_STATUS_POLLING_INTERVAL_MS = 30000; // 30秒間隔でポーリング（WebSocketで状態同期できているため）
 
 interface GuildState {
   // サーバー情報
@@ -179,13 +179,14 @@ export const useGuildStore = create<GuildState>()(
       // ボットのボイスチャンネル状態を取得
       fetchBotVoiceStatus: async (serverId) => {
         try {
-          set({ isLoadingBotStatus: true });
           const channelId = await api.getBotVoiceStatus(serverId);
-
+          const current = get();
+          // activeChannelIdはユーザーがまだ選択していない場合のみ同期
+          const shouldSyncChannel = !current.activeChannelId || current.activeChannelId === current.botVoiceChannelId;
           set({
             botVoiceChannelId: channelId,
             isBotConnected: channelId !== null,
-            activeChannelId: channelId, // 実際のボットの状態と同期
+            ...(shouldSyncChannel ? { activeChannelId: channelId } : {}),
             isLoadingBotStatus: false
           });
         } catch (error) {
@@ -205,13 +206,14 @@ export const useGuildStore = create<GuildState>()(
           clearInterval(voiceStatusPollingTimer);
         }
 
-        // 定期的にボイスステータスをチェック
+        // 定期的にボイスステータスをチェック（タブが表示されている場合のみ）
         voiceStatusPollingTimer = setInterval(() => {
+          // タブが非表示の場合はスキップ
+          if (typeof document !== 'undefined' && document.hidden) return;
           const currentServerId = get().activeServerId;
           if (currentServerId === serverId) {
             get().fetchBotVoiceStatus(serverId);
           } else {
-            // サーバーが変わった場合はポーリングを停止
             get().stopVoiceStatusPolling();
           }
         }, VOICE_STATUS_POLLING_INTERVAL_MS);

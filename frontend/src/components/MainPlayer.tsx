@@ -93,7 +93,7 @@ interface MainPlayerProps {
   isLoading: boolean;
 }
 
-export const MainPlayer: React.FC<MainPlayerProps> = ({
+export const MainPlayer: React.FC<MainPlayerProps> = React.memo(({
   currentTrack,
   isPlaying,
   onPlay,
@@ -823,4 +823,6 @@ export const MainPlayer: React.FC<MainPlayerProps> = ({
       </motion.div>
     </TooltipProvider>
   );
-};
+});
+
+MainPlayer.displayName = 'MainPlayer';

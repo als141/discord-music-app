@@ -1,7 +1,7 @@
 // SearchResults.tsx
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PlayableItem, SearchItem, Track } from '@/utils/api';
 import { ChevronLeft, Search, Music, Disc, PlaySquare, ListMusic, Plus, Loader2, User, Music2 } from 'lucide-react';
@@ -51,15 +51,15 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
     playlists: 'プレイリスト'
   };
 
-  const categorizedResults = {
+  const categorizedResults = useMemo(() => ({
     artists: results.filter(item => item.type === 'artist'),
     songs: results.filter(item => item.type === 'song'),
     videos: results.filter(item => item.type === 'video'),
     albums: results.filter(item => ['album', 'single', 'ep'].includes(item.type)),
     playlists: results.filter(item => item.type === 'playlist')
-  };
+  }), [results]);
 
-  const getVisibleItems = (category: string, items: SearchItem[]) => {
+  const getVisibleItems = useCallback((category: string, items: SearchItem[]) => {
     if (showMore[category]) {
       return items;
     }
@@ -67,7 +67,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
       return items.slice(0, 1);
     }
     return items.slice(0, 5);
-  };
+  }, [showMore]);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -272,7 +272,7 @@ interface SearchResultCardProps {
   setIsArtistDialogOpen: (open: boolean) => void;
 }
 
-const SearchResultCard: React.FC<SearchResultCardProps> = ({
+const SearchResultCardInner: React.FC<SearchResultCardProps> = ({
   item,
   onAddToQueue,
   onAddTrackToQueue,
@@ -506,3 +506,6 @@ const SearchResultCard: React.FC<SearchResultCardProps> = ({
     </motion.div>
   );
 };
+
+const SearchResultCard = React.memo(SearchResultCardInner);
+SearchResultCard.displayName = 'SearchResultCard';

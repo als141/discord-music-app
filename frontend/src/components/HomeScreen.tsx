@@ -443,7 +443,7 @@ const URLAddCard = memo(({
 
 URLAddCard.displayName = 'URLAddCard';
 
-export const HomeScreen: React.FC<HomeScreenProps> = ({
+export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
   onSelectTrack,
   guildId,
   activeTab,
@@ -766,7 +766,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       )}
     </div>
   );
-};
+});
 
 HomeScreen.displayName = 'HomeScreen';
 

@@ -19,11 +19,8 @@ const animations = {
     exit: { opacity: 0 }
   },
   list: {
-    initial: { opacity: 0 },
-    animate: {
-      opacity: 1,
-      transition: { staggerChildren: 0.04 }
-    },
+    initial: {},
+    animate: {},
     exit: { opacity: 0 }
   } as Variants,
   item: {
@@ -150,20 +147,21 @@ const QueueTrackItem = memo(({
   index,
   isLast,
   isFirst,
-  onMoveUp,
-  onMoveDown,
-  onDelete,
+  onMoveItem,
+  onDeleteItem,
   isOnDeviceMode
 }: {
   track: Track;
   index: number;
   isLast: boolean;
   isFirst: boolean;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
-  onDelete: () => void;
+  onMoveItem: (index: number, direction: 'up' | 'down') => void;
+  onDeleteItem: (index: number) => void;
   isOnDeviceMode: boolean;
 }) => {
+  const onMoveUp = useCallback(() => onMoveItem(index, 'up'), [onMoveItem, index]);
+  const onMoveDown = useCallback(() => onMoveItem(index, 'down'), [onMoveItem, index]);
+  const onDelete = useCallback(() => onDeleteItem(index), [onDeleteItem, index]);
   const [isHovered, setIsHovered] = useState(false);
 
   return (
@@ -384,9 +382,8 @@ export const QueueList: React.FC<QueueListProps> = ({
                   index={index}
                   isFirst={index === 0}
                   isLast={index === queue.length - 1}
-                  onMoveUp={() => handleMoveItem(index, 'up')}
-                  onMoveDown={() => handleMoveItem(index, 'down')}
-                  onDelete={() => handleDelete(index)}
+                  onMoveItem={handleMoveItem}
+                  onDeleteItem={handleDelete}
                   isOnDeviceMode={isOnDeviceMode}
                 />
               ))}

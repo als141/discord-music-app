@@ -19,7 +19,7 @@ export function setActiveServerIdGetter(getter: () => string | null) {
 
 // デバウンス用タイマー
 let updateDebounceTimer: NodeJS.Timeout | null = null;
-const UPDATE_DEBOUNCE_MS = 50; // 50msのデバウンス
+const UPDATE_DEBOUNCE_MS = 150; // 150msのデバウンス（バースト更新をまとめる）
 
 // 操作タイムアウト用タイマー（安全機構）
 let pendingOperationTimeoutTimer: NodeJS.Timeout | null = null;
@@ -760,31 +760,34 @@ export function setupWebSocket(guildId: string) {
           return;
         }
 
-        // 状態を更新
+        // 状態を一括更新（1回のset()で全フィールドを更新し、再レンダリングを最小化）
         const queueItems = data.queue || [];
         // @ts-expect-error - Type compatibility issues with queue items
-        const current = queueItems.find((item) => item.isCurrent);
+        const current = queueItems.find((item: { isCurrent: boolean }) => item.isCurrent);
 
-        // @ts-expect-error - Type compatibility issues with track data
-        store.setCurrentTrack(current?.track || null);
-        store.setQueue(
+        const batchUpdate: Record<string, unknown> = {
+          // @ts-expect-error - Type compatibility issues with track data
+          currentTrack: current?.track || null,
           // @ts-expect-error - Type compatibility issues with queue items
-          queueItems.filter((item) => !item.isCurrent).map((item) => item.track)
-        );
-        store.setIsPlaying(!!data.is_playing);
+          queue: queueItems.filter((item: { isCurrent: boolean }) => !item.isCurrent).map((item: { track: Track }) => item.track),
+          isPlaying: !!data.is_playing,
+          lastSyncVersion: newVersion,
+          lastSyncTimestamp: newTimestamp,
+        };
 
         if (data.history) {
-          // @ts-expect-error - Type compatibility issues with history data
-          store.setHistory(data.history);
+          batchUpdate.history = data.history;
         }
 
-        // 同期情報を更新
-        store.setSyncInfo(newVersion, newTimestamp);
-
-        // 操作完了フラグをリセット
         if (store.hasPendingOperation) {
-          store.setPendingOperation(false);
+          batchUpdate.hasPendingOperation = false;
+          if (pendingOperationTimeoutTimer) {
+            clearTimeout(pendingOperationTimeoutTimer);
+            pendingOperationTimeoutTimer = null;
+          }
         }
+
+        usePlayerStore.setState(batchUpdate);
       }, UPDATE_DEBOUNCE_MS);
     },
     {

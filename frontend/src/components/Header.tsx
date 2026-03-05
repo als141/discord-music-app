@@ -28,7 +28,7 @@ interface HeaderProps {
   onToggleDeviceMode: () => void
 }
 
-export const Header: React.FC<HeaderProps> = ({
+export const Header: React.FC<HeaderProps> = React.memo(({
   onSearch,
   onAddUrl,
   onOpenMenu,
@@ -378,4 +378,6 @@ export const Header: React.FC<HeaderProps> = ({
 
     </TooltipProvider>
   )
-}
+});
+
+Header.displayName = 'Header';
