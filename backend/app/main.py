@@ -947,8 +947,8 @@ async def search(query: str, filter: str = None):
                 search_items.append(
                     SearchItem(
                         type='artist',
-                        title=artist.get('artist', artist.get('title', '')),
-                        artist=artist.get('artist', artist.get('title', '')),
+                        title=artist.get('artist') or artist.get('title') or '',
+                        artist=artist.get('artist') or artist.get('title') or 'Unknown Artist',
                         thumbnail=adjust_thumbnail_size(thumbnail),
                         url=url,
                         browseId=browse_id
@@ -978,11 +978,11 @@ async def search(query: str, filter: str = None):
                 continue
             video_url = f"https://music.youtube.com/watch?v={song['videoId']}"
             thumbnail = song['thumbnails'][0]['url'] if song.get('thumbnails') else ""
-            artist_name = ', '.join([artist['name'] for artist in song.get('artists', [])]) or "Unknown Artist"
+            artist_name = ', '.join([a['name'] for a in song.get('artists', []) if a.get('name')]) or "Unknown Artist"
             search_items.append(
                 SearchItem(
                     type='song',
-                    title=song['title'],
+                    title=song.get('title') or 'Unknown',
                     artist=artist_name,
                     thumbnail=adjust_thumbnail_size(thumbnail),
                     url=video_url
@@ -993,11 +993,11 @@ async def search(query: str, filter: str = None):
                 continue
             video_url = f"https://music.youtube.com/watch?v={video['videoId']}"
             thumbnail = video['thumbnails'][0]['url'] if video.get('thumbnails') else ""
-            artist_name = ', '.join([artist['name'] for artist in video.get('artists', [])]) or "Unknown Artist"
+            artist_name = ', '.join([a['name'] for a in video.get('artists', []) if a.get('name')]) or "Unknown Artist"
             search_items.append(
                 SearchItem(
                     type='video',
-                    title=video['title'],
+                    title=video.get('title') or 'Unknown',
                     artist=artist_name,
                     thumbnail=adjust_thumbnail_size(thumbnail),
                     url=video_url
@@ -1009,11 +1009,11 @@ async def search(query: str, filter: str = None):
             browse_id = album['browseId']
             url = f"https://music.youtube.com/browse/{browse_id}"
             thumbnail = album['thumbnails'][0]['url'] if album.get('thumbnails') else ""
-            artist_name = ', '.join([artist['name'] for artist in album.get('artists', [])]) or "Unknown Artist"
+            artist_name = ', '.join([a['name'] for a in album.get('artists', []) if a.get('name')]) or "Unknown Artist"
             search_items.append(
                 SearchItem(
-                    type=album.get('type', 'album').lower(),
-                    title=album['title'],
+                    type=(album.get('type') or 'album').lower(),
+                    title=album.get('title') or 'Unknown Album',
                     artist=artist_name,
                     thumbnail=adjust_thumbnail_size(thumbnail),
                     url=url,
@@ -1029,8 +1029,8 @@ async def search(query: str, filter: str = None):
             search_items.append(
                 SearchItem(
                     type='artist',
-                    title=artist.get('artist', artist.get('title', '')),
-                    artist=artist.get('artist', artist.get('title', '')),
+                    title=artist.get('artist') or artist.get('title') or '',
+                    artist=artist.get('artist') or artist.get('title') or 'Unknown Artist',
                     thumbnail=adjust_thumbnail_size(thumbnail),
                     url=url,
                     browseId=browse_id
@@ -1045,8 +1045,8 @@ async def search(query: str, filter: str = None):
             search_items.append(
                 SearchItem(
                     type='playlist',
-                    title=playlist['title'],
-                    artist=playlist.get('author', 'Unknown Author'),
+                    title=playlist.get('title') or 'Unknown Playlist',
+                    artist=playlist.get('author') or 'Unknown Author',
                     thumbnail=adjust_thumbnail_size(thumbnail),
                     url=url,
                     browseId=browse_id.replace('VL', '')

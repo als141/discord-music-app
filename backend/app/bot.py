@@ -613,7 +613,23 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
                 return
             _voice_disconnect_processing.add(guild_id)
             try:
-                print(f"Bot was disconnected from voice channel in {guild.name} (before: {before.channel}, after: {after.channel}, vc: {guild.voice_client})")
+                vc = guild.voice_client
+                print(f"Bot was disconnected from voice channel in {guild.name} (before: {before.channel}, after: {after.channel}, vc: {vc})")
+                # voice_clientがまだ存在する場合、discord.pyがリコネクト中の可能性がある
+                # 少し待ってから再確認し、リコネクトが成功したらシャットダウンしない
+                if vc is not None:
+                    print(f"Voice client still exists, waiting for potential reconnect... (guild: {guild.name})")
+                    await asyncio.sleep(5)
+                    # リコネクト後の状態を再確認
+                    vc_after = guild.voice_client
+                    if vc_after is not None and vc_after.is_connected():
+                        print(f"Voice reconnected successfully, keeping MusicPlayer alive (guild: {guild.name})")
+                        player = music_players.get(guild_id)
+                        if player:
+                            player.voice_client = vc_after
+                        await notify_clients_local(guild_id)
+                        return
+                    print(f"Voice did not reconnect, shutting down MusicPlayer (guild: {guild.name})")
                 player = music_players.get(guild_id)
                 if player:
                     await player.shutdown()
