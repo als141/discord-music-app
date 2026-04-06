@@ -241,6 +241,16 @@ with yt_dlp.YoutubeDL(ydl_opts) as ydl:
 
 ## Bug Fix History
 
+### 2026-04-07: `/join-voice-channel` のタイムアウト例外を修正
+- **原因**
+  - 旧実装は `channel.connect()/move_to()` のタイムアウト（`TimeoutError`）を捕捉せず、`POST /join-voice-channel/{guild_id}/{channel_id}` が `500` を返していた。
+- **対応**
+  - `backend/app/main.py` の `/join-voice-channel` を再設計し、IDの型チェックを追加。
+  - `asyncio.wait_for(..., timeout=15)` を接続/移動に適用し、`TimeoutError` を `503` に変換。
+  - 無効IDは `400`、対象外チャンネル型は `400`、存在しない guild/channel は `404` に整理。
+  - `guild.voice_client` が該当接続に失敗した場合は `disconnect()` を試行し、状態をクリーンアップ。
+  - CORS を `allow_origin_regex: ^https://.*\.vercel\.app$` でプレビュー含め許可。
+
 ### 2026-03-26: 検索500エラー + Voice reconnect + yt-dlp更新
 - **コミット**: `2e8b243f` (コード修正) + `95566639` (lockファイル更新)
 - **修正1**: SearchItem pydantic validation error (artist=None) → `or`演算子でNullセーフに

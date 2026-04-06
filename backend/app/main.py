@@ -143,6 +143,8 @@ origins = [
     "http://localhost:8000",
 ]
 
+VOICE_CONNECT_TIMEOUT_SECONDS = 15
+
 # キャッシュ用の変数を定義
 recommendations_cache = None
 recommendations_cache_timestamp = None
@@ -151,6 +153,7 @@ CACHE_DURATION = timedelta(hours=3)  # キャッシュの有効期間
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,  # フロントエンドのURLを許可
+    allow_origin_regex=r"^https://.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -166,7 +169,36 @@ app.include_router(chat.router)
 app.include_router(valorant_router)
 app.include_router(realtime_router)
 
-    
+
+async def _connect_or_move_voice_client(guild, channel):
+    """ボイスチャンネルへの接続/移動をタイムアウト付きで安全に実行する."""
+    if not guild.voice_client:
+        print(f"[join] guild {guild.id} has no voice client. connecting to channel {channel.id}")
+        await asyncio.wait_for(channel.connect(), timeout=VOICE_CONNECT_TIMEOUT_SECONDS)
+        return
+
+    current_channel_id = getattr(guild.voice_client.channel, "id", None)
+    target_channel_id = getattr(channel, "id", None)
+    if current_channel_id == target_channel_id and guild.voice_client.is_connected():
+        print(f"[join] guild {guild.id} already connected to channel {target_channel_id}")
+        return
+
+    print(f"[join] guild {guild.id} moving voice client from {current_channel_id} to {target_channel_id}")
+    await asyncio.wait_for(guild.voice_client.move_to(channel), timeout=VOICE_CONNECT_TIMEOUT_SECONDS)
+
+
+def _is_voice_channel(channel) -> bool:
+    """音声チャンネル判定（voice / stage_voice）"""
+    channel_type = getattr(channel, "type", None)
+    if channel_type is None:
+        return False
+    try:
+        type_name = str(channel_type)
+    except Exception:
+        return False
+    return type_name in {"ChannelType.voice", "ChannelType.stage_voice", "voice", "stage_voice"}
+
+
 def extract_artist_id(artist_data):
     # 'id' や 'browseId' を試して取得
     return artist_data.get('id') or artist_data.get('browseId') or None
@@ -747,13 +779,39 @@ async def get_voice_channels(guild_id: str):
 
 @app.post("/join-voice-channel/{guild_id}/{channel_id}")
 async def join_voice_channel(guild_id: str, channel_id: str):
-    guild = client.get_guild(int(guild_id))
-    channel = guild.get_channel(int(channel_id))
-    if guild and channel and channel.type.name == "voice":
-        if guild.voice_client is None:
-            await channel.connect()
-        else:
-            await guild.voice_client.move_to(channel)
+    try:
+        guild_id_int = int(guild_id)
+        channel_id_int = int(channel_id)
+        guild = client.get_guild(guild_id_int)
+        channel = guild.get_channel(channel_id_int) if guild else None
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid guild_id or channel_id")
+
+    if guild and channel and _is_voice_channel(channel):
+        try:
+            await _connect_or_move_voice_client(guild, channel)
+        except asyncio.TimeoutError:
+            print(f"[join] voice connect timeout: guild={guild_id}, channel={channel_id}")
+            # タイムアウト後に不安定な接続を明示的に切断
+            try:
+                if guild.voice_client:
+                    await guild.voice_client.disconnect()
+            except Exception as disconnect_error:
+                print(f"[join] voice client cleanup failed: {disconnect_error}")
+            raise HTTPException(
+                status_code=503,
+                detail="Voice channel connection timed out. Please try again in a moment."
+            )
+        except HTTPException:
+            raise
+        except Exception as error:
+            error_msg = str(error)
+            print(f"[join] voice connect failed: guild={guild_id}, channel={channel_id}, error={error_msg}")
+            raise HTTPException(
+                status_code=503,
+                detail="Failed to connect to voice channel. Please retry."
+            )
+
         # 既存プレイヤーがあればそのまま使い、なければ新規作成
         if guild_id not in music_players:
             music_players[guild_id] = MusicPlayer(client, guild, guild_id, notify_clients)
@@ -762,6 +820,12 @@ async def join_voice_channel(guild_id: str, channel_id: str):
             music_players[guild_id].voice_client = guild.voice_client
         await notify_clients(guild_id)
         return {"message": "Joined voice channel"}
+    if guild and channel and not _is_voice_channel(channel):
+        raise HTTPException(status_code=400, detail="Only voice and stage voice channels are supported")
+    if not guild:
+        raise HTTPException(status_code=404, detail="Guild not found")
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
     raise HTTPException(status_code=404, detail="Guild or Channel not found")
 
 @app.get("/bot-voice-status/{guild_id}")
