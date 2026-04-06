@@ -16,6 +16,13 @@ if [ "$LOCAL_HASH" = "$REMOTE_HASH" ]; then
   exit 0
 fi
 
+if git merge-base --is-ancestor "$REMOTE_HASH" "$LOCAL_HASH"; then
+  echo "[deploy] Local is ahead of origin/main (un-pushed changes exist). Skip auto-update."
+  echo "[deploy] Local:  $LOCAL_HASH"
+  echo "[deploy] Remote: $REMOTE_HASH"
+  exit 0
+fi
+
 if [ -n "$(git status --porcelain)" ]; then
   echo "[deploy] Local repository has uncommitted changes. Skip auto-reset to avoid overwrite."
   echo "$REMOTE_HASH available on origin/main"
