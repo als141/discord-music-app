@@ -71,3 +71,4 @@ cookies.txt
 backend/backend.egg-info
 __pycache__
 backend/logs/app.log
+deploy.log
