@@ -82,6 +82,7 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 ### Frontend (Vercel)
 - **URL**: `https://discord-music-app.vercel.app`
 - **NEXT_PUBLIC_API_URL**: `https://api.atoriba.jp`
+- **Playwright GUI確認**: `scripts/open-vercel-browser.sh` を実行すると、`Vercel` の画面をWSL2上でheaded表示できる。
 
 ### Railway（削除済み）
 - プロジェクト削除済み。RailwayはUDP非対応でDiscord Voice接続不可。
@@ -95,6 +96,19 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 - 再試行で成功した yt-dlp インスタンスを使って保存ファイル名を生成するようにし、`prepare_source` 側で再生ファイル参照不整合を防止した。
 
 - 変更範囲は音楽再生処理のみで、チャット系プロンプトロジックには手を入れていない。
+
+### 2026-04-07: voice join API の検証完了
+- `POST /join-voice-channel/{guild_id}/{channel_id}` の不正入力を直接検証（`abc/xyz`）し、`400 Invalid guild_id or channel_id` を確認。
+- `guild`/`channel` 未存在時のレスポンスを `404` に分岐。
+- 非音声チャンネル時は `400 Only voice and stage voice channels are supported` を確認。
+- `TIMEOUT` 発生時は `503` に変換される実装とログ `"[join] voice connect timeout"` を確認。
+- CORS は `https://discord-music-app.vercel.app` + `https://api.atoriba.jp` + `^https://.*\.vercel\.app$` で許可され、CORS preflight と不正 origin の振る舞いを手動確認。
+
+### 2026-04-07: Playwright / ブラウザ可視化手順の確立
+- `scripts/open-vercel-browser.sh` を更新し、WSL2 の `DISPLAY` 自動探索と headed 起動の運用を整理。
+- `npx playwright` での `Vercel` 実ページ確認（console/network）を日次チェック可能化。
+- `browser_network_requests` で `/api/auth/session`, `/api/voice-channels` の 200/404 応答を現環境で確認。
+- `Discord` ドメイン上で `api.atoriba.jp` への直接フェッチは CSP により阻害されるため、検証は `discord-music-app.vercel.app` 側で実施すべきと確認。
 
 ### yt-dlp Configuration (CRITICAL)
 - **js_runtimes**: `{'node': {}, 'deno': {}}` を明示指定必須。デフォルトはdenoのみ。
@@ -217,6 +231,7 @@ journalctl -u discord-music-bot --since '7 days ago' --no-pager | grep -c 'ERROR
 - **yt-dlp "The page needs to be reloaded"**: yt-dlpのバージョンが古い。lockファイルごと更新してデプロイ
 - **WebSocket切断**: journalctlで `WebSocket disconnected` の頻度を確認。Cloudflare Tunnel経由だと正常
 - **Piのログが出ない**: `PYTHONUNBUFFERED=1` がsystemdサービスに設定されているか確認
+- **Playwright の headed 表示**: WSL2では`DISPLAY`未設定があるとブラウザが起動しない。`scripts/open-vercel-browser.sh` を使い、必要なら `DISPLAY="$(awk '/^nameserver/{print $2; exit}' /etc/resolv.conf):0"` を設定。
 - **Piサービス停止が遅い**: 大量のMusicPlayerが溜まってる証拠。`systemctl kill` で強制終了後 `start`
 - **検索500エラー**: SearchItemのartist/titleがNoneになっていないか確認。`or`演算子でNullセーフに
 - **Discord Gateway 520エラー**: Discord側のインフラ問題。指数バックオフで自動復旧する。コード対処不要
