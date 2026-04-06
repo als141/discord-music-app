@@ -139,6 +139,47 @@ def get_ytdl():
                 print(f"[STARTUP] yt-dlp initialized with cookiefile: {options.get('cookiefile', 'NOT SET')}")
     return _ytdl_instance
 
+
+def build_temp_ytdl_with_format(format_selector: str) -> yt_dlp.YoutubeDL:
+    """指定したフォーマットで一時的な yt-dlp インスタンスを生成する"""
+    options = get_ytdl_format_options()
+    options['format'] = format_selector
+    return yt_dlp.YoutubeDL(options)
+
+
+def extract_info_with_fallback(url: str, download: bool = False) -> tuple[dict, yt_dlp.YoutubeDL]:
+    """format指定を切り替えながら情報取得を行う。"""
+    fallback_formats = [
+        None,  # 通常設定
+        'bestaudio/best',
+        'best',
+    ]
+
+    last_error = None
+    for fmt in fallback_formats:
+        ydl = get_ytdl() if fmt is None else build_temp_ytdl_with_format(fmt)
+        try:
+            if fmt is not None:
+                logger.warning(f"yt-dlp フォーマットフォールバックを試行: {fmt}")
+            info = ydl.extract_info(url, download=download)
+            if info is None:
+                raise Exception("動画情報の取得に失敗しました")
+            return info, ydl
+
+        except Exception as e:
+            last_error = e
+            message = str(e)
+            retriable = (
+                'The page needs to be reloaded' in message
+                or 'Requested format is not available' in message
+            )
+            if not retriable or fmt == fallback_formats[-1]:
+                raise
+            logger.warning(f"yt-dlp抽出失敗 (format={fmt}): {message}")
+
+    # 到達しない想定
+    raise last_error or Exception('yt-dlp抽出に失敗しました')
+
 # 後方互換性のための定数
 MUSIC_DIR = settings.music.directory
 OAUTH2_USERNAME = settings.music.oauth2_username
@@ -362,7 +403,7 @@ class MusicPlayer:
                     logger.debug(f"音楽をダウンロード中: {song.title} ({song.url})")
 
                     # ダウンロード実行（1回のextract_info呼び出しのみ）
-                    info = get_ytdl().extract_info(song.url, download=True)
+                    info, used_ytdl = extract_info_with_fallback(song.url, download=True)
                     if info is None:
                         raise Exception("動画情報の取得に失敗しました")
 
@@ -372,7 +413,7 @@ class MusicPlayer:
                             raise Exception("プレイリストに有効な動画がありません")
 
                     # 元のファイル名をそのまま使用（拡張子変換なし）
-                    filename = get_ytdl().prepare_filename(info)
+                    filename = used_ytdl.prepare_filename(info)
 
                     if not os.path.exists(filename):
                         logger.error(f"ダウンロードされたファイルが見つかりません: {filename}")
@@ -418,7 +459,7 @@ class MusicPlayer:
             if not url.startswith("ytsearch1:"):
                 url = "ytsearch1:" + url[len("ytsearch:"):]
             try:
-                search_result = get_ytdl().extract_info(url, download=False)
+                search_result, _ = extract_info_with_fallback(url, download=False)
                 if search_result is None:
                     raise Exception(f"検索結果が取得できません: {url}")
                 if 'entries' in search_result and search_result['entries']:
@@ -447,7 +488,7 @@ class MusicPlayer:
         # YouTube/外部URLの処理
         try:
             logger.debug(f"yt-dlpで情報を取得中: {url}")
-            info = get_ytdl().extract_info(url, download=False)
+            info, _ = extract_info_with_fallback(url, download=False)
 
             if info is None:
                 logger.error(f"yt-dlpがNoneを返しました: {url} (プレイリストやラジオURLの場合、個別の曲URLを使用してください)")

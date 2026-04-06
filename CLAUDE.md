@@ -89,6 +89,13 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 
 ## Key Technical Notes
 
+### 2026-04-07: 音楽再生の yt-dlp フォールバック追加
+- `backend/app/services/music_player.py` で `extract_info` 実行をリトライ可能に変更。
+- 取得エラー `The page needs to be reloaded` / `Requested format is not available` が発生した場合、`bestaudio/best` と `best` の順でフォーマット候補を切り替え再試行するようにした。
+- 再試行で成功した yt-dlp インスタンスを使って保存ファイル名を生成するようにし、`prepare_source` 側で再生ファイル参照不整合を防止した。
+
+- 変更範囲は音楽再生処理のみで、チャット系プロンプトロジックには手を入れていない。
+
 ### yt-dlp Configuration (CRITICAL)
 - **js_runtimes**: `{'node': {}, 'deno': {}}` を明示指定必須。デフォルトはdenoのみ。
 - **Node.js 20以上が必要**: 18.xは `(unsupported)` と表示されて署名解読が動かない

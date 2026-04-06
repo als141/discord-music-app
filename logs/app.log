@@ -1,0 +1,6 @@
+2026-04-07 01:25:59,511 - app.services.music_player - INFO - COOKIES_FILE env value: '/home/als0028/discord-music-app/backend/cookies.txt'
+2026-04-07 01:25:59,511 - app.services.music_player - INFO - YouTube cookies file loaded: /home/als0028/discord-music-app/backend/cookies.txt
+2026-04-07 01:25:59,512 - app.services.music_player - INFO - Cookies file size: 2978 bytes, first line: # Netscape HTTP Cookie File...
+2026-04-07 01:26:27,082 - app.services.music_player - INFO - COOKIES_FILE env value: '/home/als0028/discord-music-app/backend/cookies.txt'
+2026-04-07 01:26:27,083 - app.services.music_player - INFO - YouTube cookies file loaded: /home/als0028/discord-music-app/backend/cookies.txt
+2026-04-07 01:26:27,083 - app.services.music_player - INFO - Cookies file size: 2978 bytes, first line: # Netscape HTTP Cookie File...
