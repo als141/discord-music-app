@@ -23,7 +23,18 @@ LOCAL=$(git rev-parse HEAD)
 REMOTE=$(git rev-parse origin/main)
 
 if [ "$LOCAL" = "$REMOTE" ]; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] No remote changes. Local and origin are in sync." >> "$LOG_FILE"
     exit 0
+fi
+
+if git merge-base --is-ancestor "$REMOTE" "$LOCAL"; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Local ahead of origin/main. Skipping auto-deploy to preserve local fix state." >> "$LOG_FILE"
+    exit 0
+fi
+
+if ! git merge-base --is-ancestor "$LOCAL" "$REMOTE"; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Branches diverged. Manual review required." >> "$LOG_FILE"
+    exit 1
 fi
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] New commit detected: $REMOTE" >> "$LOG_FILE"
