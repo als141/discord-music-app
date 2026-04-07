@@ -183,8 +183,31 @@ async def _connect_or_move_voice_client(guild, channel):
         print(f"[join] guild {guild.id} already connected to channel {target_channel_id}")
         return
 
+    # voice_clientが存在するが切断状態の場合、クリーンアップしてから新規接続
+    if not guild.voice_client.is_connected():
+        print(f"[join] guild {guild.id} voice client exists but disconnected. cleaning up and reconnecting...")
+        try:
+            await asyncio.wait_for(guild.voice_client.disconnect(force=True), timeout=5.0)
+        except Exception as e:
+            print(f"[join] cleanup disconnect failed (ignored): {e}")
+        # disconnectしてもvoice_clientが残る場合があるので少し待つ
+        await asyncio.sleep(1)
+        print(f"[join] guild {guild.id} reconnecting to channel {channel.id}")
+        await asyncio.wait_for(channel.connect(), timeout=VOICE_CONNECT_TIMEOUT_SECONDS)
+        return
+
     print(f"[join] guild {guild.id} moving voice client from {current_channel_id} to {target_channel_id}")
-    await asyncio.wait_for(guild.voice_client.move_to(channel), timeout=VOICE_CONNECT_TIMEOUT_SECONDS)
+    try:
+        await asyncio.wait_for(guild.voice_client.move_to(channel), timeout=VOICE_CONNECT_TIMEOUT_SECONDS)
+    except Exception as e:
+        # move_toが失敗した場合（内部タイムアウト等）、切断して新規接続を試みる
+        print(f"[join] move_to failed: {e}. disconnecting and reconnecting...")
+        try:
+            await asyncio.wait_for(guild.voice_client.disconnect(force=True), timeout=5.0)
+        except Exception:
+            pass
+        await asyncio.sleep(1)
+        await asyncio.wait_for(channel.connect(), timeout=VOICE_CONNECT_TIMEOUT_SECONDS)
 
 
 def _is_voice_channel(channel) -> bool:
@@ -984,6 +1007,52 @@ def adjust_thumbnail_size(thumbnail_url, width=400, height=400):
     thumbnail_url = re.sub(r'w\d+-h\d+', f'w{width}-h{height}', thumbnail_url)
     return thumbnail_url
 
+def _build_search_items(filter_type: str, results: list) -> list:
+    """検索結果をSearchItemリストに変換する。全filterタイプに対応。"""
+    items = []
+    if filter_type == 'songs':
+        for song in results:
+            if 'videoId' not in song:
+                continue
+            video_url = f"https://music.youtube.com/watch?v={song['videoId']}"
+            thumbnail = song['thumbnails'][0]['url'] if song.get('thumbnails') else ""
+            artist_name = ', '.join([a['name'] for a in song.get('artists', []) if a.get('name')]) or "Unknown Artist"
+            items.append(SearchItem(type='song', title=song.get('title') or 'Unknown', artist=artist_name, thumbnail=adjust_thumbnail_size(thumbnail), url=video_url))
+    elif filter_type == 'videos':
+        for video in results:
+            if 'videoId' not in video:
+                continue
+            video_url = f"https://music.youtube.com/watch?v={video['videoId']}"
+            thumbnail = video['thumbnails'][0]['url'] if video.get('thumbnails') else ""
+            artist_name = ', '.join([a['name'] for a in video.get('artists', []) if a.get('name')]) or "Unknown Artist"
+            items.append(SearchItem(type='video', title=video.get('title') or 'Unknown', artist=artist_name, thumbnail=adjust_thumbnail_size(thumbnail), url=video_url))
+    elif filter_type == 'albums':
+        for album in results:
+            if 'browseId' not in album:
+                continue
+            browse_id = album['browseId']
+            url = f"https://music.youtube.com/browse/{browse_id}"
+            thumbnail = album['thumbnails'][0]['url'] if album.get('thumbnails') else ""
+            artist_name = ', '.join([a['name'] for a in album.get('artists', []) if a.get('name')]) or "Unknown Artist"
+            items.append(SearchItem(type=(album.get('type') or 'album').lower(), title=album.get('title') or 'Unknown Album', artist=artist_name, thumbnail=adjust_thumbnail_size(thumbnail), url=url, browseId=browse_id))
+    elif filter_type == 'artists':
+        for artist in results:
+            if 'browseId' not in artist:
+                continue
+            browse_id = artist['browseId']
+            url = f"https://music.youtube.com/browse/{browse_id}"
+            thumbnail = artist['thumbnails'][0]['url'] if artist.get('thumbnails') else ""
+            items.append(SearchItem(type='artist', title=artist.get('artist') or artist.get('title') or '', artist=artist.get('artist') or artist.get('title') or 'Unknown Artist', thumbnail=adjust_thumbnail_size(thumbnail), url=url, browseId=browse_id))
+    elif filter_type == 'playlists':
+        for playlist in results:
+            if 'browseId' not in playlist:
+                continue
+            browse_id = playlist['browseId']
+            url = f"https://music.youtube.com/playlist?list={browse_id.replace('VL', '')}"
+            thumbnail = playlist['thumbnails'][0]['url'] if playlist.get('thumbnails') else ""
+            items.append(SearchItem(type='playlist', title=playlist.get('title') or 'Unknown Playlist', artist=playlist.get('author') or 'Unknown Author', thumbnail=adjust_thumbnail_size(thumbnail), url=url, browseId=browse_id.replace('VL', '')))
+    return items
+
 @app.get("/search", response_model=SearchResult)
 async def search(query: str, filter: str = None):
     async def fetch_results(filter_type: str):
@@ -997,27 +1066,10 @@ async def search(query: str, filter: str = None):
         except Exception as e:
             print(f"Error fetching {filter_type}: {e}")
             return []
-    
+
     if filter:
         results = await fetch_results(filter)
-        search_items = []
-        if filter == 'artists':
-            for artist in results:
-                if 'browseId' not in artist:
-                    continue
-                browse_id = artist['browseId']
-                url = f"https://music.youtube.com/browse/{browse_id}"
-                thumbnail = artist['thumbnails'][0]['url'] if artist.get('thumbnails') else ""
-                search_items.append(
-                    SearchItem(
-                        type='artist',
-                        title=artist.get('artist') or artist.get('title') or '',
-                        artist=artist.get('artist') or artist.get('title') or 'Unknown Artist',
-                        thumbnail=adjust_thumbnail_size(thumbnail),
-                        url=url,
-                        browseId=browse_id
-                    )
-                )
+        search_items = _build_search_items(filter, results)
         return SearchResult(results=search_items)
     else:
         results = await asyncio.gather(
@@ -1028,94 +1080,10 @@ async def search(query: str, filter: str = None):
             fetch_results('playlists')
         )
 
-        search_tasks = {
-            'songs': results[0],
-            'videos': results[1],
-            'albums': results[2],
-            'artists': results[3],
-            'playlists': results[4]
-        }
-
+        filter_types = ['songs', 'videos', 'albums', 'artists', 'playlists']
         search_items = []
-        for song in search_tasks['songs']:
-            if 'videoId' not in song:
-                continue
-            video_url = f"https://music.youtube.com/watch?v={song['videoId']}"
-            thumbnail = song['thumbnails'][0]['url'] if song.get('thumbnails') else ""
-            artist_name = ', '.join([a['name'] for a in song.get('artists', []) if a.get('name')]) or "Unknown Artist"
-            search_items.append(
-                SearchItem(
-                    type='song',
-                    title=song.get('title') or 'Unknown',
-                    artist=artist_name,
-                    thumbnail=adjust_thumbnail_size(thumbnail),
-                    url=video_url
-                )
-            )
-        for video in search_tasks['videos']:
-            if 'videoId' not in video:
-                continue
-            video_url = f"https://music.youtube.com/watch?v={video['videoId']}"
-            thumbnail = video['thumbnails'][0]['url'] if video.get('thumbnails') else ""
-            artist_name = ', '.join([a['name'] for a in video.get('artists', []) if a.get('name')]) or "Unknown Artist"
-            search_items.append(
-                SearchItem(
-                    type='video',
-                    title=video.get('title') or 'Unknown',
-                    artist=artist_name,
-                    thumbnail=adjust_thumbnail_size(thumbnail),
-                    url=video_url
-                )
-            )
-        for album in search_tasks['albums']:
-            if 'browseId' not in album:
-                continue
-            browse_id = album['browseId']
-            url = f"https://music.youtube.com/browse/{browse_id}"
-            thumbnail = album['thumbnails'][0]['url'] if album.get('thumbnails') else ""
-            artist_name = ', '.join([a['name'] for a in album.get('artists', []) if a.get('name')]) or "Unknown Artist"
-            search_items.append(
-                SearchItem(
-                    type=(album.get('type') or 'album').lower(),
-                    title=album.get('title') or 'Unknown Album',
-                    artist=artist_name,
-                    thumbnail=adjust_thumbnail_size(thumbnail),
-                    url=url,
-                    browseId=browse_id
-                )
-            )
-        for artist in search_tasks['artists']:
-            if 'browseId' not in artist:
-                continue
-            browse_id = artist['browseId']
-            url = f"https://music.youtube.com/browse/{browse_id}"
-            thumbnail = artist['thumbnails'][0]['url'] if artist.get('thumbnails') else ""
-            search_items.append(
-                SearchItem(
-                    type='artist',
-                    title=artist.get('artist') or artist.get('title') or '',
-                    artist=artist.get('artist') or artist.get('title') or 'Unknown Artist',
-                    thumbnail=adjust_thumbnail_size(thumbnail),
-                    url=url,
-                    browseId=browse_id
-                )
-            )
-        for playlist in search_tasks['playlists']:
-            if 'browseId' not in playlist:
-                continue
-            browse_id = playlist['browseId']
-            url = f"https://music.youtube.com/playlist?list={browse_id.replace('VL', '')}"
-            thumbnail = playlist['thumbnails'][0]['url'] if playlist.get('thumbnails') else ""
-            search_items.append(
-                SearchItem(
-                    type='playlist',
-                    title=playlist.get('title') or 'Unknown Playlist',
-                    artist=playlist.get('author') or 'Unknown Author',
-                    thumbnail=adjust_thumbnail_size(thumbnail),
-                    url=url,
-                    browseId=browse_id.replace('VL', '')
-                )
-            )
+        for i, filter_type in enumerate(filter_types):
+            search_items.extend(_build_search_items(filter_type, results[i]))
         return SearchResult(results=search_items)
 
 @app.get("/playlist/{browse_id}", response_model=List[Track])
