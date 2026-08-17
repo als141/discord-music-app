@@ -230,6 +230,8 @@ class MusicPlayer:
         # プレイヤーインスタンスごとの世代ID。bot再起動やVC再参加で MusicPlayer が作り直されると
         # state_version が 0 に戻るため、クライアントはこの epoch が変わったら version 比較をリセットする
         self.state_epoch: str = uuid.uuid4().hex
+        # 音源準備中（yt-dlp 抽出/ダウンロード中）フラグ。UI のバッファリング表示用
+        self.is_preparing: bool = False
 
         logger.info(f"音楽プレイヤーを初期化 (Guild: {guild.name}, ID: {guild_id})")
         
@@ -277,10 +279,13 @@ class MusicPlayer:
             if song.source is None:
                 try:
                     logger.debug(f"音源を準備中: {song.title}")
+                    self.is_preparing = True
+                    await self.notify_clients(self.guild_id)
                     song = await self.bot.loop.run_in_executor(self.executor, self.prepare_source, song)
                     self.queue[0] = song
                     consecutive_errors = 0  # 成功したらリセット
                 except Exception as e:
+                    self.is_preparing = False
                     logger.error(f"音源準備中にエラー: {e}", exc_info=True)
                     consecutive_errors += 1
                     if consecutive_errors >= max_consecutive_errors:
@@ -291,6 +296,7 @@ class MusicPlayer:
                     await self.notify_clients(self.guild_id)
                     continue
 
+            self.is_preparing = False
             self.current = song
             logger.info(f"再生準備: {song.title} ({song.source})")
 

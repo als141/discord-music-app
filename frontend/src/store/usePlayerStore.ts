@@ -54,6 +54,8 @@ interface PlayerState {
   queue: Track[];
   isPlaying: boolean;
   isLoading: boolean;
+  /** サーバー側が音源を準備中（曲追加〜再生開始の間）。再生ボタンにスピナーを出す */
+  isBuffering: boolean;
   history: QueueItem[];
 
   // プレイヤーUI状態
@@ -107,6 +109,7 @@ export const usePlayerStore = create<PlayerState>()(
       queue: [],
       isPlaying: false,
       isLoading: false,
+      isBuffering: false,
       history: [],
 
       isMainPlayerVisible: false,
@@ -629,6 +632,7 @@ function applyServerState(data: WebSocketData, source: 'websocket' | 'rest') {
     // @ts-expect-error - Type compatibility issues with queue items
     queue: queueItems.filter((item: { isCurrent: boolean }) => !item.isCurrent).map((item: { track: Track }) => item.track),
     isPlaying: !!data.is_playing,
+    isBuffering: !!data.is_loading,
     lastSyncVersion: newVersion,
     lastSyncTimestamp: newTimestamp,
     lastSyncEpoch: newEpoch,

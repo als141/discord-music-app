@@ -261,14 +261,17 @@ async def build_player_state(guild_id: str, *, bump_version: bool) -> dict:
     if player:
         version = player.increment_version() if bump_version else player.get_version()
         epoch = player.state_epoch
+        is_loading = bool(getattr(player, "is_preparing", False))
     else:
         version = 0
         epoch = None
+        is_loading = False
 
     return {
         "current_track": jsonable_encoder(current_track),
         "queue": jsonable_encoder(queue),
         "is_playing": is_playing_status,
+        "is_loading": is_loading,
         "history": jsonable_encoder(history),
         "version": version,
         "epoch": epoch,

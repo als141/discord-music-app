@@ -96,6 +96,7 @@ export interface PlayerStateSnapshot {
   current_track: Track | null;
   queue: QueueItem[];
   is_playing: boolean;
+  is_loading?: boolean;
   history: QueueItem[];
   version: number;
   epoch: string | null;

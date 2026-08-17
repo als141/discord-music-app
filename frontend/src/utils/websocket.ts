@@ -399,6 +399,8 @@ export class WSConnection {
 export interface WebSocketData {
     queue?: unknown[];
     is_playing?: boolean;
+    /** サーバー側で音源を準備中（yt-dlp 抽出/DL）。UI のバッファリング表示用 */
+    is_loading?: boolean;
     history?: unknown[];
     version?: number;
     /** MusicPlayer インスタンスの世代ID。変わったら version 比較をリセットする */

@@ -10,7 +10,7 @@ import { SideMenu } from './SideMenu';
 import { SearchResults } from './SearchResults';
 import { useToast } from "@/hooks/use-toast";
 import { Loading } from '@/components/ui/loading';
-import { PlayIcon, PauseIcon } from 'lucide-react';
+import { PlayIcon, PauseIcon, Loader2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { useSwipeable } from 'react-swipeable';
 import { useSession } from 'next-auth/react';
@@ -51,7 +51,7 @@ export const MainApp: React.FC = () => {
   } = useGuildStore();
   
   const {
-    currentTrack, queue, isPlaying, isLoading, history,
+    currentTrack, queue, isPlaying, isLoading, isBuffering, history,
     isMainPlayerVisible, setIsMainPlayerVisible,
     play, pause, skip,
     addToQueue, reorderQueue, removeFromQueue,
@@ -304,7 +304,8 @@ export const MainApp: React.FC = () => {
     onDelete: removeFromQueue,
     guildId: activeServerId,
     onClose: () => setIsMainPlayerVisible(false),
-    isLoading,
+    // 楽観的更新中 or サーバー側で音源準備中はスピナー
+    isLoading: isLoading || isBuffering,
   };
 
   // メインのレンダリング
@@ -445,9 +446,12 @@ export const MainApp: React.FC = () => {
                     play();
                   }
                 }}
-                aria-label={isPlaying ? "一時停止" : "再生"}
+                aria-label={isBuffering ? "読み込み中" : isPlaying ? "一時停止" : "再生"}
+                disabled={isBuffering}
               >
-                {isPlaying ? (
+                {isBuffering ? (
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                ) : isPlaying ? (
                   <PauseIcon className="h-6 w-6" />
                 ) : (
                   <PlayIcon className="h-6 w-6" />
