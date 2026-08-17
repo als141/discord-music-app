@@ -45,9 +45,12 @@ const VIEWPORTS = [
   { name: 'desktop-1920x1080', width: 1920, height: 1080 },
 ];
 
+const MOCK_SESSION = { user: { id: '000000000000000001', name: 'als0028', email: 'preview@example.com', image: 'https://cdn.discordapp.com/embed/avatars/1.png' }, expires: new Date(Date.now() + 86400000).toISOString() };
 const json = (route, body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
 async function setupMocks(context) {
+  // next-auth の SessionProvider がマウント時に取りに来る（バージョンによる）
+  await context.route('**/api/auth/session', r => json(r, MOCK_SESSION));
   await context.route('**/api/discord/userGuilds', r => json(r, [{ id: GUILD, name: 'ドデカサーバー', permissions: '0' }]));
   await context.route(`**/bot-voice-status/**`, r => json(r, { channel_id: 'vc1' }));
   await context.route(`**/voice-channels/**`, r => json(r, [{ id: 'vc1', name: 'ロビー' }, { id: 'vc2', name: '作業部屋' }]));

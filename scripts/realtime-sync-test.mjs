@@ -15,6 +15,7 @@ const { chromium } = require('playwright');
 
 const BASE = process.env.PREVIEW_BASE || 'http://localhost:3000';
 const GUILD = '1093915551174234212';
+const MOCK_SESSION = { user: { id: '000000000000000001', name: 'als0028', email: 'preview@example.com', image: 'https://cdn.discordapp.com/embed/avatars/1.png' }, expires: new Date(Date.now() + 86400000).toISOString() };
 const json = (route, body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 const T = (title, id) => ({ title, artist: 'Test Artist', thumbnail: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`, url: `https://music.youtube.com/watch?v=${id}`, added_by: null });
 const state = (current, queue, is_playing, version, epoch) => ({
@@ -28,6 +29,7 @@ const check = (name, cond, extra = '') => { if (cond) { pass++; console.log(`OK 
 
 const browser = await chromium.launch();
 const context = await browser.newContext({ viewport: { width: 1376, height: 870 } });
+await context.route('**/api/auth/session', r => json(r, MOCK_SESSION));
 await context.route('**/api/discord/userGuilds', r => json(r, [{ id: GUILD, name: 'テストサーバー', permissions: '0' }]));
 await context.route('**/bot-voice-status/**', r => json(r, { channel_id: 'vc1' }));
 await context.route('**/voice-channels/**', r => json(r, [{ id: 'vc1', name: 'ロビー' }]));
@@ -107,6 +109,7 @@ check('接続中はヘッダーに VC 名', (await status()) === 'ロビー', `g
 // 9) REST フォールバック: 接続を全部落として再接続を失敗させる → /player-state ポーリング
 await context.unrouteAll({ behavior: 'ignoreErrors' });
 await context.route('**/player-state/**', r => { restCalls++; return json(r, restState); });
+await context.route('**/api/auth/session', r => json(r, MOCK_SESSION));
 await context.route('**/api/discord/userGuilds', r => json(r, [{ id: GUILD, name: 'テストサーバー', permissions: '0' }]));
 await context.routeWebSocket(/\/ws\//, ws => { ws.close({ code: 1006, reason: 'down' }); });
 for (const s of sockets) { try { s.close({ code: 1006, reason: 'down' }); } catch {} }
