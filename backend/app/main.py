@@ -30,7 +30,24 @@ from .db import init_db, UploadedSong, add_uploaded_song, get_uploaded_songs_in_
 from contextlib import asynccontextmanager
 from fastapi.staticfiles import StaticFiles  # ← 追加
 
-ytmusic = YTMusic(language='ja', location='JP')
+# ytmusicapi >= 1.12 は language='ja' だと filter 付き search が空配列になる
+# （カテゴリ見出し "曲" と "song" を照合するため）。検索/関連曲/詳細取得は en 固定にし、
+# UI 見出しが日本語で欲しい get_home / mood 系だけ ja インスタンスを使う。
+# タイトル・アーティスト名自体は言語設定に関係なく原語で返る。
+ytmusic = YTMusic(language='en', location='JP')
+ytmusic_ja = YTMusic(language='ja', location='JP')
+
+# アルバム種別の正規化（ロケール依存の表記 → frontend が期待する 'album'/'single'/'ep'）
+_ALBUM_TYPE_MAP = {
+    'album': 'album', 'アルバム': 'album',
+    'single': 'single', 'シングル': 'single',
+    'ep': 'ep',
+}
+
+def _normalize_album_type(raw) -> str:
+    if not raw:
+        return 'album'
+    return _ALBUM_TYPE_MAP.get(str(raw).strip().lower(), 'album')
 
 load_dotenv()
 
@@ -589,7 +606,7 @@ async def get_recommendations():
         if recommendations_cache and recommendations_cache_timestamp:
             if now - recommendations_cache_timestamp < CACHE_DURATION:
                 return recommendations_cache
-        home = ytmusic.get_home(limit=5)
+        home = ytmusic_ja.get_home(limit=5)
         sections = []
         for section in home:
             section_title = section.get('title', 'おすすめ')
@@ -654,7 +671,7 @@ async def get_recommendations():
 @app.get("/mood-categories")
 async def get_mood_categories():
     try:
-        categories = ytmusic.get_mood_categories()
+        categories = ytmusic_ja.get_mood_categories()
         return categories
     except Exception as e:
         print(f"ムードカテゴリの取得中にエラーが発生しました: {e}")
@@ -663,7 +680,7 @@ async def get_mood_categories():
 @app.get("/mood-playlists/{params}", response_model=List[SearchItem])
 async def get_mood_playlists(params: str):
     try:
-        playlists = ytmusic.get_mood_playlists(params)
+        playlists = ytmusic_ja.get_mood_playlists(params)
         search_items = []
         for playlist in playlists:
             playlist_url = f"https://music.youtube.com/playlist?list={playlist['playlistId']}"
@@ -688,7 +705,13 @@ async def get_charts(country: str = 'JP'):
     try:
         charts = ytmusic.get_charts(country=country)
         search_items = []
-        for song in charts.get('songs', {}).get('items', [])[:20]:
+        # YouTube 側の仕様変更で 'songs' が無く 'videos' のみになる場合がある（dict/list 両対応）
+        def _items(section):
+            if isinstance(section, dict):
+                return section.get('items') or []
+            return section if isinstance(section, list) else []
+        chart_items = _items(charts.get('songs')) or _items(charts.get('videos'))
+        for song in chart_items[:20]:
             video_url = f"https://music.youtube.com/watch?v={song['videoId']}" if 'videoId' in song else ""
             thumbnail = song['thumbnails'][0]['url'] if 'thumbnails' in song and song['thumbnails'] else ""
             artist_name = ', '.join([artist['name'] for artist in song.get('artists', [])]) or "Unknown Artist"
@@ -734,9 +757,10 @@ async def get_artist_info(artist_id: str):
 @app.get("/related/{video_id}", response_model=SearchResult)
 async def get_related_songs(video_id: str):
     try:
-        related = ytmusic.get_watch_playlist(videoId=video_id, limit=11)
+        related = await asyncio.to_thread(ytmusic.get_watch_playlist, videoId=video_id, limit=11)
         search_items = []
-        for track in related.get('tracks', [])[1:]:
+        # 先頭は再生中の曲自身。limit は上流で無視されることがあるので明示的に10件へ絞る
+        for track in related.get('tracks', [])[1:11]:
             if track.get('videoId'):
                 video_url = f"https://music.youtube.com/watch?v={track['videoId']}"
                 thumbnail = track['thumbnail'][0]['url'] if 'thumbnail' in track and track['thumbnail'] else ""
@@ -1034,7 +1058,7 @@ def _build_search_items(filter_type: str, results: list) -> list:
             url = f"https://music.youtube.com/browse/{browse_id}"
             thumbnail = album['thumbnails'][0]['url'] if album.get('thumbnails') else ""
             artist_name = ', '.join([a['name'] for a in album.get('artists', []) if a.get('name')]) or "Unknown Artist"
-            items.append(SearchItem(type=(album.get('type') or 'album').lower(), title=album.get('title') or 'Unknown Album', artist=artist_name, thumbnail=adjust_thumbnail_size(thumbnail), url=url, browseId=browse_id))
+            items.append(SearchItem(type=_normalize_album_type(album.get('type')), title=album.get('title') or 'Unknown Album', artist=artist_name, thumbnail=adjust_thumbnail_size(thumbnail), url=url, browseId=browse_id))
     elif filter_type == 'artists':
         for artist in results:
             if 'browseId' not in artist:
