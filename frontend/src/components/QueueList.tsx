@@ -43,7 +43,6 @@ interface QueueListProps {
   onClose?: () => void;
   onDelete: (index: number) => void;
   isEmbedded?: boolean;
-  isOnDeviceMode?: boolean;
 }
 
 // Current track component - Apple Music style
@@ -51,12 +50,10 @@ const CurrentTrackItem = memo(({
   track,
   isPlaying,
   onPlayPause,
-  isOnDeviceMode
 }: {
   track: Track;
   isPlaying: boolean;
   onPlayPause: () => void;
-  isOnDeviceMode: boolean;
 }) => {
   const truncateText = (text: string | undefined, maxLength: number) => {
     if (!text) return '';
@@ -99,7 +96,7 @@ const CurrentTrackItem = memo(({
         <p className="text-xs sm:text-sm text-muted-foreground truncate">
           {truncateText(track.artist, 30)}
         </p>
-        {!isOnDeviceMode && track.added_by && (
+        {track.added_by && (
           <div className="flex items-center mt-2">
             <Avatar className="h-5 w-5 mr-1.5">
               {track.added_by.image ? (
@@ -149,7 +146,6 @@ const QueueTrackItem = memo(({
   isFirst,
   onMoveItem,
   onDeleteItem,
-  isOnDeviceMode
 }: {
   track: Track;
   index: number;
@@ -157,7 +153,6 @@ const QueueTrackItem = memo(({
   isFirst: boolean;
   onMoveItem: (index: number, direction: 'up' | 'down') => void;
   onDeleteItem: (index: number) => void;
-  isOnDeviceMode: boolean;
 }) => {
   const onMoveUp = useCallback(() => onMoveItem(index, 'up'), [onMoveItem, index]);
   const onMoveDown = useCallback(() => onMoveItem(index, 'down'), [onMoveItem, index]);
@@ -190,7 +185,7 @@ const QueueTrackItem = memo(({
       <div className="flex-grow overflow-hidden ml-3 min-w-0">
         <h4 className="font-medium text-foreground truncate text-sm">{track.title}</h4>
         <p className="text-xs text-muted-foreground truncate">{track.artist}</p>
-        {!isOnDeviceMode && track.added_by && (
+        {track.added_by && (
           <div className="flex items-center mt-1">
             <Avatar className="h-4 w-4 mr-1">
               {track.added_by.image ? (
@@ -288,7 +283,6 @@ export const QueueList: React.FC<QueueListProps> = ({
   onClose,
   onDelete,
   isEmbedded = false,
-  isOnDeviceMode = false,
 }) => {
   const { toast } = useToast();
 
@@ -342,7 +336,6 @@ export const QueueList: React.FC<QueueListProps> = ({
             track={currentTrack}
             isPlaying={isPlaying}
             onPlayPause={onPlayPause}
-            isOnDeviceMode={isOnDeviceMode}
           />
         ) : (
           <div className="flex-grow text-center p-8 mx-4 mb-4 bg-secondary/30 rounded-xl">
@@ -384,7 +377,6 @@ export const QueueList: React.FC<QueueListProps> = ({
                   isLast={index === queue.length - 1}
                   onMoveItem={handleMoveItem}
                   onDeleteItem={handleDelete}
-                  isOnDeviceMode={isOnDeviceMode}
                 />
               ))}
             </motion.div>

@@ -34,7 +34,6 @@ interface HomeScreenProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
   history: QueueItem[];
-  isOnDeviceMode: boolean;
   onAddUrl?: (url: string) => void;
 }
 
@@ -283,10 +282,8 @@ VersionDisplay.displayName = 'VersionDisplay';
 // URL Add Card - Apple Music inspired floating card
 const URLAddCard = memo(({
   onAddUrl,
-  isOnDeviceMode
 }: {
   onAddUrl: (url: string) => void;
-  isOnDeviceMode: boolean;
 }) => {
   const [url, setUrl] = useState('');
   const [isFocused, setIsFocused] = useState(false);
@@ -323,9 +320,6 @@ const URLAddCard = memo(({
       setIsSubmitting(false);
     }
   };
-
-  // デバイスモードでは表示しない
-  if (isOnDeviceMode) return null;
 
   return (
     <TooltipProvider>
@@ -449,7 +443,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
   activeTab,
   onTabChange,
   history = [],
-  isOnDeviceMode,
   onAddUrl,
 }) => {
   const { toast } = useToast();
@@ -552,8 +545,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
       <div className="h-full overflow-y-auto overflow-x-hidden bg-background">
         <div className="py-4 sm:py-6 space-y-8 sm:space-y-10">
           {/* URL Add Card - Apple Music Style */}
-          {onAddUrl && !isOnDeviceMode && (
-            <URLAddCard onAddUrl={onAddUrl} isOnDeviceMode={isOnDeviceMode} />
+          {onAddUrl && (
+            <URLAddCard onAddUrl={onAddUrl} />
           )}
 
           {/* Recently Played - Apple Music Style */}
@@ -662,7 +655,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
         </div>
       </div>
     );
-  }, [history, guildId, sections, loading, handleSelectTrackCallback, handleArtistClick, onAddUrl, isOnDeviceMode]);
+  }, [history, guildId, sections, loading, handleSelectTrackCallback, handleArtistClick, onAddUrl]);
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -701,20 +694,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
 
         {/* Version display */}
         <VersionDisplay versionInfo={versionInfo} />
-
-        {/* Device mode indicator */}
-        {isOnDeviceMode && (
-          <motion.div
-            initial={{ opacity: 0, y: -5 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mt-2 text-xs text-muted-foreground px-3 py-1.5 rounded-full bg-secondary/80 flex items-center gap-1.5"
-            role="status"
-            aria-live="polite"
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-            デバイスモードで動作中
-          </motion.div>
-        )}
       </div>
 
       {/* Main content area */}

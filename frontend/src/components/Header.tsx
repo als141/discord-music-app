@@ -17,23 +17,17 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
-import { Switch } from '@/components/ui/switch'
-import { Label } from '@/components/ui/label'
 
 interface HeaderProps {
   onSearch: (query: string) => void
   onAddUrl: (url: string) => void
   onOpenMenu: () => void
-  isOnDeviceMode: boolean
-  onToggleDeviceMode: () => void
 }
 
 export const Header: React.FC<HeaderProps> = React.memo(({
   onSearch,
   onAddUrl,
   onOpenMenu,
-  isOnDeviceMode,
-  onToggleDeviceMode
 }) => {
   const [searchQuery, setSearchQuery] = useState('')
   const [url, setUrl] = useState('')
@@ -122,24 +116,22 @@ export const Header: React.FC<HeaderProps> = React.memo(({
         <div className="flex items-center justify-between h-full px-4 max-w-screen-2xl mx-auto">
           {/* Left Section - Menu Button */}
           <div className="flex items-center gap-2">
-            {!isOnDeviceMode && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    onClick={onOpenMenu}
-                    variant="ghost"
-                    size="icon"
-                    className="h-9 w-9 rounded-full hover:bg-black/5 text-foreground"
-                    aria-label="メニューを開く"
-                  >
-                    <Menu className="h-5 w-5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p>メニュー</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={onOpenMenu}
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 rounded-full hover:bg-black/5 text-foreground"
+                  aria-label="メニューを開く"
+                >
+                  <Menu className="h-5 w-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p>メニュー</p>
+              </TooltipContent>
+            </Tooltip>
           </div>
 
           {/* Center Section - Logo/Title (optional) */}
@@ -151,22 +143,6 @@ export const Header: React.FC<HeaderProps> = React.memo(({
 
           {/* Right Section - Actions */}
           <div className="flex items-center gap-1">
-            {/* Device Mode Toggle */}
-            <div className="hidden sm:flex items-center gap-2 mr-2 px-3 py-1.5 rounded-full bg-secondary/60">
-              <Switch
-                id="device-mode"
-                checked={isOnDeviceMode}
-                onCheckedChange={onToggleDeviceMode}
-                className="data-[state=checked]:bg-primary"
-              />
-              <Label
-                htmlFor="device-mode"
-                className="text-xs font-medium text-muted-foreground cursor-pointer"
-              >
-                デバイス
-              </Label>
-            </div>
-
             {/* Search Button */}
             <Tooltip>
               <TooltipTrigger asChild>

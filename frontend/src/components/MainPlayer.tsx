@@ -5,8 +5,6 @@ import {
   PauseIcon,
   SkipForwardIcon,
   ChevronDownIcon,
-  Volume2Icon,
-  VolumeXIcon,
   RefreshCwIcon,
   PlusIcon,
   Loader2,
@@ -38,7 +36,6 @@ import { User } from '@/utils/api';
 import { Skeleton } from '@/components/ui/skeleton';
 import ArtistDialog from '@/components/ArtistDialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { usePlayerStore } from '@/store';
 
 // Apple Music style related track item
 const RelatedTrackItem = memo(({ track, onAddToQueue }: {
@@ -89,7 +86,6 @@ interface MainPlayerProps {
   guildId: string | null;
   onClose: () => void;
   isVisible: boolean;
-  isOnDeviceMode: boolean;
   isLoading: boolean;
 }
 
@@ -105,11 +101,9 @@ export const MainPlayer: React.FC<MainPlayerProps> = React.memo(({
   guildId,
   onClose,
   isVisible,
-  isOnDeviceMode,
   isLoading,
 }) => {
   const { data: session } = useSession();
-  const { currentTime, duration, volume, setVolume, audioRef } = usePlayerStore();
   const { toast } = useToast();
 
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -238,7 +232,7 @@ export const MainPlayer: React.FC<MainPlayerProps> = React.memo(({
   }, [currentTrack, isDrawerOpen, activeTab, extractVideoId, toast]);
 
   const handleAddToQueue = async (track: Track) => {
-    if (!guildId && !isOnDeviceMode) {
+    if (!guildId) {
       toast({
         title: 'エラー',
         description: 'サーバーが選択されていません。',
@@ -253,7 +247,7 @@ export const MainPlayer: React.FC<MainPlayerProps> = React.memo(({
       image: session.user.image || '',
     } : null;
 
-    if (!user && !isOnDeviceMode) {
+    if (!user) {
       toast({
         title: "エラー",
         description: "ログインが必要です。",
@@ -263,15 +257,11 @@ export const MainPlayer: React.FC<MainPlayerProps> = React.memo(({
     }
 
     try {
-      if (isOnDeviceMode) {
-        await usePlayerStore.getState().addToQueue(track, null);
-      } else if (guildId) {
-        await api.addUrl(guildId, track.url, user);
-        toast({
-          title: '成功',
-          description: '曲がキューに追加されました。',
-        });
-      }
+      await api.addUrl(guildId, track.url, user);
+      toast({
+        title: '成功',
+        description: '曲がキューに追加されました。',
+      });
     } catch (error) {
       console.error('曲の追加中にエラーが発生しました:', error);
       toast({
@@ -304,30 +294,6 @@ export const MainPlayer: React.FC<MainPlayerProps> = React.memo(({
     } finally {
       setIsRelatedLoading(false);
     }
-  };
-
-  const formatTime = (time: number) => {
-    if (isNaN(time)) return '0:00';
-    const minutes = Math.floor(time / 60);
-    const seconds = Math.floor(time % 60);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  };
-
-  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
-    const seekBar = e.currentTarget;
-    const rect = seekBar.getBoundingClientRect();
-    const seekPosition = (e.clientX - rect.left) / rect.width;
-    const newTime = seekPosition * duration;
-
-    if (audioRef?.current) {
-      audioRef.current.currentTime = newTime;
-      usePlayerStore.getState().setCurrentTime(newTime);
-    }
-  };
-
-  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newVolume = parseFloat(e.target.value);
-    setVolume(newVolume);
   };
 
   const renderSkeletons = () => (
@@ -481,7 +447,7 @@ export const MainPlayer: React.FC<MainPlayerProps> = React.memo(({
           )}
 
           {/* Track uploader info */}
-          {!isOnDeviceMode && currentTrack?.added_by && (
+          {currentTrack?.added_by && (
             <motion.div
               className="flex items-center gap-2 px-4 py-2 rounded-full bg-secondary/60"
               initial={{ opacity: 0, y: 10 }}
@@ -501,97 +467,6 @@ export const MainPlayer: React.FC<MainPlayerProps> = React.memo(({
             </motion.div>
           )}
 
-          {/* Player controls for on-device mode */}
-          {isOnDeviceMode && (
-            <div className="w-full max-w-md px-4 mt-6">
-              {/* Progress bar */}
-              <div className="mb-4">
-                <div className="relative pt-1">
-                  <div className="flex mb-2 items-center justify-between text-xs text-muted-foreground font-medium">
-                    <span>{formatTime(currentTime)}</span>
-                    <span>{formatTime(duration)}</span>
-                  </div>
-                  <div
-                    className="relative h-1 bg-secondary rounded-full cursor-pointer group"
-                    onClick={handleSeek}
-                    role="slider"
-                    aria-valuemin={0}
-                    aria-valuemax={duration}
-                    aria-valuenow={currentTime}
-                    aria-label="再生位置"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (!audioRef?.current) return;
-
-                      const step = duration / 20;
-                      let newTime = currentTime;
-
-                      if (e.key === 'ArrowRight') {
-                        newTime = Math.min(duration, currentTime + step);
-                      } else if (e.key === 'ArrowLeft') {
-                        newTime = Math.max(0, currentTime - step);
-                      } else {
-                        return;
-                      }
-
-                      audioRef.current.currentTime = newTime;
-                      usePlayerStore.getState().setCurrentTime(newTime);
-                      e.preventDefault();
-                    }}
-                  >
-                    <motion.div
-                      className="absolute top-0 left-0 h-full bg-primary rounded-full"
-                      style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
-                      initial={{ width: 0 }}
-                      animate={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
-                      transition={{ duration: 0.1 }}
-                    />
-                    <motion.div
-                      className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
-                      style={{ left: `calc(${duration > 0 ? (currentTime / duration) * 100 : 0}% - 6px)` }}
-                      initial={{ left: 0 }}
-                      animate={{ left: `calc(${duration > 0 ? (currentTime / duration) * 100 : 0}% - 6px)` }}
-                      transition={{ duration: 0.1 }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Volume control */}
-              <div className="flex items-center mt-4">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setVolume(volume === 0 ? 1 : 0)}
-                  className="mr-2 text-muted-foreground hover:text-foreground"
-                  aria-label={volume === 0 ? "ミュート解除" : "ミュート"}
-                >
-                  {volume === 0 ? <VolumeXIcon size={20} /> : <Volume2Icon size={20} />}
-                </Button>
-                <div className="relative flex-grow">
-                  <div className="h-1 bg-secondary rounded-full">
-                    <motion.div
-                      className="absolute top-0 left-0 h-full bg-muted-foreground rounded-full"
-                      style={{ width: `${volume * 100}%` }}
-                      initial={{ width: 0 }}
-                      animate={{ width: `${volume * 100}%` }}
-                      transition={{ duration: 0.1 }}
-                    />
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    value={volume}
-                    onChange={handleVolumeChange}
-                    className="absolute top-0 left-0 w-full h-1 opacity-0 cursor-pointer"
-                    aria-label="音量"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Player controls */}
@@ -711,7 +586,6 @@ export const MainPlayer: React.FC<MainPlayerProps> = React.memo(({
                   onClose={() => setIsDrawerOpen(false)}
                   onDelete={onDelete}
                   isEmbedded
-                  isOnDeviceMode={isOnDeviceMode}
                 />
               </TabsContent>
 

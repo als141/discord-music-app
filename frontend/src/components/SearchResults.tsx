@@ -25,7 +25,6 @@ interface SearchResultsProps {
   onAddTrackToQueue: (track: Track) => Promise<void>;
   onClose: () => void;
   onSearch: (query: string) => Promise<void>;
-  isOnDeviceMode: boolean;
 }
 
 export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQueue, onAddTrackToQueue, onClose, onSearch }) => {

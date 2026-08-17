@@ -23,7 +23,6 @@ import { useGuildStore, usePlayerStore, setupWebSocket, cleanupWebSocket } from 
 import { VOICE_CHAT_ENABLED } from '@/lib/features';
 
 // API URL の取得
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 // BigIntのJSONシリアライズの設定
 declare global {
@@ -53,11 +52,9 @@ export const MainApp: React.FC = () => {
   
   const {
     currentTrack, queue, isPlaying, isLoading, history,
-    isOnDeviceMode, deviceQueue, deviceCurrentTrack, deviceIsPlaying,
     isMainPlayerVisible, setIsMainPlayerVisible,
     play, pause, skip,
     addToQueue, reorderQueue, removeFromQueue,
-    toggleDeviceMode, audioRef
   } = usePlayerStore();
 
   // UI の状態
@@ -152,13 +149,6 @@ export const MainApp: React.FC = () => {
     }
   }, [homeActiveTab]);
   
-  // Track が変わった時にロード開始  
-  useEffect(() => {
-    if (deviceCurrentTrack && audioRef?.current) {
-      audioRef.current.volume = usePlayerStore.getState().volume;
-    }
-  }, [deviceCurrentTrack, audioRef]);
-
   // メニューを閉じる
   const handleCloseMenu = useCallback(() => {
     setIsMenuOpen(false);
@@ -197,15 +187,6 @@ export const MainApp: React.FC = () => {
   
   // URLを追加
   const handleAddUrl = useCallback(async (url: string) => {
-    if (isOnDeviceMode) {
-      toast({
-        title: "エラー",
-        description: "デバイスモードではURLの直接追加はサポートされていません。",
-        variant: "destructive",
-      });
-      return;
-    }
-    
     if (!activeServerId) {
       toast({
         title: "エラー",
@@ -232,7 +213,7 @@ export const MainApp: React.FC = () => {
         variant: "destructive",
       });
     }
-  }, [activeServerId, isOnDeviceMode, toast, getUserInfo]);
+  }, [activeServerId, toast, getUserInfo]);
 
   // 検索
   const handleSearch = useCallback(async (query: string) => {
@@ -253,7 +234,7 @@ export const MainApp: React.FC = () => {
   // ミニプレイヤーを表示すべきかどうか
   const shouldShowMiniPlayer = useMemo(() => {
     return (
-      (currentTrack || deviceCurrentTrack) && 
+      currentTrack && 
       !isMainPlayerVisible && 
       homeActiveTab !== 'chat' && 
       homeActiveTab !== 'uploaded-music' && 
@@ -261,7 +242,7 @@ export const MainApp: React.FC = () => {
       homeActiveTab !== 'valorant' && 
       homeActiveTab !== 'realtime'
     );
-  }, [currentTrack, deviceCurrentTrack, isMainPlayerVisible, homeActiveTab]);
+  }, [currentTrack, isMainPlayerVisible, homeActiveTab]);
 
   // ローディング表示
   if (status === 'loading') {
@@ -286,37 +267,33 @@ export const MainApp: React.FC = () => {
           onSearch={handleSearch}
           onAddUrl={handleAddUrl}
           onOpenMenu={() => setIsMenuOpen(true)}
-          isOnDeviceMode={isOnDeviceMode}
-          onToggleDeviceMode={toggleDeviceMode}
         />
         
         {/* サイドメニュー */}
         <AnimatePresence>
-          {!isOnDeviceMode && (
-            <SideMenu
-              isOpen={isMenuOpen}
-              onClose={handleCloseMenu}
-              activeServerId={activeServerId}
-              onSelectServer={setActiveServerId}
-              voiceChannels={voiceChannels}
-              activeChannelId={activeChannelId}
-              onSelectChannel={(channelId) => {
-                if (channelId && activeServerId) {
-                  joinVoiceChannel(activeServerId, channelId);
-                } else {
-                  setActiveChannelId(null);
-                }
-              }}
-              onRefresh={handleRefresh}
-              onInviteBot={inviteBot}
-              onDisconnect={() => {
-                if (activeServerId) {
-                  disconnectVoiceChannel(activeServerId);
-                }
-              }}
-              onFetchServers={fetchMutualServers}
-            />
-          )}
+          <SideMenu
+            isOpen={isMenuOpen}
+            onClose={handleCloseMenu}
+            activeServerId={activeServerId}
+            onSelectServer={setActiveServerId}
+            voiceChannels={voiceChannels}
+            activeChannelId={activeChannelId}
+            onSelectChannel={(channelId) => {
+              if (channelId && activeServerId) {
+                joinVoiceChannel(activeServerId, channelId);
+              } else {
+                setActiveChannelId(null);
+              }
+            }}
+            onRefresh={handleRefresh}
+            onInviteBot={inviteBot}
+            onDisconnect={() => {
+              if (activeServerId) {
+                disconnectVoiceChannel(activeServerId);
+              }
+            }}
+            onFetchServers={fetchMutualServers}
+          />
         </AnimatePresence>
         
         {/* メインコンテンツ */}
@@ -329,45 +306,7 @@ export const MainApp: React.FC = () => {
               onAddTrackToQueue={(track) => addToQueue(track, getUserInfo())}
               onClose={() => setIsSearchActive(false)}
               onSearch={handleSearch}
-              isOnDeviceMode={isOnDeviceMode}
             />
-          ) : isOnDeviceMode ? (
-            // デバイスモード
-            <>
-              <AnimatePresence>
-                {isMainPlayerVisible && (
-                  <MainPlayer
-                    currentTrack={deviceCurrentTrack}
-                    isPlaying={deviceIsPlaying}
-                    onPlay={play}
-                    onPause={pause}
-                    onSkip={skip}
-                    queue={deviceQueue}
-                    onReorder={reorderQueue}
-                    onDelete={removeFromQueue}
-                    guildId={null}
-                    onClose={() => setIsMainPlayerVisible(false)}
-                    isVisible={isMainPlayerVisible}
-                    isOnDeviceMode={isOnDeviceMode}
-                    isLoading={isLoading}
-                  />
-                )}
-              </AnimatePresence>
-              
-              {!isMainPlayerVisible && (
-                <HomeScreen
-                  onSelectTrack={(item: PlayableItem) => {
-                    addToQueue(item, getUserInfo());
-                    setIsMainPlayerVisible(true);
-                  }}
-                  guildId={null}
-                  activeTab={homeActiveTab}
-                  onTabChange={(tab) => setHomeActiveTab(tab)}
-                  history={[]}
-                  isOnDeviceMode={isOnDeviceMode}
-                />
-              )}
-            </>
           ) : (
             // サーバーモード
             <>
@@ -391,7 +330,6 @@ export const MainApp: React.FC = () => {
                         guildId={activeServerId}
                         onClose={() => setIsMainPlayerVisible(false)}
                         isVisible={isMainPlayerVisible}
-                        isOnDeviceMode={isOnDeviceMode}
                         isLoading={isLoading}
                       />
                     )}
@@ -407,7 +345,6 @@ export const MainApp: React.FC = () => {
                       activeTab={homeActiveTab}
                       onTabChange={(tab) => setHomeActiveTab(tab)}
                       history={history}
-                      isOnDeviceMode={isOnDeviceMode}
                       onAddUrl={handleAddUrl}
                     />
                   )}
@@ -429,8 +366,8 @@ export const MainApp: React.FC = () => {
             {...miniPlayerSwipeHandlers}
           >
             <Image
-              src={isOnDeviceMode ? deviceCurrentTrack!.thumbnail : currentTrack!.thumbnail}
-              alt={isOnDeviceMode ? deviceCurrentTrack!.title : currentTrack!.title}
+              src={currentTrack!.thumbnail}
+              alt={currentTrack!.title}
               width={48}
               height={48}
               className="object-cover rounded-md flex-shrink-0"
@@ -439,10 +376,10 @@ export const MainApp: React.FC = () => {
             />
             <div className="ml-4 flex-grow min-w-0 mr-4">
               <h4 className="font-semibold truncate">
-                {isOnDeviceMode ? deviceCurrentTrack!.title : currentTrack!.title}
+                {currentTrack!.title}
               </h4>
               <p className="text-muted-foreground truncate">
-                {isOnDeviceMode ? deviceCurrentTrack!.artist : currentTrack!.artist}
+                {currentTrack!.artist}
               </p>
             </div>
             <Button
@@ -467,29 +404,6 @@ export const MainApp: React.FC = () => {
           </motion.div>
         )}
         
-        {/* オーディオ要素（常時レンダリング。isOnDeviceModeトグル時にDOMを破棄しない） */}
-        <audio
-          ref={audioRef}
-          src={
-            isOnDeviceMode && deviceCurrentTrack?.url
-              ? `${API_URL}/stream?url=${encodeURIComponent(deviceCurrentTrack.url)}`
-              : undefined
-          }
-          onEnded={skip}
-          onPlay={() => usePlayerStore.getState().setIsPlaying(true)}
-          onPause={() => usePlayerStore.getState().setIsPlaying(false)}
-          onError={(e) => {
-            if (!isOnDeviceMode || !deviceCurrentTrack) return;
-            console.error('オーディオエラー:', e);
-            toast({
-              title: "再生エラー",
-              description: "音声の再生中にエラーが発生しました。",
-              variant: "destructive",
-            });
-            skip();
-          }}
-          autoPlay={isOnDeviceMode}
-        />
       </div>
     </ErrorBoundary>
   );
