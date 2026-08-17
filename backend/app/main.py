@@ -329,6 +329,141 @@ async def get_player_state(guild_id: str):
     return await build_player_state(guild_id, bump_version=False)
 
 
+@app.post("/upload-audio/{guild_id}")
+async def upload_audio(
+    guild_id: str,
+    user_id: str = Form(...),
+    user_name: str = Form(...),
+    title: str = Form(...),
+    artist: str = Form(...),
+    audio_file: UploadFile = File(...),
+    thumbnail_file: UploadFile = File(None),
+):
+    # 音声ファイルの拡張子チェック
+    allowed_audio_extensions = ["mp3", "wav", "flac", "aac", "m4a"]
+    audio_ext = audio_file.filename.split(".")[-1].lower()
+    if audio_ext not in allowed_audio_extensions:
+        raise HTTPException(status_code=400, detail="対応外の音声形式です。")
+
+    # ユニークIDで保存ファイル名作成
+    audio_id = str(uuid.uuid4())
+    safe_audio_filename = f"{audio_id}.{audio_ext}"
+    audio_path = os.path.join(UPLOAD_DIR, safe_audio_filename)
+    full_audio_path = os.path.abspath(audio_path)
+
+    # 音声ファイル保存
+    try:
+        async with aiofiles.open(audio_path, 'wb') as out_file:
+            content = await audio_file.read()
+            await out_file.write(content)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"音声ファイル保存失敗: {e}")
+
+    # サムネイルファイルの処理
+    thumb_filename = ""
+    if thumbnail_file:
+        thumb_ext = thumbnail_file.filename.split(".")[-1].lower()
+        allowed_thumb_exts = ["jpg","jpeg","png","gif"]
+        if thumb_ext not in allowed_thumb_exts:
+            raise HTTPException(status_code=400, detail="サムネイルの拡張子が無効です。")
+        safe_thumb_filename = f"{audio_id}.{thumb_ext}"
+        thumb_path = os.path.join(UPLOAD_DIR, safe_thumb_filename)
+        try:
+            async with aiofiles.open(thumb_path, 'wb') as out_file:
+                thumb_content = await thumbnail_file.read()
+                await out_file.write(thumb_content)
+            thumb_filename = safe_thumb_filename
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"サムネイル保存失敗: {e}")
+    # DB登録
+    new_song = UploadedSong(
+        id=audio_id,
+        guild_id=guild_id,
+        title=title,
+        artist=artist,
+        filename=safe_audio_filename,
+        thumbnail_filename=thumb_filename,
+        uploader_id=user_id,
+        uploader_name=user_name,
+        full_path=full_audio_path,
+    )
+    add_uploaded_song(new_song)
+
+    return {"message": "アップロード成功", "song": new_song}
+
+@app.get("/uploaded-audio-list/{guild_id}", response_model=List[SongResponse])
+async def get_uploaded_audio_list(guild_id: str):
+    songs = get_uploaded_songs_in_guild(guild_id)
+    return [SongResponse(**s.dict()) for s in songs]
+
+@app.put("/uploaded-audio-edit/{guild_id}/{song_id}", response_model=SongResponse)
+async def edit_uploaded_audio(
+    guild_id: str,
+    song_id: str,
+    user_id: str = Form(...),
+    title: str = Form(...),
+    artist: str = Form(...),
+):
+    song = find_uploaded_song_by_id(guild_id, song_id)
+    if not song:
+        raise HTTPException(status_code=404, detail="楽曲が見つかりません。")
+    if song.uploader_id != user_id:
+        raise HTTPException(status_code=403, detail="編集権限がありません。")
+
+    song.title = title
+    song.artist = artist
+    update_uploaded_song(song)
+    return SongResponse(**song.dict())
+
+@app.delete("/uploaded-audio-delete/{guild_id}/{song_id}")
+async def delete_uploaded_audio(guild_id: str, song_id: str, user_id: str):
+    song = find_uploaded_song_by_id(guild_id, song_id)
+    if not song:
+        raise HTTPException(status_code=404, detail="楽曲が存在しません。")
+    if song.uploader_id != user_id:
+        raise HTTPException(status_code=403, detail="削除権限がありません。")
+
+    if os.path.exists(song.full_path):
+        os.remove(song.full_path)
+    thumb_abs = os.path.join(UPLOAD_DIR, song.thumbnail_filename)
+    if song.thumbnail_filename and os.path.exists(thumb_abs):
+        os.remove(thumb_abs)
+
+    delete_uploaded_song(guild_id, song_id)
+    return {"message": "削除成功"}
+
+
+@app.post("/set-volume/{guild_id}")
+async def set_volume(guild_id: str, volume: float):
+    if not 0.0 <= volume <= 1.0:
+        raise HTTPException(status_code=400, detail="Volume must be between 0.0 and 1.0")
+    player = music_players.get(guild_id)
+    if player:
+        await player.set_volume(volume)
+        return {"message": "Volume set"}
+    raise HTTPException(status_code=404, detail="No active music player found")
+
+@app.get("/bot-guilds")
+async def get_bot_guilds():
+    bot_guilds = []
+    for guild in client.guilds:
+        bot_guilds.append({
+            'id': str(guild.id),
+            'name': guild.name
+        })
+    return bot_guilds
+
+@app.post("/disconnect-voice-channel/{guild_id}")
+async def disconnect_voice_channel(guild_id: str):
+    guild = client.get_guild(int(guild_id))
+    if guild and guild.voice_client:
+        await guild.voice_client.disconnect()
+        if guild_id in music_players:
+            del music_players[guild_id]
+        await notify_clients(guild_id)
+        return {"message": "ボイスチャネルから切断しました"}
+    raise HTTPException(status_code=404, detail="指定されたギルドでボットはボイスチャネルに接続されていません")
+
 @app.websocket("/ws/{guild_id}")
 async def websocket_endpoint(websocket: WebSocket, guild_id: str):
     await websocket.accept()
