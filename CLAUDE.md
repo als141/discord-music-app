@@ -101,6 +101,16 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 - `_normalize_album_type()` でロケール表記を正規化、`/related` は10件に制限、`/charts` は `songs` が無い場合 `videos`(list) にフォールバック
 - 検証: ローカルで `app.main` の関数を直接呼んで全フィルタ/related/recommendations/mood/album/playlist を確認 → 本番デプロイ → `scripts/smoke_test.sh` 全OK
 
+### 2026-08-17: レスポンシブ再設計（commit 5cfd9d54）
+- **デスクトップ（lg=1024px以上）**: 右カラムに Now Playing パネルを常時ドッキング（`.now-playing-aside`）。ミニプレイヤー/フルスクリーンプレイヤーは出さない。`MainPlayer variant="docked"`
+- **モバイル/タブレット**: 従来どおりミニプレイヤー→フルスクリーン（`variant="sheet"`）。シートは**常時マウント + translateY 切替**（AnimatePresence の exit 待ちで白いラッパーが残るバグがあったため）。横向きスマホは `.player-sheet-body` の media query で2カラム
+- Header 中央に接続先（サーバー名/VC名/接続状態ドット）を常設。`useGuildStore` から取得、クリックでサイドメニュー
+- 判定は `useIsDesktop()`（`src/hooks/use-media-query.ts`, `useSyncExternalStore`, SSR は false）
+- SearchResults は `fixed` → main カラム内 `absolute inset-0 z-30`。ミニプレイヤー分の下余白は main の CSS 変数 `--bottom-inset` で共有
+- **レイアウト検証手順**: `cd frontend && NEXT_PUBLIC_API_URL=https://api.atoriba.jp bun run dev` → `node scripts/preview-screenshots.mjs` → `scripts/screenshots/*.png`（6ビューポート、横スクロール/console error を自動判定）。`/dev-preview` はモックセッションで MainApp を表示（開発時のみ。middleware の `authorized` で許可、本番は `notFound()`）。API/WS は Playwright の route モック
+- **注意**: Turbopack の永続キャッシュ（`.next/cache`, `.next/dev`）で globals.css の変更が反映されないことがあった。CSS が古いと感じたら `rm -rf .next/cache .next/dev` して dev 再起動
+- `playwright` は frontend の devDependency（スクリプトは `createRequire` で frontend 側を解決）
+
 ### 2026-08-17: デバイスモード（ブラウザ再生）を削除（commit 711ed26e）
 - ユーザー要望により「デバイスモード」を全削除。Header のトグル、store の `isOnDeviceMode`/`deviceQueue`/`deviceCurrentTrack`/`audioRef`/`volume`/`currentTime`/`duration`、MainApp の `<audio>` 要素、MainPlayer のシーク/音量UI、各コンポーネントの `isOnDeviceMode` props
 - backend の `GET /stream`（デバイスモード専用。未認証で任意URLを Pi にダウンロードするエンドポイント）も削除 → 404
