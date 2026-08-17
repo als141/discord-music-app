@@ -43,6 +43,8 @@ interface QueueListProps {
   onClose?: () => void;
   onDelete: (index: number) => void;
   isEmbedded?: boolean;
+  /** false のとき「再生中の曲」カードを表示しない（デスクトップのドッキングパネルなど、上部に既に表示がある場合） */
+  showCurrentTrack?: boolean;
 }
 
 // Current track component - Apple Music style
@@ -283,6 +285,7 @@ export const QueueList: React.FC<QueueListProps> = ({
   onClose,
   onDelete,
   isEmbedded = false,
+  showCurrentTrack = true,
 }) => {
   const { toast } = useToast();
 
@@ -331,18 +334,18 @@ export const QueueList: React.FC<QueueListProps> = ({
         )}
 
         {/* Current track */}
-        {currentTrack ? (
+        {showCurrentTrack && (currentTrack ? (
           <CurrentTrackItem
             track={currentTrack}
             isPlaying={isPlaying}
             onPlayPause={onPlayPause}
           />
         ) : (
-          <div className="flex-grow text-center p-8 mx-4 mb-4 bg-secondary/30 rounded-xl">
+          <div className="text-center p-8 mx-4 mb-4 bg-secondary/30 rounded-xl">
             <Music2 className="w-10 h-10 mx-auto mb-2 text-muted-foreground/50" />
             <p className="text-muted-foreground text-sm">再生中の曲がありません</p>
           </div>
-        )}
+        ))}
 
         {/* Queue header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">

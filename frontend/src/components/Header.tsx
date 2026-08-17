@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, Link as LinkIcon, Menu, Clipboard, X, Clock } from 'lucide-react'
+import { Search, Link as LinkIcon, Menu, Clipboard, X, Clock, Volume2, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -36,7 +36,9 @@ export const Header: React.FC<HeaderProps> = React.memo(({
   const [searchHistory, setSearchHistory] = useState<string[]>([])
   const { toast } = useToast()
   const { data: session } = useSession()
-  const { resetAutoConnectCheck } = useGuildStore()
+  const { resetAutoConnectCheck, mutualServers, activeServerId, voiceChannels, activeChannelId, isBotConnected } = useGuildStore()
+  const activeServer = mutualServers.find(s => s.id === activeServerId) || null
+  const activeChannel = voiceChannels.find(c => c.id === activeChannelId) || null
 
   useEffect(() => {
     const history = localStorage.getItem('searchHistory')
@@ -113,7 +115,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
     <TooltipProvider>
       {/* Apple Music Style Frosted Glass Header */}
       <header className="fixed top-0 left-0 right-0 z-[100] h-14 glass border-b border-black/5">
-        <div className="flex items-center justify-between h-full px-4 max-w-screen-2xl mx-auto">
+        <div className="flex items-center justify-between h-full px-4">
           {/* Left Section - Menu Button */}
           <div className="flex items-center gap-2">
             <Tooltip>
@@ -134,11 +136,33 @@ export const Header: React.FC<HeaderProps> = React.memo(({
             </Tooltip>
           </div>
 
-          {/* Center Section - Logo/Title (optional) */}
-          <div className="absolute left-1/2 -translate-x-1/2 hidden sm:block">
-            <span className="text-sm font-semibold text-foreground tracking-tight">
-              Music
-            </span>
+          {/* Center Section - 接続状態（サーバー / VC）。クリックでサイドメニューを開く */}
+          <div className="absolute left-1/2 -translate-x-1/2 max-w-[46%] sm:max-w-[50%]">
+            <button
+              type="button"
+              onClick={onOpenMenu}
+              className="flex items-center gap-2 h-9 px-3 rounded-full hover:bg-black/5 transition-colors max-w-full"
+              aria-label={activeServer ? `接続先: ${activeServer.name}${activeChannel ? ' / ' + activeChannel.name : ''}。サーバー・チャンネルを変更` : 'サーバーを選択'}
+            >
+              <span
+                className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                  isBotConnected && activeChannel ? 'bg-green-500 shadow-[0_0_0_3px_rgba(34,197,94,0.2)]' : activeServer ? 'bg-amber-400' : 'bg-muted-foreground/40'
+                }`}
+                aria-hidden="true"
+              />
+              <span className="flex flex-col items-start min-w-0 leading-tight">
+                <span className="text-[13px] font-semibold text-foreground truncate max-w-full">
+                  {activeServer ? activeServer.name : 'サーバー未選択'}
+                </span>
+                {activeServer && (
+                  <span className="text-[11px] text-muted-foreground truncate max-w-full inline-flex items-center gap-1">
+                    <Volume2 className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
+                    {activeChannel ? activeChannel.name : 'ボイスチャンネル未接続'}
+                  </span>
+                )}
+              </span>
+              <ChevronDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 hidden sm:block" aria-hidden="true" />
+            </button>
           </div>
 
           {/* Right Section - Actions */}

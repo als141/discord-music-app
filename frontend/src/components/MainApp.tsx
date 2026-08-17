@@ -20,7 +20,7 @@ import { IntroPage } from './IntroPage';
 import { ErrorBoundary } from './ErrorBoundary';
 import { HomeScreen } from './HomeScreen';
 import { useGuildStore, usePlayerStore, setupWebSocket, cleanupWebSocket } from '@/store';
-import { VOICE_CHAT_ENABLED } from '@/lib/features';
+import { useIsDesktop } from '@/hooks/use-media-query';
 
 // API URL の取得
 
@@ -56,6 +56,9 @@ export const MainApp: React.FC = () => {
     play, pause, skip,
     addToQueue, reorderQueue, removeFromQueue,
   } = usePlayerStore();
+
+  // レイアウト: lg 以上は Now Playing パネルを右にドッキング
+  const isDesktop = useIsDesktop();
 
   // UI の状態
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -234,6 +237,7 @@ export const MainApp: React.FC = () => {
   // ミニプレイヤーを表示すべきかどうか
   const shouldShowMiniPlayer = useMemo(() => {
     return (
+      !isDesktop &&
       currentTrack && 
       !isMainPlayerVisible && 
       homeActiveTab !== 'chat' && 
@@ -242,7 +246,7 @@ export const MainApp: React.FC = () => {
       homeActiveTab !== 'valorant' && 
       homeActiveTab !== 'realtime'
     );
-  }, [currentTrack, isMainPlayerVisible, homeActiveTab]);
+  }, [isDesktop, currentTrack, isMainPlayerVisible, homeActiveTab]);
 
   // ローディング表示
   if (status === 'loading') {
@@ -258,17 +262,48 @@ export const MainApp: React.FC = () => {
     return <IntroPage />;
   }
 
+  // フルスクリーンプレイヤー（sheet）はモバイル/タブレットのみ。デスクトップは右カラムに常時表示
+  const showSheetPlayer = !isDesktop && isMainPlayerVisible;
+
+  const homeScreen = (
+    <HomeScreen
+      onSelectTrack={(item: PlayableItem) => {
+        addToQueue(item, getUserInfo());
+        if (!isDesktop) setIsMainPlayerVisible(true);
+      }}
+      guildId={activeServerId}
+      activeTab={homeActiveTab}
+      onTabChange={(tab) => setHomeActiveTab(tab)}
+      history={history}
+      onAddUrl={handleAddUrl}
+    />
+  );
+
+  const playerProps = {
+    currentTrack,
+    isPlaying,
+    onPlay: play,
+    onPause: pause,
+    onSkip: skip,
+    queue,
+    onReorder: reorderQueue,
+    onDelete: removeFromQueue,
+    guildId: activeServerId,
+    onClose: () => setIsMainPlayerVisible(false),
+    isLoading,
+  };
+
   // メインのレンダリング
   return (
     <ErrorBoundary>
-      <div className="h-screen bg-background text-foreground flex flex-col" {...swipeHandlers}>
+      <div className="app-shell bg-background text-foreground" {...swipeHandlers}>
         {/* ヘッダー */}
         <Header
           onSearch={handleSearch}
           onAddUrl={handleAddUrl}
           onOpenMenu={() => setIsMenuOpen(true)}
         />
-        
+
         {/* サイドメニュー */}
         <AnimatePresence>
           <SideMenu
@@ -295,115 +330,116 @@ export const MainApp: React.FC = () => {
             onFetchServers={fetchMutualServers}
           />
         </AnimatePresence>
-        
-        {/* メインコンテンツ */}
-        <main className="flex-grow overflow-hidden pt-16">
-          {isSearchActive ? (
-            // 検索結果
-            <SearchResults
-              results={searchResults}
-              onAddToQueue={(item) => addToQueue(item, getUserInfo())}
-              onAddTrackToQueue={(track) => addToQueue(track, getUserInfo())}
-              onClose={() => setIsSearchActive(false)}
-              onSearch={handleSearch}
-            />
-          ) : (
-            // サーバーモード
-            <>
-              {isLoading && !isMainPlayerVisible ? (
-                <div className="h-full flex items-center justify-center">
-                  <Loading size="large" text="サーバーに接続中..." />
-                </div>
-              ) : (
-                <>
-                  <AnimatePresence>
-                    {isMainPlayerVisible && (
-                      <MainPlayer
-                        currentTrack={currentTrack}
-                        isPlaying={isPlaying}
-                        onPlay={play}
-                        onPause={pause}
-                        onSkip={skip}
-                        queue={queue}
-                        onReorder={reorderQueue}
-                        onDelete={removeFromQueue}
-                        guildId={activeServerId}
-                        onClose={() => setIsMainPlayerVisible(false)}
-                        isVisible={isMainPlayerVisible}
-                        isLoading={isLoading}
-                      />
-                    )}
-                  </AnimatePresence>
-                  
-                  {!isMainPlayerVisible && (
-                    <HomeScreen
-                      onSelectTrack={(item: PlayableItem) => {
-                        addToQueue(item, getUserInfo());
-                        setIsMainPlayerVisible(true);
-                      }}
-                      guildId={activeServerId}
-                      activeTab={homeActiveTab}
-                      onTabChange={(tab) => setHomeActiveTab(tab)}
-                      history={history}
-                      onAddUrl={handleAddUrl}
-                    />
-                  )}
-                </>
-              )}
-            </>
-          )}
-        </main>
-        
-        {/* ミニプレイヤー */}
-        {shouldShowMiniPlayer && (
-          <motion.div
-            className="fixed bottom-0 left-0 right-0 bg-card p-4 flex items-center cursor-pointer"
-            onClick={() => setIsMainPlayerVisible(true)}
-            initial={{ y: "100%" }}
-            animate={{ y: 0 }}
-            exit={{ y: "100%" }}
-            transition={{ duration: 0.3 }}
-            {...miniPlayerSwipeHandlers}
+
+        {/* ボディ: 左=メインコンテンツ / 右=Now Playing（lg以上） */}
+        <div className="flex-1 min-h-0 flex pt-14">
+          {/* メインカラム */}
+          <main
+            className="relative flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden"
+            style={{ '--bottom-inset': shouldShowMiniPlayer ? '76px' : '0px' } as React.CSSProperties}
+            aria-label="メインコンテンツ"
           >
-            <Image
-              src={currentTrack!.thumbnail}
-              alt={currentTrack!.title}
-              width={48}
-              height={48}
-              className="object-cover rounded-md flex-shrink-0"
-              style={{ width: 48, height: 48 }}
-              unoptimized
-            />
-            <div className="ml-4 flex-grow min-w-0 mr-4">
-              <h4 className="font-semibold truncate">
-                {currentTrack!.title}
-              </h4>
-              <p className="text-muted-foreground truncate">
-                {currentTrack!.artist}
-              </p>
-            </div>
-            <Button
-              variant="ghost" 
-              className="flex-shrink-0"
-              onClick={(e) => { 
-                e.stopPropagation(); 
-                if (isPlaying) {
-                  pause();
-                } else {
-                  play();
-                }
-              }}
-              aria-label={isPlaying ? "一時停止" : "再生"}
+            {/* ホーム画面は常にマウント（タブ状態・スクロール位置を維持） */}
+            <div
+              className={`h-full pb-[var(--bottom-inset)] ${showSheetPlayer || isSearchActive ? 'invisible' : ''}`}
+              aria-hidden={showSheetPlayer || isSearchActive}
             >
-              {isPlaying ? (
-                <PauseIcon className="h-6 w-6" />
-              ) : (
-                <PlayIcon className="h-6 w-6" />
-              )}
-            </Button>
-          </motion.div>
-        )}
-        
+              {homeScreen}
+            </div>
+
+            {/* 検索結果オーバーレイ（メインカラム内に収める） */}
+            {isSearchActive && (
+              <SearchResults
+                results={searchResults}
+                onAddToQueue={(item) => addToQueue(item, getUserInfo())}
+                onAddTrackToQueue={(track) => addToQueue(track, getUserInfo())}
+                onClose={() => setIsSearchActive(false)}
+                onSearch={handleSearch}
+              />
+            )}
+
+            {/* フルスクリーンプレイヤー（モバイル/タブレット）
+                常にマウントしたまま translateY で出し入れする（AnimatePresence の exit 待ちで
+                白い残骸が残る問題を避ける。Drawer の状態も維持できる） */}
+            {!isDesktop && (
+              <motion.div
+                className="absolute inset-0 z-40 bg-background"
+                initial={false}
+                animate={{ y: showSheetPlayer ? 0 : '100%' }}
+                transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
+                style={{ pointerEvents: showSheetPlayer ? 'auto' : 'none' }}
+                aria-hidden={!showSheetPlayer}
+                inert={!showSheetPlayer}
+              >
+                <MainPlayer {...playerProps} variant="sheet" />
+              </motion.div>
+            )}
+          </main>
+
+          {/* Now Playing パネル（デスクトップ） */}
+          {isDesktop && (
+            <aside className="now-playing-aside hidden lg:flex flex-col min-h-0" aria-label="再生中パネル">
+              <MainPlayer {...playerProps} variant="docked" />
+            </aside>
+          )}
+        </div>
+
+        {/* ミニプレイヤー（モバイル/タブレット） */}
+        <AnimatePresence>
+          {shouldShowMiniPlayer && (
+            <motion.div
+              className="mobile-player fixed bottom-0 left-0 right-0 z-40 flex items-center cursor-pointer"
+              onClick={() => setIsMainPlayerVisible(true)}
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ duration: 0.3 }}
+              role="button"
+              tabIndex={0}
+              aria-label="プレイヤーを開く"
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setIsMainPlayerVisible(true); }}
+              {...miniPlayerSwipeHandlers}
+            >
+              <Image
+                src={currentTrack!.thumbnail || '/default_thumbnail.webp'}
+                alt={currentTrack!.title}
+                width={48}
+                height={48}
+                className="object-cover rounded-md flex-shrink-0"
+                style={{ width: 48, height: 48 }}
+                unoptimized
+              />
+              <div className="ml-3 flex-grow min-w-0 mr-3">
+                <h4 className="font-semibold truncate text-sm">
+                  {currentTrack!.title}
+                </h4>
+                <p className="text-muted-foreground truncate text-xs">
+                  {currentTrack!.artist}
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="flex-shrink-0 rounded-full h-10 w-10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (isPlaying) {
+                    pause();
+                  } else {
+                    play();
+                  }
+                }}
+                aria-label={isPlaying ? "一時停止" : "再生"}
+              >
+                {isPlaying ? (
+                  <PauseIcon className="h-6 w-6" />
+                ) : (
+                  <PlayIcon className="h-6 w-6" />
+                )}
+              </Button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </ErrorBoundary>
   );

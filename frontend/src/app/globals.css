@@ -180,6 +180,70 @@
 
 /* Component styles */
 @layer components {
+  /* アプリ全体のシェル。モバイルブラウザのアドレスバー分を考慮して dvh を優先 */
+  .app-shell {
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* デスクトップで右にドッキングされる Now Playing パネル */
+  .now-playing-aside {
+    width: 380px;
+    flex-shrink: 0;
+    border-left: 0.5px solid var(--color-border);
+    background: linear-gradient(180deg, rgba(245, 245, 247, 0.6) 0%, var(--color-background) 40%);
+  }
+  @media (min-width: 1280px) {
+    .now-playing-aside { width: 420px; }
+  }
+  @media (min-width: 1536px) {
+    .now-playing-aside { width: 460px; }
+  }
+
+  /* フルスクリーンプレイヤー（モバイル）のアートワーク: 横幅と画面高さの両方で上限を決め、
+     操作ボタンが必ずファーストビューに入るようにする */
+  .player-artwork-sheet {
+    width: min(78vw, 42dvh, 420px);
+    aspect-ratio: 1 / 1;
+  }
+  @media (orientation: landscape) and (max-height: 500px) {
+    .player-artwork-sheet { width: min(30vw, 55dvh); }
+  }
+  /* フルスクリーンプレイヤー本体のレイアウト。
+     縦画面: アートワーク → 曲情報 → コントロール を縦に積む
+     横長で低い画面（スマホ横向き）: 左にアートワーク、右に曲情報+コントロール */
+  .player-sheet-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.5rem 0;
+    max-width: 28rem;
+  }
+  .player-sheet-art { flex: 1 1 auto; }
+  .player-sheet-side { flex: 0 0 auto; width: 100%; }
+  @media (orientation: landscape) and (max-height: 500px) {
+    .player-sheet-body {
+      flex-direction: row;
+      max-width: none;
+      gap: 1.5rem;
+      padding: 0 0.5rem;
+    }
+    .player-sheet-art { flex: 0 0 auto; height: 100%; }
+    .player-sheet-side { flex: 1 1 0; width: auto; }
+    .player-artwork-sheet { width: auto; height: 100%; max-height: 100%; }
+  }
+  /* ドッキング時のアートワーク */
+  .player-artwork-docked {
+    width: min(100%, 30dvh, 300px);
+    aspect-ratio: 1 / 1;
+  }
+  @media (min-height: 900px) {
+    .player-artwork-docked { width: min(100%, 320px); }
+  }
   /* Frosted Glass Header - Apple Music style */
   .apple-header {
     position: fixed;
@@ -342,6 +406,13 @@
 
   .apple-play-button:active {
     transform: scale(0.96);
+  }
+
+  .apple-play-button:disabled {
+    opacity: 0.45;
+    box-shadow: none;
+    transform: none;
+    cursor: not-allowed;
   }
 
   /* Apple Music Card - Album/Track card */

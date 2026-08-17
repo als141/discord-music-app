@@ -16,7 +16,6 @@ import {
 import { Track, api } from '@/utils/api';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { Loading } from '@/components/ui/loading';
 import {
   Drawer,
   DrawerContent,
@@ -85,8 +84,12 @@ interface MainPlayerProps {
   onDelete: (index: number) => void;
   guildId: string | null;
   onClose: () => void;
-  isVisible: boolean;
   isLoading: boolean;
+  /**
+   * sheet  : モバイル/タブレット向けフルスクリーン表示（閉じるボタン・スワイプ・キューはDrawer）
+   * docked : デスクトップ向け右カラム常時表示（閉じるボタンなし・キュー/関連曲をインライン表示）
+   */
+  variant?: 'sheet' | 'docked';
 }
 
 export const MainPlayer: React.FC<MainPlayerProps> = React.memo(({
@@ -100,9 +103,10 @@ export const MainPlayer: React.FC<MainPlayerProps> = React.memo(({
   onDelete,
   guildId,
   onClose,
-  isVisible,
   isLoading,
+  variant = 'sheet',
 }) => {
+  const isDocked = variant === 'docked';
   const { data: session } = useSession();
   const { toast } = useToast();
 
@@ -226,10 +230,11 @@ export const MainPlayer: React.FC<MainPlayerProps> = React.memo(({
       }
     };
 
-    if (currentTrack && isDrawerOpen && activeTab === 'related') {
+    const isPanelOpen = isDocked || isDrawerOpen;
+    if (currentTrack && isPanelOpen && activeTab === 'related') {
       fetchRelatedTracks();
     }
-  }, [currentTrack, isDrawerOpen, activeTab, extractVideoId, toast]);
+  }, [currentTrack, isDrawerOpen, isDocked, activeTab, extractVideoId, toast]);
 
   const handleAddToQueue = async (track: Track) => {
     if (!guildId) {
@@ -310,11 +315,11 @@ export const MainPlayer: React.FC<MainPlayerProps> = React.memo(({
   );
 
   const swipeHandlers = useSwipeable({
-    onSwipedDown: () => onClose(),
-    onSwipedUp: () => setIsDrawerOpen(true),
-    trackTouch: true,
+    onSwipedDown: () => { if (!isDocked) onClose(); },
+    onSwipedUp: () => { if (!isDocked) setIsDrawerOpen(true); },
+    trackTouch: !isDocked,
     trackMouse: false,
-    preventScrollOnSwipe: true,
+    preventScrollOnSwipe: !isDocked,
   });
 
   const drawerSwipeHandlers = useSwipeable({
@@ -324,365 +329,370 @@ export const MainPlayer: React.FC<MainPlayerProps> = React.memo(({
     trackMouse: false,
   });
 
+  const handleRefreshRelated = () => {
+    if (!currentTrack) return;
+    const videoId = extractVideoId(currentTrack.url);
+    if (!videoId) return;
+    setIsRelatedLoading(true);
+    api.getRelatedSongs(videoId)
+      .then(tracks => setRelatedTracks(tracks))
+      .catch(error => {
+        console.error('関連トラック取得エラー:', error);
+        toast({
+          title: 'エラー',
+          description: '関連動画の取得に失敗しました。',
+          variant: 'destructive',
+        });
+      })
+      .finally(() => setIsRelatedLoading(false));
+  };
+
+  // ---- 部品: アートワーク ----
+  const artwork = (
+    <motion.div
+      className={`${isDocked ? 'player-artwork-docked' : 'player-artwork-sheet'} rounded-2xl overflow-hidden relative flex-shrink-0`}
+      initial={{ scale: 0.94, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{ duration: 0.45, ease: [0.25, 0.1, 0.25, 1] }}
+      style={{
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 10px 20px -5px rgba(0, 0, 0, 0.15)'
+      }}
+    >
+      {currentTrack && (
+        <Image
+          ref={imageRef}
+          src={currentTrack.thumbnail || '/default_thumbnail.webp'}
+          alt={currentTrack.title || '選択された曲はありません'}
+          fill
+          sizes="(min-width: 1024px) 320px, 80vw"
+          style={{ objectFit: 'cover' }}
+          onLoad={() => setImageLoaded(true)}
+          className={`z-0 transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+          unoptimized
+        />
+      )}
+      <AnimatePresence>
+        {(!imageLoaded || !currentTrack) && (
+          <motion.div
+            className="absolute inset-0 bg-secondary flex items-center justify-center"
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <Disc3 className={`w-16 h-16 text-muted-foreground ${currentTrack ? 'animate-spin' : 'opacity-40'}`} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+
+  // ---- 部品: 曲情報 ----
+  const trackInfo = (
+    <motion.div
+      className="w-full text-center px-2 min-w-0"
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.15, ease: [0.25, 0.1, 0.25, 1] }}
+    >
+      <h2
+        className={`${isDocked ? 'text-lg xl:text-xl' : 'text-xl sm:text-2xl'} font-bold text-foreground truncate mb-1.5`}
+        title={currentTrack?.title}
+      >
+        {currentTrack?.title || '再生中の曲はありません'}
+      </h2>
+
+      {currentTrack?.artist ? (
+        <div className="flex justify-center max-w-full">
+          <button
+            onClick={() => handleArtistClick(currentTrack.artist)}
+            disabled={isArtistLoading}
+            className="group inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-primary/10 hover:bg-primary/15 transition-all duration-200 max-w-full"
+            aria-label={`${currentTrack.artist}の詳細を表示`}
+          >
+            {isArtistLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                <span className="text-muted-foreground text-sm">読み込み中...</span>
+              </>
+            ) : (
+              <>
+                <span className={`${isDocked ? 'text-sm' : 'text-base sm:text-lg'} text-primary font-medium truncate`}>
+                  {currentTrack.artist}
+                </span>
+                <ExternalLink className="w-3.5 h-3.5 text-primary opacity-60 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+              </>
+            )}
+          </button>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          {currentTrack ? 'アーティスト不明' : 'ホームや検索から曲を追加してください'}
+        </p>
+      )}
+
+      {currentTrack?.added_by && (
+        <div className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Avatar className="w-4 h-4">
+            {currentTrack.added_by.image ? (
+              <AvatarImage src={currentTrack.added_by.image} alt={currentTrack.added_by.name || 'Unknown'} />
+            ) : (
+              <AvatarFallback className="bg-primary/10"><UserIcon className="h-2.5 w-2.5 text-primary" /></AvatarFallback>
+            )}
+          </Avatar>
+          <span className="truncate">{currentTrack.added_by.name || 'Unknown'}さんが追加</span>
+        </div>
+      )}
+    </motion.div>
+  );
+
+  // ---- 部品: 再生コントロール ----
+  const controls = (
+    <div className={`flex justify-center items-center ${isDocked ? 'gap-6' : 'gap-8 sm:gap-10'}`}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <motion.button
+            whileHover={{ scale: isLoading ? 1 : 1.05 }}
+            whileTap={{ scale: isLoading ? 1 : 0.95 }}
+            onClick={isLoading ? undefined : isPlaying ? onPause : onPlay}
+            className={`apple-play-button ${isDocked ? 'w-16 h-16' : 'w-[72px] h-[72px] sm:w-20 sm:h-20'}`}
+            disabled={isLoading || !currentTrack}
+            aria-label={isLoading ? "読み込み中" : isPlaying ? "一時停止" : "再生"}
+          >
+            {isLoading ? (
+              <Loader2 className="animate-spin w-8 h-8 text-white" />
+            ) : isPlaying ? (
+              <PauseIcon className="w-8 h-8 text-white" fill="white" />
+            ) : (
+              <PlayIcon className="w-8 h-8 text-white ml-1" fill="white" />
+            )}
+          </motion.button>
+        </TooltipTrigger>
+        <TooltipContent className="bg-white/95 backdrop-blur-xl border-black/10">
+          <p>{isLoading ? "読み込み中" : isPlaying ? "一時停止" : "再生"}</p>
+        </TooltipContent>
+      </Tooltip>
+
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={onSkip}
+            disabled={!currentTrack}
+            className="p-4 rounded-full bg-secondary/80 hover:bg-secondary transition-all duration-200 disabled:opacity-40"
+            aria-label="次の曲へ"
+          >
+            <SkipForwardIcon size={24} className="text-foreground" />
+          </motion.button>
+        </TooltipTrigger>
+        <TooltipContent className="bg-white/95 backdrop-blur-xl border-black/10">
+          <p>次の曲へ</p>
+        </TooltipContent>
+      </Tooltip>
+    </div>
+  );
+
+  // ---- 部品: キュー / 関連曲 タブ（Drawer とドッキングパネルで共用） ----
+  const panelTabs = (panelHeightStyle?: React.CSSProperties) => (
+    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col min-h-0 flex-1">
+      <div className="px-4 pt-3 flex-shrink-0">
+        <TabsList className="grid w-full grid-cols-2 bg-secondary/60 p-1 rounded-full">
+          <TabsTrigger
+            value="queue"
+            className="rounded-full data-[state=active]:bg-white data-[state=active]:shadow-sm text-foreground"
+            aria-controls="queue-panel"
+          >
+            キュー{queue.length > 0 ? ` (${queue.length})` : ''}
+          </TabsTrigger>
+          <TabsTrigger
+            value="related"
+            className="rounded-full data-[state=active]:bg-white data-[state=active]:shadow-sm text-foreground"
+            aria-controls="related-panel"
+          >
+            関連曲
+          </TabsTrigger>
+        </TabsList>
+      </div>
+
+      <TabsContent
+        value="queue"
+        className="mt-3 flex-1 min-h-0 overflow-y-auto data-[state=inactive]:hidden"
+        style={panelHeightStyle}
+        id="queue-panel"
+        role="tabpanel"
+      >
+        <QueueList
+          queue={queue}
+          currentTrack={currentTrack}
+          isPlaying={isPlaying}
+          onPlayPause={isPlaying ? onPause : onPlay}
+          onReorder={onReorder}
+          onClose={() => setIsDrawerOpen(false)}
+          onDelete={onDelete}
+          isEmbedded
+          showCurrentTrack={!isDocked}
+        />
+      </TabsContent>
+
+      <TabsContent
+        value="related"
+        className="mt-3 flex-1 min-h-0 overflow-y-auto space-y-3 px-4 pb-6 data-[state=inactive]:hidden"
+        style={panelHeightStyle}
+        id="related-panel"
+        role="tabpanel"
+      >
+        <div className="flex flex-wrap gap-2 justify-between">
+          <Button
+            onClick={handleAddAllToQueue}
+            disabled={isRelatedLoading || relatedTracks.length === 0}
+            size="sm"
+            className="bg-primary hover:bg-primary/90 text-white rounded-full text-xs sm:text-sm"
+          >
+            <PlusIcon className="mr-1 h-3.5 w-3.5" />
+            全て追加
+          </Button>
+          <Button
+            onClick={handleRefreshRelated}
+            disabled={isRelatedLoading || !currentTrack}
+            size="sm"
+            variant="outline"
+            className="rounded-full text-xs sm:text-sm border-border"
+          >
+            <RefreshCwIcon className={`mr-1 h-3.5 w-3.5 ${isRelatedLoading ? 'animate-spin' : ''}`} />
+            再取得
+          </Button>
+        </div>
+        <AnimatePresence mode="wait">
+          {isRelatedLoading ? (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-3" key="skeletons">
+              {renderSkeletons()}
+            </motion.div>
+          ) : (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="space-y-3" key="related-tracks">
+              {relatedTracks.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Disc3 className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                  <p className="text-sm">{currentTrack ? '関連する曲が見つかりませんでした' : '曲を再生すると関連曲が表示されます'}</p>
+                </div>
+              ) : (
+                relatedTracks.map(track => (
+                  <RelatedTrackItem key={track.url} track={track} onAddToQueue={handleAddToQueue} />
+                ))
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </TabsContent>
+    </Tabs>
+  );
+
+  const artistDialog = isArtistDialogOpen && selectedArtistId && (
+    <ArtistDialog
+      artistId={selectedArtistId}
+      isOpen={isArtistDialogOpen}
+      onClose={() => setIsArtistDialogOpen(false)}
+      onAddTrackToQueue={handleAddToQueue}
+      onAddItemToQueue={async (item) => {
+        if ('url' in item && 'title' in item && 'artist' in item && 'thumbnail' in item) {
+          await handleAddToQueue(item as Track);
+        } else {
+          console.warn('Unsupported item type:', item);
+        }
+      }}
+    />
+  );
+
+  // ================= docked（デスクトップ右カラム） =================
+  if (isDocked) {
+    return (
+      <TooltipProvider>
+        <div
+          className="flex flex-col h-full min-h-0 w-full"
+          role="region"
+          aria-label="再生中"
+        >
+          <div className="flex flex-col items-center gap-4 px-6 pt-6 pb-4 flex-shrink-0">
+            {artwork}
+            {trackInfo}
+            {controls}
+          </div>
+          <div className="flex-1 min-h-0 flex flex-col border-t border-border/50">
+            {panelTabs()}
+          </div>
+          {artistDialog}
+        </div>
+      </TooltipProvider>
+    );
+  }
+
+  // ================= sheet（モバイル/タブレット フルスクリーン） =================
   return (
     <TooltipProvider>
-      <motion.div
+      <div
         {...swipeHandlers}
-        className="flex flex-col items-center justify-between h-full bg-gradient-to-b from-secondary/30 to-background p-4 overflow-hidden relative"
-        initial={{ opacity: 0, y: "100%" }}
-        animate={{ opacity: isVisible ? 1 : 0, y: isVisible ? 0 : "100%" }}
-        exit={{ opacity: 0, y: "100%" }}
-        transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
+        className="flex flex-col items-center h-full bg-gradient-to-b from-secondary/30 to-background overflow-hidden relative px-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
         role="region"
         aria-label="音楽プレイヤー"
       >
-        {/* Close button */}
-        <Button
-          onClick={onClose}
-          className="absolute top-4 left-4 z-10 bg-black/5 hover:bg-black/10 text-foreground backdrop-blur-sm transition-all duration-200"
-          variant="ghost"
-          size="icon"
-          aria-label="プレイヤーを閉じる"
-        >
-          <ChevronDownIcon size={28}/>
-        </Button>
-
-        <div className="flex-grow flex flex-col items-center justify-center w-full max-w-md pt-16 sm:pt-8">
-          {/* Album artwork - Apple Music style with shadow */}
-          <motion.div
-            className="w-full max-w-[75vw] sm:max-w-[45vw] aspect-square rounded-2xl overflow-hidden mb-6 sm:mb-10 relative"
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.5, ease: [0.25, 0.1, 0.25, 1] }}
-            style={{
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 10px 20px -5px rgba(0, 0, 0, 0.15)'
-            }}
+        {/* 上部バー: 閉じるボタン + ラベル */}
+        <div className="w-full flex items-center justify-between h-12 flex-shrink-0">
+          <Button
+            onClick={onClose}
+            className="rounded-full bg-black/5 hover:bg-black/10 text-foreground"
+            variant="ghost"
+            size="icon"
+            aria-label="プレイヤーを閉じる"
           >
-            {currentTrack && (
-              <Image
-                ref={imageRef}
-                src={currentTrack.thumbnail || '/default_thumbnail.webp'}
-                alt={currentTrack.title || '選択された曲はありません'}
-                fill
-                style={{ objectFit: 'cover' }}
-                onLoad={() => setImageLoaded(true)}
-                className={`z-0 transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
-                unoptimized
-              />
-            )}
+            <ChevronDownIcon size={26}/>
+          </Button>
+          <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Now Playing</span>
+          <div className="w-10" aria-hidden="true" />
+        </div>
 
-            <AnimatePresence>
-              {!imageLoaded && (
-                <motion.div
-                  className="absolute inset-0 bg-secondary flex items-center justify-center"
-                  initial={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                >
-                  <Disc3 className="w-16 h-16 text-muted-foreground animate-spin" />
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
-
-          {/* Track information */}
-          <motion.div
-            className="w-full text-center mb-6 sm:mb-8 px-4"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
-          >
-            <h2 className="text-xl sm:text-2xl font-bold text-foreground truncate mb-2" title={currentTrack?.title}>
-              {currentTrack?.title || 'タイトルなし'}
-            </h2>
-
-            {currentTrack?.artist ? (
-              <motion.div
-                className="inline-flex items-center justify-center max-w-[90%]"
+        {/* 本体: 縦画面=縦積み / 横長の低い画面=左右2カラム（CSS: .player-sheet-body） */}
+        <div className="player-sheet-body flex-1 min-h-0 w-full">
+          <div className="player-sheet-art flex items-center justify-center min-h-0">
+            {artwork}
+          </div>
+          <div className="player-sheet-side flex flex-col items-center justify-center min-h-0 min-w-0 gap-4">
+            {trackInfo}
+            <div className="flex flex-col items-center gap-3 flex-shrink-0">
+              {controls}
+              <motion.button
+                className="flex items-center justify-center bg-secondary/80 rounded-full px-5 py-2 gap-2"
+                onClick={() => setIsDrawerOpen(true)}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
+                aria-expanded={isDrawerOpen}
+                aria-controls="queue-drawer"
               >
-                <button
-                  onClick={() => handleArtistClick(currentTrack.artist)}
-                  disabled={isArtistLoading}
-                  className="group relative inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-primary/10 hover:bg-primary/15 transition-all duration-200"
-                  aria-label={`${currentTrack.artist}の詳細を表示`}
-                >
-                  {isArtistLoading ? (
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                      <span className="text-muted-foreground text-sm">読み込み中...</span>
-                    </div>
-                  ) : (
-                    <>
-                      <span className="text-base sm:text-lg text-primary font-medium max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
-                        {currentTrack.artist}
-                      </span>
-                      <ExternalLink className="w-4 h-4 text-primary opacity-60 group-hover:opacity-100 transition-opacity" />
-                    </>
-                  )}
-                </button>
-              </motion.div>
-            ) : (
-              <p className="text-base sm:text-lg text-muted-foreground mt-1 sm:mt-2">
-                アーティスト不明
-              </p>
-            )}
-          </motion.div>
-
-          {/* Artist dialog */}
-          {isArtistDialogOpen && selectedArtistId && (
-            <ArtistDialog
-              artistId={selectedArtistId}
-              isOpen={isArtistDialogOpen}
-              onClose={() => setIsArtistDialogOpen(false)}
-              onAddTrackToQueue={handleAddToQueue}
-              onAddItemToQueue={async (item) => {
-                if ('url' in item && 'title' in item && 'artist' in item && 'thumbnail' in item) {
-                  await handleAddToQueue(item as Track);
-                } else {
-                  console.warn('Unsupported item type:', item);
-                }
-              }}
-            />
-          )}
-
-          {/* Track uploader info */}
-          {currentTrack?.added_by && (
-            <motion.div
-              className="flex items-center gap-2 px-4 py-2 rounded-full bg-secondary/60"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-            >
-              <Avatar className="w-6 h-6">
-                {currentTrack.added_by.image ? (
-                  <AvatarImage src={currentTrack.added_by.image} alt={currentTrack.added_by.name || 'Unknown'} />
-                ) : (
-                  <AvatarFallback className="bg-primary/10"><UserIcon className="h-3 w-3 text-primary" /></AvatarFallback>
-                )}
-              </Avatar>
-              <span className="text-sm text-muted-foreground">
-                {currentTrack.added_by.name || 'Unknown'}さんが追加
-              </span>
-            </motion.div>
-          )}
-
-        </div>
-
-        {/* Player controls */}
-        <div className="w-full max-w-md">
-          <div className="flex justify-center items-center space-x-6 sm:space-x-10 mb-6 sm:mb-8">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <motion.button
-                  whileHover={{ scale: isLoading ? 1 : 1.05 }}
-                  whileTap={{ scale: isLoading ? 1 : 0.95 }}
-                  onClick={isLoading ? undefined : isPlaying ? onPause : onPlay}
-                  className="apple-play-button w-[72px] h-[72px] sm:w-20 sm:h-20"
-                  disabled={isLoading}
-                  aria-label={isLoading ? "読み込み中" : isPlaying ? "一時停止" : "再生"}
-                >
-                  {isLoading ? (
-                    <Loader2 className="animate-spin w-8 h-8 text-white" />
-                  ) : isPlaying ? (
-                    <PauseIcon className="w-8 h-8 text-white" fill="white" />
-                  ) : (
-                    <PlayIcon className="w-8 h-8 text-white ml-1" fill="white" />
-                  )}
-                </motion.button>
-              </TooltipTrigger>
-              <TooltipContent className="bg-white/95 backdrop-blur-xl border-black/10">
-                <p>{isLoading ? "読み込み中" : isPlaying ? "一時停止" : "再生"}</p>
-              </TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={onSkip}
-                  className="p-4 rounded-full bg-secondary/80 hover:bg-secondary transition-all duration-200"
-                  aria-label="次の曲へ"
-                >
-                  <SkipForwardIcon size={24} className="text-foreground" />
-                </motion.button>
-              </TooltipTrigger>
-              <TooltipContent className="bg-white/95 backdrop-blur-xl border-black/10">
-                <p>次の曲へ</p>
-              </TooltipContent>
-            </Tooltip>
+                <ListMusic size={18} className="text-foreground" />
+                <span className="text-sm font-medium text-foreground">
+                  キュー{queue.length > 0 ? `（${queue.length}）` : ''}・関連曲
+                </span>
+              </motion.button>
+            </div>
           </div>
-
-          {/* Queue toggle button */}
-          <motion.button
-            className="mt-2 sm:mt-4 flex flex-col items-center cursor-pointer w-full"
-            onClick={() => setIsDrawerOpen(true)}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            aria-expanded={isDrawerOpen}
-            aria-controls="queue-drawer"
-          >
-            <motion.div
-              className="flex items-center justify-center bg-secondary/80 rounded-full px-5 py-2.5 gap-2"
-              animate={{ y: [0, -3, 0] }}
-              transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
-            >
-              <ListMusic size={18} className="text-foreground" />
-              <span className="text-sm font-medium text-foreground">
-                キューを表示
-              </span>
-            </motion.div>
-          </motion.button>
         </div>
+
+        {artistDialog}
 
         {/* Queue drawer - Apple Music style */}
         <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
           <DrawerContent
             {...drawerSwipeHandlers}
-            className="bg-background border-t border-border"
+            className="bg-background border-t border-border max-h-[88dvh]"
             id="queue-drawer"
           >
-            <DrawerHeader className="border-b border-border/50 pb-4">
+            <DrawerHeader className="border-b border-border/50 pb-3">
               <DrawerTitle className="text-xl font-bold text-foreground">再生キュー</DrawerTitle>
               <DrawerDescription className="text-muted-foreground">
-                次に再生される曲
+                次に再生される曲と関連曲
               </DrawerDescription>
             </DrawerHeader>
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <div className="px-4 pt-4">
-                <TabsList className="grid w-full grid-cols-2 bg-secondary/60 p-1 rounded-full">
-                  <TabsTrigger
-                    value="queue"
-                    className="rounded-full data-[state=active]:bg-white data-[state=active]:shadow-sm text-foreground"
-                    aria-controls="queue-panel"
-                  >
-                    キュー
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="related"
-                    className="rounded-full data-[state=active]:bg-white data-[state=active]:shadow-sm text-foreground"
-                    aria-controls="related-panel"
-                  >
-                    関連曲
-                  </TabsTrigger>
-                </TabsList>
-              </div>
+            {panelTabs({ height: 'min(calc(100vh - 280px), calc(100dvh - 280px))' })}
 
-              <TabsContent
-                value="queue"
-                className="mt-4 overflow-y-auto pb-20"
-                style={{ height: 'min(calc(100vh - 300px), calc(100dvh - 300px))' }}
-                id="queue-panel"
-                role="tabpanel"
-              >
-                <QueueList
-                  queue={queue}
-                  currentTrack={currentTrack}
-                  isPlaying={isPlaying}
-                  onPlayPause={isPlaying ? onPause : onPlay}
-                  onReorder={onReorder}
-                  onClose={() => setIsDrawerOpen(false)}
-                  onDelete={onDelete}
-                  isEmbedded
-                />
-              </TabsContent>
-
-              <TabsContent
-                value="related"
-                className="mt-4 overflow-y-auto space-y-3 pb-20 px-4"
-                style={{ height: 'min(calc(100vh - 300px), calc(100dvh - 300px))' }}
-                id="related-panel"
-                role="tabpanel"
-              >
-                <div className="flex flex-wrap gap-2 justify-between mb-4">
-                  <Button
-                    onClick={handleAddAllToQueue}
-                    disabled={isRelatedLoading || relatedTracks.length === 0}
-                    size="sm"
-                    className="bg-primary hover:bg-primary/90 text-white rounded-full text-xs sm:text-sm"
-                  >
-                    <PlusIcon className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
-                    <span className="hidden xs:inline">全て</span>追加
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      setIsRelatedLoading(true);
-                      if (currentTrack) {
-                        const videoId = extractVideoId(currentTrack.url);
-                        if (videoId) {
-                          api.getRelatedSongs(videoId)
-                            .then(tracks => {
-                              setRelatedTracks(tracks);
-                              setIsRelatedLoading(false);
-                            })
-                            .catch(error => {
-                              console.error('関連トラック取得エラー:', error);
-                              setIsRelatedLoading(false);
-                              toast({
-                                title: 'エラー',
-                                description: '関連動画の取得に失敗しました。',
-                                variant: 'destructive',
-                              });
-                            });
-                        } else {
-                          setIsRelatedLoading(false);
-                        }
-                      } else {
-                        setIsRelatedLoading(false);
-                      }
-                    }}
-                    disabled={isRelatedLoading}
-                    size="sm"
-                    variant="outline"
-                    className="rounded-full text-xs sm:text-sm border-border"
-                  >
-                    <RefreshCwIcon className={`mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4 ${isRelatedLoading ? 'animate-spin' : ''}`} />
-                    再取得
-                  </Button>
-                </div>
-                <AnimatePresence mode="wait">
-                  {isRelatedLoading ? (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="space-y-3"
-                      key="skeletons"
-                    >
-                      {renderSkeletons()}
-                    </motion.div>
-                  ) : (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.3 }}
-                      className="space-y-3"
-                      key="related-tracks"
-                    >
-                      {relatedTracks.length === 0 ? (
-                        <div className="text-center py-12 text-muted-foreground">
-                          <Disc3 className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                          <p>関連する曲が見つかりませんでした</p>
-                        </div>
-                      ) : (
-                        relatedTracks.map(track => (
-                          <RelatedTrackItem
-                            key={track.url}
-                            track={track}
-                            onAddToQueue={handleAddToQueue}
-                          />
-                        ))
-                      )}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </TabsContent>
-            </Tabs>
-
-            <DrawerFooter className="border-t border-border/50 pt-4">
+            <DrawerFooter className="border-t border-border/50 pt-3">
               <DrawerClose asChild>
                 <Button
                   variant="outline"
@@ -694,7 +704,7 @@ export const MainPlayer: React.FC<MainPlayerProps> = React.memo(({
             </DrawerFooter>
           </DrawerContent>
         </Drawer>
-      </motion.div>
+      </div>
     </TooltipProvider>
   );
 });

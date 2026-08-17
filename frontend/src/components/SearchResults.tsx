@@ -80,7 +80,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
   return (
     <TooltipProvider delayDuration={300} skipDelayDuration={100}>
       <motion.div
-        className="fixed top-14 left-0 right-0 bottom-0 bg-background z-40 overflow-hidden flex flex-col"
+        className="absolute inset-0 bg-background z-30 overflow-hidden flex flex-col pb-[var(--bottom-inset,0px)]"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 20 }}
