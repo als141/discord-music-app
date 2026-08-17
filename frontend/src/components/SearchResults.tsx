@@ -18,6 +18,7 @@ import Image from 'next/image';
 import { api } from '@/utils/api';
 import ArtistDialog from '@/components/ArtistDialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface SearchResultsProps {
   results: SearchItem[];
@@ -25,9 +26,13 @@ interface SearchResultsProps {
   onAddTrackToQueue: (track: Track) => Promise<void>;
   onClose: () => void;
   onSearch: (query: string) => Promise<void>;
+  /** 親（ヘッダー検索）側で検索中のとき true。スケルトンを表示する */
+  isSearching?: boolean;
+  /** 直近の検索クエリ（結果0件時の文言用） */
+  lastQuery?: string;
 }
 
-export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQueue, onAddTrackToQueue, onClose, onSearch }) => {
+export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQueue, onAddTrackToQueue, onClose, onSearch, isSearching = false, lastQuery = '' }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [playlistTracks, setPlaylistTracks] = useState<{[key: string]: Track[]}>({});
@@ -131,7 +136,22 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
         {/* Results area - 通常のネイティブスクロール */}
         <div className="flex-grow overflow-y-auto overflow-x-hidden">
           <div className="p-4 sm:p-6 w-full">
-            {results.length === 0 ? (
+            {(isSearching || isLoading) && results.length === 0 ? (
+              <div className="space-y-3" role="status" aria-live="polite" aria-label="検索中">
+                <Skeleton className="h-9 w-72 max-w-full rounded-full" />
+                <Skeleton className="h-6 w-32 mt-4" />
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 p-3 rounded-2xl bg-secondary/40">
+                    <Skeleton className="w-12 h-12 rounded-lg flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <Skeleton className="h-4 w-2/3 mb-2" />
+                      <Skeleton className="h-3 w-1/3" />
+                    </div>
+                    <Skeleton className="w-9 h-9 rounded-full" />
+                  </div>
+                ))}
+              </div>
+            ) : results.length === 0 ? (
               <motion.div
                 className="flex flex-col items-center justify-center py-20"
                 initial={{ opacity: 0, y: 20 }}
@@ -141,10 +161,10 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
                   <Music2 className="w-10 h-10 text-muted-foreground/50" />
                 </div>
                 <p className="text-muted-foreground text-center">
-                  検索結果がありません
+                  {lastQuery ? `「${lastQuery}」の検索結果がありません` : '検索結果がありません'}
                 </p>
                 <p className="text-muted-foreground/60 text-sm text-center mt-1">
-                  キーワードを入力して検索してください
+                  {lastQuery ? '別のキーワードで試してみてください' : 'キーワードを入力して検索してください'}
                 </p>
               </motion.div>
             ) : (

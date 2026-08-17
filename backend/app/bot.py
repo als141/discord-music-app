@@ -23,7 +23,7 @@ from xai_sdk.tools import web_search, x_search
 from PIL import Image
 from io import BytesIO
 import base64
-from typing import Optional, Dict, List, Any, Union
+from typing import Optional, Dict, List, Any, Union, Callable, Awaitable
 import json
 from datetime import datetime
 import aiohttp
@@ -91,11 +91,27 @@ async def is_playing_local(guild_id: str):
     player = music_players.get(guild_id)
     return player.is_playing() if player else False
 
-# 簡易通知関数（循環参照を避けるため）
+# WebSocket 通知の実体は main.py（active_connections を持つ側）が register_notify_clients() で登録する。
+# 循環 import を避けるため bot.py からは main.py を参照しない。
+# 注意: 以前はここが no-op だったため、Discord 側（自動参加 / スラッシュコマンド）で作られた
+# MusicPlayer からブラウザへ一切リアルタイム更新が飛ばないバグがあった。
+_notify_clients_impl: Optional[Callable[[str], Awaitable[None]]] = None
+
+
+def register_notify_clients(fn: Callable[[str], Awaitable[None]]) -> None:
+    """WebSocket 通知関数を登録する（main.py から呼ぶ）"""
+    global _notify_clients_impl
+    _notify_clients_impl = fn
+
+
 async def notify_clients_local(guild_id: str):
-    """music_player.pyが独自に通知機能を持っているため、ここでは何もしない"""
-    # WebSocket通知は MusicPlayer の notify_clients コールバックで処理される
-    pass
+    """登録済みの WebSocket 通知関数へ委譲する（未登録なら何もしない）"""
+    if _notify_clients_impl is None:
+        return
+    try:
+        await _notify_clients_impl(guild_id)
+    except Exception as e:  # 通知失敗で再生系の処理を止めない
+        print(f"notify_clients failed (guild: {guild_id}): {type(e).__name__}: {e}")
 
 load_dotenv()
 # x.ai (Grok) 用のクライアント設定

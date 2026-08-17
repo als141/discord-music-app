@@ -64,6 +64,9 @@ export const MainApp: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchItem[]>([]);
   const [isSearchActive, setIsSearchActive] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [lastSearchQuery, setLastSearchQuery] = useState('');
+  const searchSeqRef = useRef(0);
   const [homeActiveTab, setHomeActiveTab] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('homeActiveTab') || 'home';
@@ -220,17 +223,28 @@ export const MainApp: React.FC = () => {
 
   // 検索
   const handleSearch = useCallback(async (query: string) => {
+    const seq = ++searchSeqRef.current;
+    // 先にオーバーレイを開いてスケルトンを出す（結果待ちの間に画面が固まって見えないように）
+    setIsSearchActive(true);
+    setIsSearching(true);
+    setLastSearchQuery(query);
+    setSearchResults([]);
     try {
       const results = await api.search(query);
+      // 連打時は最後の検索だけ反映（古い応答が新しい結果を上書きしないように）
+      if (seq !== searchSeqRef.current) return;
       setSearchResults(results);
-      setIsSearchActive(true);
     } catch (error) {
+      if (seq !== searchSeqRef.current) return;
       console.error(error);
+      setSearchResults([]);
       toast({
         title: "エラー",
         description: "検索に失敗しました。",
         variant: "destructive",
       });
+    } finally {
+      if (seq === searchSeqRef.current) setIsSearching(false);
     }
   }, [toast]);
 
@@ -355,6 +369,8 @@ export const MainApp: React.FC = () => {
                 onAddTrackToQueue={(track) => addToQueue(track, getUserInfo())}
                 onClose={() => setIsSearchActive(false)}
                 onSearch={handleSearch}
+                isSearching={isSearching}
+                lastQuery={lastSearchQuery}
               />
             )}
 

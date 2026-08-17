@@ -1,5 +1,6 @@
 import asyncio
 import os
+import uuid
 import threading
 import yt_dlp
 import discord
@@ -226,6 +227,9 @@ class MusicPlayer:
 
         # 状態バージョン管理（フロントエンドとの同期用）
         self.state_version: int = 0
+        # プレイヤーインスタンスごとの世代ID。bot再起動やVC再参加で MusicPlayer が作り直されると
+        # state_version が 0 に戻るため、クライアントはこの epoch が変わったら version 比較をリセットする
+        self.state_epoch: str = uuid.uuid4().hex
 
         logger.info(f"音楽プレイヤーを初期化 (Guild: {guild.name}, ID: {guild_id})")
         

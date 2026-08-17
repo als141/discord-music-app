@@ -92,6 +92,18 @@ export interface SearchItem extends PlayableItem {
   items?: Track[];
 }
 
+export interface PlayerStateSnapshot {
+  current_track: Track | null;
+  queue: QueueItem[];
+  is_playing: boolean;
+  history: QueueItem[];
+  version: number;
+  epoch: string | null;
+  has_player: boolean;
+  timestamp: number;
+  [key: string]: unknown;
+}
+
 export interface QueueItem {
   track: Track;
   position: number;
@@ -265,6 +277,17 @@ export const api = {
     } catch (error) {
       handleApiError(error);
     }
+  },
+
+  /** WebSocket の update と同じ形のプレイヤー状態（再接続・タブ復帰時の再同期用） */
+  getPlayerState: async (guildId: string): Promise<PlayerStateSnapshot | null> => {
+    try {
+      const response = await apiClient.get(`/player-state/${guildId}`);
+      return response.data;
+    } catch (error) {
+      handleApiError(error);
+    }
+    return null;
   },
 
   getCurrentTrack: async (guildId: string): Promise<Track | null> => {

@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useToast } from '@/hooks/use-toast'
 import { useSession, signIn, signOut } from 'next-auth/react'
-import { useGuildStore } from '@/store'
+import { useGuildStore, usePlayerStore } from '@/store'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import {
   DropdownMenu,
@@ -39,6 +39,8 @@ export const Header: React.FC<HeaderProps> = React.memo(({
   const { resetAutoConnectCheck, mutualServers, activeServerId, voiceChannels, activeChannelId, isBotConnected } = useGuildStore()
   const activeServer = mutualServers.find(s => s.id === activeServerId) || null
   const activeChannel = voiceChannels.find(c => c.id === activeChannelId) || null
+  const connectionStatus = usePlayerStore(s => s.connectionStatus)
+  const isSyncing = !!activeServer && (connectionStatus === 'connecting' || connectionStatus === 'reconnecting' || connectionStatus === 'error')
 
   useEffect(() => {
     const history = localStorage.getItem('searchHistory')
@@ -146,7 +148,11 @@ export const Header: React.FC<HeaderProps> = React.memo(({
             >
               <span
                 className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                  isBotConnected && activeChannel ? 'bg-green-500 shadow-[0_0_0_3px_rgba(34,197,94,0.2)]' : activeServer ? 'bg-amber-400' : 'bg-muted-foreground/40'
+                  isSyncing
+                    ? 'bg-amber-400 animate-pulse shadow-[0_0_0_3px_rgba(251,191,36,0.25)]'
+                    : isBotConnected && activeChannel
+                      ? 'bg-green-500 shadow-[0_0_0_3px_rgba(34,197,94,0.2)]'
+                      : activeServer ? 'bg-muted-foreground/50' : 'bg-muted-foreground/40'
                 }`}
                 aria-hidden="true"
               />
@@ -155,9 +161,11 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                   {activeServer ? activeServer.name : 'サーバー未選択'}
                 </span>
                 {activeServer && (
-                  <span className="text-[11px] text-muted-foreground truncate max-w-full inline-flex items-center gap-1">
+                  <span className={`text-[11px] truncate max-w-full inline-flex items-center gap-1 ${isSyncing ? 'text-amber-600' : 'text-muted-foreground'}`}>
                     <Volume2 className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
-                    {activeChannel ? activeChannel.name : 'ボイスチャンネル未接続'}
+                    {isSyncing
+                      ? (connectionStatus === 'connecting' ? '同期中…' : '再接続中…')
+                      : activeChannel ? activeChannel.name : 'ボイスチャンネル未接続'}
                   </span>
                 )}
               </span>

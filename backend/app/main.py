@@ -4,7 +4,8 @@ import uuid
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional, Dict
 import asyncio
-from .bot import client, music_players
+import json
+from .bot import client, music_players, register_notify_clients
 from .services.music_player import MusicPlayer, Song
 from .schemas import (
     User, Track, QueueItem, SearchItem, SearchResult, Server, VoiceChannel,
@@ -243,53 +244,68 @@ def extract_artist_id(artist_data):
 
 active_connections: Dict[str, List[WebSocket]] = {}
 
-async def notify_clients(guild_id: str):
-    """WebSocketクライアントに音楽プレイヤーの状態変更を通知"""
+async def build_player_state(guild_id: str, *, bump_version: bool) -> dict:
+    """WebSocket / REST 共通のプレイヤー状態ペイロードを組み立てる。
+
+    bump_version=True のとき（状態変更通知）は version を進める。
+    初期送信・REST 取得・sync 要求のときは現在の version をそのまま返す。
+    """
     import time
 
+    current_track = await get_current_track(guild_id)
+    queue = await get_queue(guild_id)
+    is_playing_status = await is_playing(guild_id)
+    history = await get_history(guild_id)
+
+    player = music_players.get(guild_id)
+    if player:
+        version = player.increment_version() if bump_version else player.get_version()
+        epoch = player.state_epoch
+    else:
+        version = 0
+        epoch = None
+
+    return {
+        "current_track": jsonable_encoder(current_track),
+        "queue": jsonable_encoder(queue),
+        "is_playing": is_playing_status,
+        "history": jsonable_encoder(history),
+        "version": version,
+        "epoch": epoch,
+        "has_player": player is not None,
+        "timestamp": int(time.time() * 1000),  # ミリ秒単位のタイムスタンプ
+    }
+
+
+async def _send_state(websocket: WebSocket, guild_id: str, *, bump_version: bool) -> None:
+    state = await build_player_state(guild_id, bump_version=bump_version)
+    await websocket.send_json({"type": "update", "data": state})
+
+
+async def notify_clients(guild_id: str):
+    """WebSocketクライアントに音楽プレイヤーの状態変更を通知"""
     connections = active_connections.get(guild_id, [])
     if not connections:
         return
 
     try:
-        # データを一度だけ取得してキャッシュ
-        current_track = await get_current_track(guild_id)
-        queue = await get_queue(guild_id)
-        is_playing_status = await is_playing(guild_id)
-        history = await get_history(guild_id)
-
-        # バージョンを取得（プレイヤーが存在する場合）
-        player = music_players.get(guild_id)
-        version = player.increment_version() if player else 0
-
-        message = {
-            "type": "update",
-            "data": {
-                "current_track": jsonable_encoder(current_track),
-                "queue": jsonable_encoder(queue),
-                "is_playing": is_playing_status,
-                "history": jsonable_encoder(history),
-                "version": version,
-                "timestamp": int(time.time() * 1000)  # ミリ秒単位のタイムスタンプ
-            }
-        }
+        message = {"type": "update", "data": await build_player_state(guild_id, bump_version=True)}
     except Exception as e:
         print(f"データ取得エラー (guild: {guild_id}): {str(e)}")
         return
-    
-    # 切断されたコネクションを追跡
-    disconnected_connections = []
-    
-    for connection in connections:
+
+    # 全接続へ並行送信。遅い/死んだ接続が他の接続の配信を遅らせないようにする
+    async def _send(connection: WebSocket) -> bool:
         try:
-            await connection.send_json(message)
-        except WebSocketDisconnect:
-            print(f"WebSocket切断検出 (guild: {guild_id})")
-            disconnected_connections.append(connection)
+            await asyncio.wait_for(connection.send_json(message), timeout=5)
+            return True
         except Exception as e:
-            print(f"WebSocket通知エラー (guild: {guild_id}): {str(e)}")
-            disconnected_connections.append(connection)
-    
+            print(f"WebSocket通知エラー (guild: {guild_id}): {type(e).__name__}: {str(e)}")
+            return False
+
+    results = await asyncio.gather(*(_send(c) for c in list(connections)), return_exceptions=False)
+    disconnected_connections = [c for c, ok in zip(list(connections), results) if not ok]
+
     # 切断されたコネクションをクリーンアップ
     if disconnected_connections:
         for connection in disconnected_connections:
@@ -297,148 +313,21 @@ async def notify_clients(guild_id: str):
                 active_connections[guild_id].remove(connection)
             except (ValueError, KeyError):
                 pass
-        
-        # リストが空になった場合は削除
+
         if guild_id in active_connections and not active_connections[guild_id]:
             del active_connections[guild_id]
             print(f"ギルド {guild_id} の全接続が削除されました")
-                
 
 
-@app.post("/upload-audio/{guild_id}")
-async def upload_audio(
-    guild_id: str,
-    user_id: str = Form(...),
-    user_name: str = Form(...),
-    title: str = Form(...),
-    artist: str = Form(...),
-    audio_file: UploadFile = File(...),
-    thumbnail_file: UploadFile = File(None),
-):
-    # 音声ファイルの拡張子チェック
-    allowed_audio_extensions = ["mp3", "wav", "flac", "aac", "m4a"]
-    audio_ext = audio_file.filename.split(".")[-1].lower()
-    if audio_ext not in allowed_audio_extensions:
-        raise HTTPException(status_code=400, detail="対応外の音声形式です。")
-
-    # ユニークIDで保存ファイル名作成
-    audio_id = str(uuid.uuid4())
-    safe_audio_filename = f"{audio_id}.{audio_ext}"
-    audio_path = os.path.join(UPLOAD_DIR, safe_audio_filename)
-    full_audio_path = os.path.abspath(audio_path)
-
-    # 音声ファイル保存
-    try:
-        async with aiofiles.open(audio_path, 'wb') as out_file:
-            content = await audio_file.read()
-            await out_file.write(content)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"音声ファイル保存失敗: {e}")
-
-    # サムネイルファイルの処理
-    thumb_filename = ""
-    if thumbnail_file:
-        thumb_ext = thumbnail_file.filename.split(".")[-1].lower()
-        allowed_thumb_exts = ["jpg","jpeg","png","gif"]
-        if thumb_ext not in allowed_thumb_exts:
-            raise HTTPException(status_code=400, detail="サムネイルの拡張子が無効です。")
-        safe_thumb_filename = f"{audio_id}.{thumb_ext}"
-        thumb_path = os.path.join(UPLOAD_DIR, safe_thumb_filename)
-        try:
-            async with aiofiles.open(thumb_path, 'wb') as out_file:
-                thumb_content = await thumbnail_file.read()
-                await out_file.write(thumb_content)
-            thumb_filename = safe_thumb_filename
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"サムネイル保存失敗: {e}")
-    # DB登録
-    new_song = UploadedSong(
-        id=audio_id,
-        guild_id=guild_id,
-        title=title,
-        artist=artist,
-        filename=safe_audio_filename,
-        thumbnail_filename=thumb_filename,
-        uploader_id=user_id,
-        uploader_name=user_name,
-        full_path=full_audio_path,
-    )
-    add_uploaded_song(new_song)
-
-    return {"message": "アップロード成功", "song": new_song}
-
-@app.get("/uploaded-audio-list/{guild_id}", response_model=List[SongResponse])
-async def get_uploaded_audio_list(guild_id: str):
-    songs = get_uploaded_songs_in_guild(guild_id)
-    return [SongResponse(**s.dict()) for s in songs]
-
-@app.put("/uploaded-audio-edit/{guild_id}/{song_id}", response_model=SongResponse)
-async def edit_uploaded_audio(
-    guild_id: str,
-    song_id: str,
-    user_id: str = Form(...),
-    title: str = Form(...),
-    artist: str = Form(...),
-):
-    song = find_uploaded_song_by_id(guild_id, song_id)
-    if not song:
-        raise HTTPException(status_code=404, detail="楽曲が見つかりません。")
-    if song.uploader_id != user_id:
-        raise HTTPException(status_code=403, detail="編集権限がありません。")
-
-    song.title = title
-    song.artist = artist
-    update_uploaded_song(song)
-    return SongResponse(**song.dict())
-
-@app.delete("/uploaded-audio-delete/{guild_id}/{song_id}")
-async def delete_uploaded_audio(guild_id: str, song_id: str, user_id: str):
-    song = find_uploaded_song_by_id(guild_id, song_id)
-    if not song:
-        raise HTTPException(status_code=404, detail="楽曲が存在しません。")
-    if song.uploader_id != user_id:
-        raise HTTPException(status_code=403, detail="削除権限がありません。")
-
-    if os.path.exists(song.full_path):
-        os.remove(song.full_path)
-    thumb_abs = os.path.join(UPLOAD_DIR, song.thumbnail_filename)
-    if song.thumbnail_filename and os.path.exists(thumb_abs):
-        os.remove(thumb_abs)
-
-    delete_uploaded_song(guild_id, song_id)
-    return {"message": "削除成功"}
+# Discord 側（自動参加 / スラッシュコマンド）で作られた MusicPlayer からも WebSocket 通知が飛ぶように登録
+register_notify_clients(notify_clients)
 
 
-@app.post("/set-volume/{guild_id}")
-async def set_volume(guild_id: str, volume: float):
-    if not 0.0 <= volume <= 1.0:
-        raise HTTPException(status_code=400, detail="Volume must be between 0.0 and 1.0")
-    player = music_players.get(guild_id)
-    if player:
-        await player.set_volume(volume)
-        return {"message": "Volume set"}
-    raise HTTPException(status_code=404, detail="No active music player found")
+@app.get("/player-state/{guild_id}")
+async def get_player_state(guild_id: str):
+    """WebSocket の update と同じ形のプレイヤー状態を REST で返す（再接続時・タブ復帰時の再同期用）"""
+    return await build_player_state(guild_id, bump_version=False)
 
-@app.get("/bot-guilds")
-async def get_bot_guilds():
-    bot_guilds = []
-    for guild in client.guilds:
-        bot_guilds.append({
-            'id': str(guild.id),
-            'name': guild.name
-        })
-    return bot_guilds
-
-@app.post("/disconnect-voice-channel/{guild_id}")
-async def disconnect_voice_channel(guild_id: str):
-    guild = client.get_guild(int(guild_id))
-    if guild and guild.voice_client:
-        await guild.voice_client.disconnect()
-        if guild_id in music_players:
-            del music_players[guild_id]
-        await notify_clients(guild_id)
-        return {"message": "ボイスチャネルから切断しました"}
-    raise HTTPException(status_code=404, detail="指定されたギルドでボットはボイスチャネルに接続されていません")
 
 @app.websocket("/ws/{guild_id}")
 async def websocket_endpoint(websocket: WebSocket, guild_id: str):
@@ -454,26 +343,7 @@ async def websocket_endpoint(websocket: WebSocket, guild_id: str):
         import time
 
         # 初期データを送信
-        current_track = await get_current_track(guild_id)
-        queue = await get_queue(guild_id)
-        is_playing_status = await is_playing(guild_id)
-        history = await get_history(guild_id)
-
-        # バージョンを取得（プレイヤーが存在する場合）
-        player = music_players.get(guild_id)
-        version = player.get_version() if player else 0
-
-        await websocket.send_json({
-            "type": "update",
-            "data": {
-                "current_track": jsonable_encoder(current_track),
-                "queue": jsonable_encoder(queue),
-                "is_playing": is_playing_status,
-                "history": jsonable_encoder(history),
-                "version": version,
-                "timestamp": int(time.time() * 1000)
-            }
-        })
+        await _send_state(websocket, guild_id, bump_version=False)
         
         # ハートビートタスクを開始
         async def heartbeat():
@@ -496,11 +366,21 @@ async def websocket_endpoint(websocket: WebSocket, guild_id: str):
             app.state.background_tasks.add(heartbeat_task)
             heartbeat_task.add_done_callback(app.state.background_tasks.discard)
         
-        # メインループ（メッセージ待機）
+        # メインループ（クライアントからのメッセージ処理）
+        #   {"type":"ping"} → {"type":"pong"}（クライアント側の生存確認）
+        #   {"type":"sync"} → 現在の状態を再送（タブ復帰・再接続後の取りこぼし補正）
         try:
             while True:
                 data = await websocket.receive_text()
-                # クライアントからのメッセージがあれば処理（必要に応じて）
+                try:
+                    msg = json.loads(data) if data else {}
+                except ValueError:
+                    continue
+                msg_type = msg.get("type") if isinstance(msg, dict) else None
+                if msg_type == "ping":
+                    await websocket.send_json({"type": "pong", "timestamp": int(time.time() * 1000)})
+                elif msg_type == "sync":
+                    await _send_state(websocket, guild_id, bump_version=False)
         except WebSocketDisconnect:
             print(f"WebSocket disconnected for guild {guild_id}")
         

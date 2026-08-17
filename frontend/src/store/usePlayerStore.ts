@@ -3,10 +3,14 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { User, Track, api, QueueItem, PlayableItem } from '@/utils/api';
 import { toast } from '@/hooks/use-toast';
-import { createWebSocketConnection, WebSocketData } from '@/utils/websocket';
+import { createWebSocketConnection, WebSocketData, WebSocketHandle } from '@/utils/websocket';
 
 // アクティブなWebSocketコネクション
-let wsConnection: { close: () => void } | null = null;
+let wsConnection: WebSocketHandle | null = null;
+// WebSocket が切れている間の REST フォールバックポーリング
+let fallbackPollTimer: ReturnType<typeof setInterval> | null = null;
+const FALLBACK_POLL_INTERVAL_MS = 10000; // 切断中は10秒ごとに /player-state で同期
+let currentGuildId: string | null = null;
 
 // アクティブなサーバーIDを管理するためのシンプルなゲッター
 let getActiveServerId: () => string | null = () => null;
@@ -63,6 +67,8 @@ interface PlayerState {
   connectionStatus: ConnectionStatus;
   lastSyncVersion: number;
   lastSyncTimestamp: number;
+  /** サーバー側 MusicPlayer の世代ID。変わったら version 比較をリセットする */
+  lastSyncEpoch: string | null;
   hasPendingOperation: boolean;
 
   // アクション
@@ -112,6 +118,7 @@ export const usePlayerStore = create<PlayerState>()(
       connectionStatus: 'disconnected' as ConnectionStatus,
       lastSyncVersion: 0,
       lastSyncTimestamp: 0,
+      lastSyncEpoch: null,
       hasPendingOperation: false,
 
       // 基本的な状態更新アクション
@@ -535,8 +542,12 @@ export function setupWebSocket(guildId: string) {
     updateDebounceTimer = null;
   }
 
-  // 接続中状態に設定
+  currentGuildId = guildId;
+  stopFallbackPolling();
+
+  // 接続中状態に設定。ギルドが変わるので version/epoch はリセット
   playerStore.setConnectionStatus('connecting');
+  usePlayerStore.setState({ lastSyncVersion: 0, lastSyncEpoch: null, hasPendingOperation: false });
 
   // 新しい接続を作成
   wsConnection = createWebSocketConnection(
@@ -548,80 +559,27 @@ export function setupWebSocket(guildId: string) {
       }
 
       updateDebounceTimer = setTimeout(() => {
-        const store = usePlayerStore.getState();
-
-        // バージョンチェック：古い更新は無視
-        const newVersion = data.version || 0;
-        const newTimestamp = data.timestamp || Date.now();
-
-        // 操作中の場合は更新をスキップ（楽観的更新を維持）
-        if (store.hasPendingOperation && newVersion <= store.lastSyncVersion) {
-          console.log('[WebSocket] 操作中のため更新をスキップ:', {
-            newVersion,
-            currentVersion: store.lastSyncVersion
-          });
-          return;
-        }
-
-        // 古いバージョンの更新は無視
-        if (newVersion > 0 && newVersion < store.lastSyncVersion) {
-          console.log('[WebSocket] 古いバージョンの更新を無視:', {
-            newVersion,
-            currentVersion: store.lastSyncVersion
-          });
-          return;
-        }
-
-        // 状態を一括更新（1回のset()で全フィールドを更新し、再レンダリングを最小化）
-        const queueItems = data.queue || [];
-        // @ts-expect-error - Type compatibility issues with queue items
-        const current = queueItems.find((item: { isCurrent: boolean }) => item.isCurrent);
-
-        const batchUpdate: Record<string, unknown> = {
-          // @ts-expect-error - Type compatibility issues with track data
-          currentTrack: current?.track || null,
-          // @ts-expect-error - Type compatibility issues with queue items
-          queue: queueItems.filter((item: { isCurrent: boolean }) => !item.isCurrent).map((item: { track: Track }) => item.track),
-          isPlaying: !!data.is_playing,
-          lastSyncVersion: newVersion,
-          lastSyncTimestamp: newTimestamp,
-        };
-
-        if (data.history) {
-          batchUpdate.history = data.history;
-        }
-
-        if (store.hasPendingOperation) {
-          batchUpdate.hasPendingOperation = false;
-          if (pendingOperationTimeoutTimer) {
-            clearTimeout(pendingOperationTimeoutTimer);
-            pendingOperationTimeoutTimer = null;
-          }
-        }
-
-        usePlayerStore.setState(batchUpdate);
+        applyServerState(data, 'websocket');
       }, UPDATE_DEBOUNCE_MS);
     },
     {
       onOpen: () => {
         const store = usePlayerStore.getState();
         store.setConnectionStatus('connected');
+        stopFallbackPolling();
+        // 接続直後にサーバーが初期状態を送ってくる。version 比較はそこでリセットされる（epoch 判定）
       },
       onClose: () => {
         const store = usePlayerStore.getState();
-        // 意図的な切断でない場合は再接続中として表示
-        if (store.connectionStatus === 'connected') {
+        // 意図的な切断でない場合は再接続中として表示し、REST ポーリングで補完
+        if (store.connectionStatus !== 'disconnected') {
           store.setConnectionStatus('reconnecting');
         }
+        startFallbackPolling(guildId);
       },
       onError: () => {
-        const store = usePlayerStore.getState();
-        store.setConnectionStatus('error');
-        toast({
-          title: "接続エラー",
-          description: "サーバーとの接続が一時的に切断されました。自動的に再接続します。",
-          variant: "destructive",
-        });
+        // 詳細は onClose → 再接続に任せる。トーストは出さない（頻発すると邪魔）。
+        // 接続状態はヘッダーのインジケータで表示する
       }
     }
   );
@@ -629,8 +587,107 @@ export function setupWebSocket(guildId: string) {
   return wsConnection;
 }
 
+/**
+ * サーバーから受け取ったプレイヤー状態をストアに反映する（WebSocket / REST 共通）。
+ *
+ * バージョン管理:
+ * - epoch（MusicPlayer の世代ID）が変わっていたら bot 再起動 / VC 再参加なので無条件に受け入れて version をリセット
+ * - 同じ epoch で version が古い更新は無視
+ * - 操作中（楽観的更新中）は、同じ epoch で version が進んでいない更新だけスキップ
+ */
+function applyServerState(data: WebSocketData, source: 'websocket' | 'rest') {
+  const store = usePlayerStore.getState();
+
+  const newVersion = data.version || 0;
+  const newTimestamp = data.timestamp || Date.now();
+  const newEpoch = (data.epoch as string | null | undefined) ?? null;
+  const epochChanged = newEpoch !== store.lastSyncEpoch;
+
+  if (!epochChanged) {
+    // 操作中の場合は、進んでいない更新をスキップ（楽観的更新を維持）
+    if (store.hasPendingOperation && newVersion <= store.lastSyncVersion) {
+      return;
+    }
+    // 古いバージョンの更新は無視（同じ世代内のみ比較）
+    if (newVersion > 0 && newVersion < store.lastSyncVersion) {
+      return;
+    }
+    // REST ポーリングは WebSocket と競合しうるので、同じ version の再適用はしない
+    if (source === 'rest' && newVersion > 0 && newVersion === store.lastSyncVersion) {
+      return;
+    }
+  }
+
+  // 状態を一括更新（1回のset()で全フィールドを更新し、再レンダリングを最小化）
+  const queueItems = data.queue || [];
+  // @ts-expect-error - Type compatibility issues with queue items
+  const current = queueItems.find((item: { isCurrent: boolean }) => item.isCurrent);
+
+  const batchUpdate: Record<string, unknown> = {
+    // @ts-expect-error - Type compatibility issues with track data
+    currentTrack: current?.track || null,
+    // @ts-expect-error - Type compatibility issues with queue items
+    queue: queueItems.filter((item: { isCurrent: boolean }) => !item.isCurrent).map((item: { track: Track }) => item.track),
+    isPlaying: !!data.is_playing,
+    lastSyncVersion: newVersion,
+    lastSyncTimestamp: newTimestamp,
+    lastSyncEpoch: newEpoch,
+  };
+
+  if (data.history) {
+    batchUpdate.history = data.history;
+  }
+
+  if (store.hasPendingOperation) {
+    batchUpdate.hasPendingOperation = false;
+    if (pendingOperationTimeoutTimer) {
+      clearTimeout(pendingOperationTimeoutTimer);
+      pendingOperationTimeoutTimer = null;
+    }
+  }
+
+  usePlayerStore.setState(batchUpdate);
+}
+
+/** WebSocket が切れている間、タブが見えているときだけ REST で状態を取りに行く */
+function startFallbackPolling(guildId: string) {
+  if (fallbackPollTimer) return;
+  const poll = async () => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+    if (currentGuildId !== guildId) return;
+    if (wsConnection?.isOpen()) { stopFallbackPolling(); return; }
+    try {
+      const state = await api.getPlayerState(guildId);
+      if (state && currentGuildId === guildId && !wsConnection?.isOpen()) {
+        applyServerState(state, 'rest');
+      }
+    } catch {
+      // ネットワーク断など。次回に任せる
+    }
+  };
+  fallbackPollTimer = setInterval(poll, FALLBACK_POLL_INTERVAL_MS);
+}
+
+function stopFallbackPolling() {
+  if (fallbackPollTimer) {
+    clearInterval(fallbackPollTimer);
+    fallbackPollTimer = null;
+  }
+}
+
+/** 手動で状態の再同期を要求する（プルリフレッシュ等） */
+export function requestPlayerSync() {
+  if (wsConnection?.isOpen()) {
+    wsConnection.requestSync();
+  } else if (currentGuildId) {
+    api.getPlayerState(currentGuildId).then((state) => { if (state) applyServerState(state, 'rest'); }).catch(() => {});
+  }
+}
+
 // WebSocket接続をクリーンアップする関数
 export function cleanupWebSocket() {
+  currentGuildId = null;
+  stopFallbackPolling();
   // デバウンスタイマーをクリア
   if (updateDebounceTimer) {
     clearTimeout(updateDebounceTimer);
