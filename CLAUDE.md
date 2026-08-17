@@ -101,6 +101,13 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 - `_normalize_album_type()` でロケール表記を正規化、`/related` は10件に制限、`/charts` は `songs` が無い場合 `videos`(list) にフォールバック
 - 検証: ローカルで `app.main` の関数を直接呼んで全フィルタ/related/recommendations/mood/album/playlist を確認 → 本番デプロイ → `scripts/smoke_test.sh` 全OK
 
+### 2026-08-17: デバイスモード（ブラウザ再生）を削除（commit 711ed26e）
+- ユーザー要望により「デバイスモード」を全削除。Header のトグル、store の `isOnDeviceMode`/`deviceQueue`/`deviceCurrentTrack`/`audioRef`/`volume`/`currentTime`/`duration`、MainApp の `<audio>` 要素、MainPlayer のシーク/音量UI、各コンポーネントの `isOnDeviceMode` props
+- backend の `GET /stream`（デバイスモード専用。未認証で任意URLを Pi にダウンロードするエンドポイント）も削除 → 404
+- 残っているもの: backend `/set-volume` はサーバー側音量用で frontend `api.setVolume` から呼べるが UI からは未使用（契約棚卸し対象）
+- 検証: `tsc --noEmit` / `bun run build` 通過、Vercel 本番 Ready、Pi 自動デプロイ成功、smoke_test 全 OK
+- 注意: `bun run lint`（`next lint`）は Next.js のバージョン都合で以前から壊れている（今回の変更とは無関係）
+
 ### 2026-08-17: 自動デプロイが4ヶ月間動いていなかった（deploy.log 誤コミット）
 - `deploy.log` が `.gitignore` にあるのに `3847ef9f`（2026-04-07）で誤ってコミットされていた
 - Pi では `auto-deploy.sh` が常に deploy.log へ追記 → `git status --porcelain` が常に dirty → `deploy.sh` の「未コミット変更あり → skip」に毎回該当し、**pushしても本番に反映されない**状態だった
@@ -194,6 +201,7 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 
 ### API Endpoints
 - `GET /` - ヘルスチェック
+- （`GET /stream` は 2026-08-17 に削除済み）
 - `GET /bot-guilds` - ボットが参加しているサーバー一覧
 - `GET /voice-channels/{guild_id}` - ボイスチャンネル一覧
 - `GET /bot-voice-status/{guild_id}` - ボットのVC接続状態
