@@ -39,7 +39,9 @@ Discord音楽ボットアプリケーション。フロントエンド（Next.js
 - **ログ確認**: `journalctl -u discord-music-bot -f`
 - **過去ログ**: `journalctl -u discord-music-bot --since '24 hours ago' --no-pager`
 - **デプロイログ**: `~/discord-music-app/deploy.log`
-- **自動デプロイ**: 2分ごとにGitHubをチェック (`discord-music-bot-deploy.timer`)
+- **自動デプロイ**: **10秒ごと**にGitHubをチェック (`discord-music-bot-deploy.timer`, `OnUnitActiveSec=10s`)。mainへのpush＝即本番デプロイ＋再起動
+- **本番スモークテスト**: `bash scripts/smoke_test.sh`（デプロイ後に毎回実行。全主要API+Piのエラーログを確認）
+- **リファクタ実行計画**: `docs/refactoring_execution_and_test_plan_ja.md`
 - **手動デプロイ**: `cd ~/discord-music-app && bash deploy.sh`
 - **コード場所**: `/home/als0028/discord-music-app/backend/`
 - **環境変数**: `/home/als0028/discord-music-app/backend/.env`
@@ -72,6 +74,7 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 | davey | 0.1.4 | 必須 |
 | yt-dlp | 2026.3.17 | >= 2026.3 |
 | yt-dlp-ejs | 0.8.0 | >= 0.5.0 |
+| ytmusicapi | 1.12.2（2026-08-17更新） | >= 1.12 |
 
 ### Cloudflare Tunnel
 - **URL**: `https://api.atoriba.jp` → Pi:8080
@@ -89,6 +92,24 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 - 同じDISCORD_TOKENで2台同時稼働すると Voice close code 4006/4017 が発生する。
 
 ## Key Technical Notes
+
+### 2026-08-17: 関連曲500 / アルバム非表示の修正（ytmusicapi 1.12.2）
+- **症状**: `/related/{video_id}` が `500 {"detail":"'endpoint'"}`、検索でアルバムが画面に出ない
+- **原因1**: ytmusicapi 1.11.4 の `get_watch_playlist` が YouTube Music 応答変更で `KeyError('endpoint')`。1.12.2 で修正済み
+- **原因2**: `YTMusic(language='ja')` だとアルバムの `type` が `'アルバム'` で返り、frontend の判定 `['album','single','ep']` に一致しなかった。さらに 1.11.4 の ja パースは artists に `'再生回数 11億 回'` や `'2026年'` が混入していた
+- **注意（上流バグ）**: ytmusicapi 1.12.x は `language='ja'` だと **filter 付き search が空配列** になる（カテゴリ見出し「曲」と "song" を照合するため）。→ `main.py` は検索/関連/詳細取得用 `ytmusic = YTMusic(language='en', location='JP')` と、`get_home`/mood 用 `ytmusic_ja` の2インスタンス構成にした。**ytmusic を ja に戻してはいけない**
+- `_normalize_album_type()` でロケール表記を正規化、`/related` は10件に制限、`/charts` は `songs` が無い場合 `videos`(list) にフォールバック
+- 検証: ローカルで `app.main` の関数を直接呼んで全フィルタ/related/recommendations/mood/album/playlist を確認 → 本番デプロイ → `scripts/smoke_test.sh` 全OK
+
+### 2026-08-17: 自動デプロイが4ヶ月間動いていなかった（deploy.log 誤コミット）
+- `deploy.log` が `.gitignore` にあるのに `3847ef9f`（2026-04-07）で誤ってコミットされていた
+- Pi では `auto-deploy.sh` が常に deploy.log へ追記 → `git status --porcelain` が常に dirty → `deploy.sh` の「未コミット変更あり → skip」に毎回該当し、**pushしても本番に反映されない**状態だった
+- 修正: `git rm --cached deploy.log`（commit `c6487ee`）。Pi 側は timer 停止 → `git checkout -- deploy.log` → `bash deploy.sh` → timer 再開で復旧。旧ログは `~/deploy.log.bak-20260817`
+- **教訓**: `deploy.sh` の dirty 判定は untracked ファイルも含む。Pi のリポジトリ直下に一時ファイルを置かない（バックアップは `~` 直下へ）
+- **手動デプロイの正しい手順**（timer と競合するので必ず停止してから）:
+  ```bash
+  ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "cd ~/discord-music-app && sudo systemctl stop discord-music-bot-deploy.timer && git status --porcelain && bash deploy.sh; sudo systemctl start discord-music-bot-deploy.timer"
+  ```
 
 ### 2026-04-07: 音楽再生の yt-dlp フォールバック追加
 - `backend/app/services/music_player.py` で `extract_info` 実行をリトライ可能に変更。
@@ -234,6 +255,8 @@ journalctl -u discord-music-bot --since '7 days ago' --no-pager | grep -c 'ERROR
 - **Playwright の headed 表示**: WSL2では`DISPLAY`未設定があるとブラウザが起動しない。`scripts/open-vercel-browser.sh` を使い、必要なら `DISPLAY="$(awk '/^nameserver/{print $2; exit}' /etc/resolv.conf):0"` を設定。
 - **Piサービス停止が遅い**: 大量のMusicPlayerが溜まってる証拠。`systemctl kill` で強制終了後 `start`
 - **検索500エラー**: SearchItemのartist/titleがNoneになっていないか確認。`or`演算子でNullセーフに
+- **push しても本番に反映されない**: Pi で `cd ~/discord-music-app && git status --porcelain` を確認。何か出ていれば deploy.sh が skip している（deploy.log 誤コミット事件参照）
+- **/related が 500 / 検索が空 / アルバムが出ない**: ytmusicapi のバージョンと `YTMusic(language=...)` を確認。上流の応答変更が原因のことが多い。ローカル venv で新版を試してから lock 更新
 - **Discord Gateway 520エラー**: Discord側のインフラ問題。指数バックオフで自動復旧する。コード対処不要
 - **asyncio "Task was destroyed but it is pending"**: MusicPlayerのshutdown時に発生。動作に実害なし（クリーンアップの改善余地あり）
 
