@@ -40,7 +40,10 @@ Discord音楽ボットアプリケーション。フロントエンド（Next.js
 - **過去ログ**: `journalctl -u discord-music-bot --since '24 hours ago' --no-pager`
 - **デプロイログ**: `~/discord-music-app/deploy.log`
 - **自動デプロイ**: **10秒ごと**にGitHubをチェック (`discord-music-bot-deploy.timer`, `OnUnitActiveSec=10s`)。mainへのpush＝即本番デプロイ＋再起動
-- **本番スモークテスト**: `bash scripts/smoke_test.sh`（デプロイ後に毎回実行。全主要API+Piのエラーログを確認）
+- **デプロイ前チェック（backend変更時は必須）**: `bash scripts/predeploy_check.sh` — 誰かが再生中（has_player=true のギルドあり）なら push を待つ。push＝10秒で bot 再起動＝再生が切れる
+- **本番スモークテスト**: `bash scripts/smoke_test.sh`（デプロイ後に毎回実行。全主要API+ルート欠落+Piのエラーログを確認）
+- **実再生テスト（テストサーバー限定）**: `node scripts/live-playback-test.mjs` — bot を テストサーバー(1080511818658762752)/VC 一般 に入れて add-url/pause/resume/skip/disconnect を REST で叩き、WS 更新を検証。人がいるサーバーでは絶対に実行しない
+- **リアルタイム同期のブラウザテスト**: `node scripts/realtime-sync-test.mjs`（dev サーバー必要。Playwright で WS を偽装、14 ケース）
 - **リファクタ実行計画**: `docs/refactoring_execution_and_test_plan_ja.md`
 - **手動デプロイ**: `cd ~/discord-music-app && bash deploy.sh`
 - **コード場所**: `/home/als0028/discord-music-app/backend/`
@@ -110,7 +113,7 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 - **検証**: `node scripts/realtime-sync-test.mjs`（Playwright routeWebSocket で epoch/version/再接続/REST フォールバック 14 ケース）。本番 WS は `wss://api.atoriba.jp/ws/{guild}` に Node の WebSocket で接続し update/pong/sync/30秒ping を確認済み
 - **事故**: 94044cf8 の編集で 7 ルート（upload-audio*, set-volume, bot-guilds, disconnect-voice-channel）を巻き込み削除 → 69878ae6 で復元。以後 `smoke_test.sh` が openapi.json でルート欠落を検知する
 - 依存更新: backend は yt-dlp 2026.7.4 / fastapi 0.141 / starlette 1.6 / uvicorn 0.52 / aiohttp 3.14 / davey 0.1.6（openai, google-genai の major は保留）。frontend は semver 内 `bun update`（next 16.3.1 等）+ `middleware.ts`→`proxy.ts`
-- 未実施: 実際に bot を VC に入れての実再生ログ確認（ユーザーのテストサーバーで実施予定）
+- 実再生テスト（テストサーバー）: join→add-url→add-url→pause→resume→skip→/player-state整合→disconnect の 11 ケース全 OK。曲追加から再生開始まで 7〜15 秒（yt-dlp 抽出+DL）かかるので `is_loading`（`MusicPlayer.is_preparing`）を状態に追加し、再生ボタン/ミニプレイヤーにスピナー表示（commit 807a00bb）
 
 ### 2026-08-17: レスポンシブ再設計（commit 5cfd9d54）
 - **デスクトップ（lg=1024px以上）**: 右カラムに Now Playing パネルを常時ドッキング（`.now-playing-aside`）。ミニプレイヤー/フルスクリーンプレイヤーは出さない。`MainPlayer variant="docked"`
