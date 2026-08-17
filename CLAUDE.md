@@ -47,7 +47,7 @@ Discord音楽ボットアプリケーション。フロントエンド（Next.js
 - **環境変数**: `/home/als0028/discord-music-app/backend/.env`
 - **Cookie**: `/home/als0028/discord-music-app/backend/cookies.txt`（2026-03-04作成、定期的な更新が必要な場合あり）
 - **PYTHONUNBUFFERED=1**: systemdサービスに設定済み（ないとprint出力がjournalに出ない）
-- **Node.js**: v20.20.0 (yt-dlpの署名解読に必須。v18はunsupported)
+- **Node.js**: **v22.23.2**（2026-08-17 に NodeSource `node_22.x` へ更新。yt-dlp 2026.7 系は Node >= 22 必須。v20 は `(unsupported)` になり cookie 使用時に全フォーマット消失）
 - **UFW**: incoming UDP 50000-65535許可済み（Discord Voice用）
 
 ### Pi上のパッケージバージョン確認コマンド
@@ -69,10 +69,11 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 | パッケージ | バージョン | 最低要件 |
 |-----------|-----------|---------|
 | Python | 3.12.13 | - |
-| Node.js | v20.20.0 | >= 20 |
+| Node.js | v22.23.2（2026-08-17更新） | >= 22（yt-dlp 2026.7+） |
 | discord.py | 2.7.1 | >= 2.7.x |
-| davey | 0.1.4 | 必須 |
-| yt-dlp | 2026.3.17 | >= 2026.3 |
+| davey | 0.1.6（2026-08-17更新） | 必須 |
+| fastapi / starlette / uvicorn | 0.141.1 / 1.6.0 / 0.52.3（2026-08-17更新） | - |
+| yt-dlp | 2026.7.4（2026-08-17更新） | >= 2026.7 |
 | yt-dlp-ejs | 0.8.0 | >= 0.5.0 |
 | ytmusicapi | 1.12.2（2026-08-17更新） | >= 1.12 |
 
@@ -100,6 +101,16 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 - **注意（上流バグ）**: ytmusicapi 1.12.x は `language='ja'` だと **filter 付き search が空配列** になる（カテゴリ見出し「曲」と "song" を照合するため）。→ `main.py` は検索/関連/詳細取得用 `ytmusic = YTMusic(language='en', location='JP')` と、`get_home`/mood 用 `ytmusic_ja` の2インスタンス構成にした。**ytmusic を ja に戻してはいけない**
 - `_normalize_album_type()` でロケール表記を正規化、`/related` は10件に制限、`/charts` は `songs` が無い場合 `videos`(list) にフォールバック
 - 検証: ローカルで `app.main` の関数を直接呼んで全フィルタ/related/recommendations/mood/album/playlist を確認 → 本番デプロイ → `scripts/smoke_test.sh` 全OK
+
+### 2026-08-17: リアルタイム同期の修正（commit 94044cf8 + 69878ae6）
+- **根本原因1**: `bot.py` の `notify_clients_local` が **no-op** だった。自動参加やスラッシュコマンドで作られた MusicPlayer（通常の利用経路）からはブラウザへ WebSocket 更新が一切飛んでいなかった → `register_notify_clients()` で main.py の `notify_clients` を登録して委譲
+- **根本原因2**: frontend の version 比較がサーバー再起動・ギルド切替の巻き戻りを考慮しておらず、deploy のたびに更新を全部無視 → MusicPlayer ごとの `state_epoch`（uuid）を送り、epoch が変わったら version リセット
+- 追加: `GET /player-state/{guild_id}`（WS update と同形）、WS で `{"type":"ping"}`→`pong`、`{"type":"sync"}`→状態再送。`build_player_state()` が WS/REST 共通
+- frontend `WSConnection`: 無制限再接続（上限15s/非表示時60s）、75秒無応答で張り直し、25秒ごと ping、`visibilitychange/online/focus/pageshow` で即再接続 or sync。store は WS 断中 10 秒ごと `/player-state` ポーリング。エラートースト廃止、ヘッダーに「同期中…/再接続中…」
+- **検証**: `node scripts/realtime-sync-test.mjs`（Playwright routeWebSocket で epoch/version/再接続/REST フォールバック 14 ケース）。本番 WS は `wss://api.atoriba.jp/ws/{guild}` に Node の WebSocket で接続し update/pong/sync/30秒ping を確認済み
+- **事故**: 94044cf8 の編集で 7 ルート（upload-audio*, set-volume, bot-guilds, disconnect-voice-channel）を巻き込み削除 → 69878ae6 で復元。以後 `smoke_test.sh` が openapi.json でルート欠落を検知する
+- 依存更新: backend は yt-dlp 2026.7.4 / fastapi 0.141 / starlette 1.6 / uvicorn 0.52 / aiohttp 3.14 / davey 0.1.6（openai, google-genai の major は保留）。frontend は semver 内 `bun update`（next 16.3.1 等）+ `middleware.ts`→`proxy.ts`
+- 未実施: 実際に bot を VC に入れての実再生ログ確認（ユーザーのテストサーバーで実施予定）
 
 ### 2026-08-17: レスポンシブ再設計（commit 5cfd9d54）
 - **デスクトップ（lg=1024px以上）**: 右カラムに Now Playing パネルを常時ドッキング（`.now-playing-aside`）。ミニプレイヤー/フルスクリーンプレイヤーは出さない。`MainPlayer variant="docked"`
@@ -150,7 +161,7 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 
 ### yt-dlp Configuration (CRITICAL)
 - **js_runtimes**: `{'node': {}, 'deno': {}}` を明示指定必須。デフォルトはdenoのみ。
-- **Node.js 20以上が必要**: 18.xは `(unsupported)` と表示されて署名解読が動かない
+- **Node.js 22以上が必要**（yt-dlp 2026.7+）: 20.x 以下は `verbose` で `node-20.x (unsupported)` と出て n challenge が解けず、cookie 使用時（web_creator client）は「Requested format is not available」で全滅する。cookie なし（tv client）は動くので気づきにくい
 - **yt-dlp-ejs**: YouTube署名解読スクリプト。0.5.0以上が必要
 - **format**: `bestaudio*/bestaudio/best`（`bestaudio/best/139`は一部環境でフォーマットが見つからない）
 - **cookiefile**: YouTube Premium認証用。Pi上では絶対パスで指定
@@ -274,6 +285,8 @@ journalctl -u discord-music-bot --since '7 days ago' --no-pager | grep -c 'ERROR
 - **Piサービス停止が遅い**: 大量のMusicPlayerが溜まってる証拠。`systemctl kill` で強制終了後 `start`
 - **検索500エラー**: SearchItemのartist/titleがNoneになっていないか確認。`or`演算子でNullセーフに
 - **push しても本番に反映されない**: Pi で `cd ~/discord-music-app && git status --porcelain` を確認。何か出ていれば deploy.sh が skip している（deploy.log 誤コミット事件参照）
+- **ブラウザに再生状態が反映されない**: ①Pi の journal で `notify_clients failed` / `WebSocket通知エラー` を確認 ②ブラウザで `wss://api.atoriba.jp/ws/{guild}` に接続して update が来るか（Node: `new WebSocket(...)`）③ヘッダーのドットが黄色（再接続中）なら WS 断。`/player-state/{guild}` を直接叩いて backend 側の状態を見る
+- **yt-dlp 更新後に「Requested format is not available」**: `verbose: True` で JS runtime が `(unsupported)` になっていないか確認。Node のバージョン要件が上がっていることが多い
 - **/related が 500 / 検索が空 / アルバムが出ない**: ytmusicapi のバージョンと `YTMusic(language=...)` を確認。上流の応答変更が原因のことが多い。ローカル venv で新版を試してから lock 更新
 - **Discord Gateway 520エラー**: Discord側のインフラ問題。指数バックオフで自動復旧する。コード対処不要
 - **asyncio "Task was destroyed but it is pending"**: MusicPlayerのshutdown時に発生。動作に実害なし（クリーンアップの改善余地あり）
