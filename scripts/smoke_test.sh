@@ -25,7 +25,15 @@ check "search playlists" 200 "$API/search?query=YOASOBI&filter=playlists" '"type
 check "related"          200 "$API/related/dQw4w9WgXcQ"                '"type":"song"'
 check "recommendations"  200 "$API/recommendations"                    '"contents"'
 check "mood-categories"  200 "$API/mood-categories"                    'params'
+check "player-state"     200 "$API/player-state/1093915551174234212"  '"has_player"'
 check "frontend"         200 "https://discord-music-app.vercel.app/"
+
+# ルートの欠落検知（編集ミスでエンドポイントが消えていないか）
+paths=$(curl -s -m 15 "$API/openapi.json" | python3 -c 'import json,sys; print(" ".join(sorted(json.load(sys.stdin)["paths"].keys())))' 2>/dev/null)
+for must in /bot-guilds /uploaded-audio-list/{guild_id} /add-url/{guild_id} /join-voice-channel/{guild_id}/{channel_id} /player-state/{guild_id} /search /related/{video_id} /disconnect-voice-channel/{guild_id}; do
+  if echo "$paths" | grep -q -- "$must"; then :; else echo "FAIL route missing: $must"; fail=1; fi
+done
+echo "OK   routes ($(echo "$paths" | wc -w) paths)"
 
 echo "--- Pi service / recent errors (5 min) ---"
 if [ -f "$KEY" ]; then
