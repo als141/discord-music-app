@@ -10,6 +10,7 @@ from typing import Optional, List, Callable, Any
 from dataclasses import dataclass
 
 from ..config import get_settings
+from .. import db as history_db
 from ..logging import get_logger
 
 # 設定を取得
@@ -337,6 +338,7 @@ class MusicPlayer:
                         lambda: self.play_next_song(e)
                     )
                 )
+                await self._record_play_history(song)
                 await self.notify_clients(self.guild_id)
             except Exception as e:
                 logger.error(f"再生エラー: {e}", exc_info=True)
@@ -628,6 +630,30 @@ class MusicPlayer:
     def is_playing(self) -> bool:
         """現在再生中かどうかを返す"""
         return bool(self.voice_client and self.voice_client.is_playing())
+
+    async def _record_play_history(self, song: "Song") -> None:
+        """再生開始を SQLite の play_history に記録する（失敗しても再生は止めない）"""
+        added_by = song.added_by
+        try:
+            def _get(attr):
+                if added_by is None:
+                    return None
+                if isinstance(added_by, dict):
+                    return added_by.get(attr)
+                return getattr(added_by, attr, None)
+            await asyncio.to_thread(
+                history_db.add_play_history,
+                self.guild_id,
+                url=song.url,
+                title=song.title,
+                artist=song.artist,
+                thumbnail=song.thumbnail,
+                added_by_id=_get("id"),
+                added_by_name=_get("name"),
+                added_by_image=_get("image"),
+            )
+        except Exception as e:
+            logger.warning(f"再生履歴の保存に失敗: {type(e).__name__}: {e}")
 
     def increment_version(self) -> int:
         """状態バージョンをインクリメントして返す"""

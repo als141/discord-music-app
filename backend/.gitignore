@@ -1,0 +1,4 @@
+
+# SQLite (WAL) side files
+*.db-wal
+*.db-shm

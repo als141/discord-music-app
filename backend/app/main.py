@@ -25,7 +25,10 @@ import re
 from datetime import datetime, timedelta
 import signal
 from .api.realtime import router as realtime_router
-from .db import init_db, UploadedSong, add_uploaded_song, get_uploaded_songs_in_guild, find_uploaded_song_by_id, update_uploaded_song, delete_uploaded_song
+from .db import (
+    init_db, UploadedSong, add_uploaded_song, get_uploaded_songs_in_guild, find_uploaded_song_by_id,
+    update_uploaded_song, delete_uploaded_song, get_play_history, get_top_tracks, get_history_stats,
+)
 from contextlib import asynccontextmanager
 from fastapi.staticfiles import StaticFiles  # ← 追加
 
@@ -729,27 +732,42 @@ async def get_related_songs(video_id: str):
         print(f"関連動画の取得中にエラーが発生しました: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     
+def _history_entry_to_queue_item(entry, position: int) -> QueueItem:
+    added_by = None
+    if entry.added_by_id:
+        added_by = User(id=entry.added_by_id, name=entry.added_by_name or "Unknown", image=entry.added_by_image or "")
+    return QueueItem(
+        track=Track(
+            title=entry.title,
+            artist=entry.artist or "Unknown Artist",
+            thumbnail=entry.thumbnail or "",
+            url=entry.url,
+            added_by=added_by,
+            played_at=entry.played_at,
+        ),
+        position=position,
+        isCurrent=False,
+    )
+
+
 @app.get("/history/{guild_id}", response_model=List[QueueItem])
-async def get_history(guild_id: str):
-    player = music_players.get(guild_id)
-    if player:
-        history_items = []
-        for i, item in enumerate(list(player.history)):
-            history_items.append(
-                QueueItem(
-                    track=Track(
-                        title=item.title,
-                        artist=item.artist,
-                        thumbnail=item.thumbnail,
-                        url=item.url,
-                        added_by=item.added_by
-                    ),
-                    position=i,
-                    isCurrent=False
-                )
-            )
-        return history_items
-    return []
+async def get_history(guild_id: str, limit: int = 50, user_id: Optional[str] = None):
+    """サーバーごとの再生履歴（SQLite 永続化。bot 再起動をまたいで残る）。
+    互換のため古い→新しい順で返す（frontend 側で reverse して表示している）。"""
+    entries = await asyncio.to_thread(get_play_history, guild_id, limit, user_id)
+    entries = list(reversed(entries))
+    return [_history_entry_to_queue_item(e, i) for i, e in enumerate(entries)]
+
+
+@app.get("/history-stats/{guild_id}")
+async def get_history_stats_endpoint(guild_id: str, days: int = 30, top: int = 10):
+    """サーバーごとの再生統計（期間内の再生数・よく流れた曲・よく入れた人）"""
+    stats, top_tracks = await asyncio.gather(
+        asyncio.to_thread(get_history_stats, guild_id, days),
+        asyncio.to_thread(get_top_tracks, guild_id, days, top),
+    )
+    stats["top_tracks"] = top_tracks
+    return stats
 
 @app.post("/remove-from-queue/{guild_id}")
 async def remove_from_queue(guild_id: str, position: int):

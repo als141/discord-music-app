@@ -12,6 +12,7 @@ class Track(BaseModel):
     thumbnail: str
     url: str
     added_by: Optional[User] = None  # ユーザー情報を追加
+    played_at: Optional[str] = None  # 再生履歴用（ISO8601 UTC）
 
 class QueueItem(BaseModel):
     track: Track

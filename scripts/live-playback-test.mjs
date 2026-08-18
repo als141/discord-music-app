@@ -85,6 +85,14 @@ try {
   const skipped = await waitFor(e => e.current && e.current !== before && e.queue === 0, 60000);
   check('WS: スキップ後に2曲目が current になる', !!skipped, JSON.stringify(skipped));
 
+  // 5.5) 再生履歴が SQLite に永続化されている（追加者込み）
+  const hist = await (await fetch(`${API}/history/${GUILD}?limit=5`)).json();
+  const histTitles = hist.map(h => h.track.title);
+  check('/history に今回の再生が入っている（永続化）', hist.some(h => /Never Gonna Give You Up/.test(h.track.title)) && hist.some(h => h.track.title === '夜に駆ける'), histTitles.join(' | '));
+  check('/history の added_by が記録されている', hist.some(h => h.track.added_by?.name === 'live-test'));
+  const stats = await (await fetch(`${API}/history-stats/${GUILD}?days=1`)).json();
+  check('/history-stats が集計を返す', typeof stats.total_plays === 'number' && Array.isArray(stats.top_tracks), `total=${stats.total_plays}`);
+
   // 6) REST /player-state が WS と一致
   const st = await (await fetch(`${API}/player-state/${GUILD}`)).json();
   const last = events[events.length - 1];

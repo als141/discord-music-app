@@ -610,6 +610,42 @@ async def on_ready():
 
     print(f"Logged in as {client.user}")
 
+    # 起動時の自動復帰: deploy（bot再起動）前に人がいた VC へ戻る。
+    # これが無いと deploy のたびに bot が VC から消え、誰かが入り直すまで戻ってこない
+    asyncio.create_task(_rejoin_occupied_voice_channels())
+
+
+async def _rejoin_occupied_voice_channels():
+    """人（bot以外）が入っているボイスチャンネルがあるギルドへ起動時に自動参加する"""
+    await asyncio.sleep(3)  # ギルド/メンバーキャッシュが埋まるのを待つ
+    for guild in list(client.guilds):
+        guild_id = str(guild.id)
+        if guild.voice_client is not None or guild_id in music_players:
+            continue
+        target = None
+        best = 0
+        for ch in guild.voice_channels:
+            humans = sum(1 for m in ch.members if not m.bot)
+            if humans > best:
+                best, target = humans, ch
+        if target is None:
+            continue
+        try:
+            vc = await target.connect(timeout=10.0)
+            await asyncio.sleep(1)
+            if not vc.is_connected():
+                raise Exception("Voice connection was lost immediately after connect")
+            music_players[guild_id] = MusicPlayer(client, guild, guild_id, notify_clients_local)
+            await notify_clients_local(guild_id)
+            print(f"Rejoined voice channel {target.name} in guild {guild.name} on startup ({best} users present).")
+        except Exception as e:
+            print(f"Startup rejoin failed in {guild.name}: {type(e).__name__}: {e}")
+            if guild.voice_client:
+                try:
+                    await guild.voice_client.disconnect(force=True)
+                except Exception:
+                    pass
+
 @client.event
 async def on_message(message: discord.Message):
     # テキストチャットへの応答は無効化中
