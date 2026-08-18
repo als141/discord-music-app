@@ -83,6 +83,10 @@ export interface Section {
 
 export interface Track extends PlayableItem {
   added_by?: User;
+  /** 再生履歴用（ISO8601 UTC） */
+  played_at?: string | null;
+  /** 追加直後で情報取得中（キューのプレースホルダ） */
+  pending?: boolean | null;
 }
 
 export interface SearchItem extends PlayableItem {

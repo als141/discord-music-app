@@ -197,6 +197,7 @@ class Song:
     artist: str
     added_by: Optional[Any] = None  # User オブジェクトまたは None
     video_id: Optional[str] = None  # YouTubeのビデオID（キャッシュ検索用）
+    pending: bool = False  # 追加直後で yt-dlp の情報取得がまだ終わっていないプレースホルダ
 
     def __post_init__(self):
         # デフォルト値の設定
@@ -277,6 +278,11 @@ class MusicPlayer:
                 continue
 
             song = self.queue[0]
+            if song.pending:
+                # 先頭がまだ情報取得中のプレースホルダ → 差し替え/削除されるまで少し待つ
+                await asyncio.sleep(0.3)
+                continue
+
             if song.source is None:
                 try:
                     logger.debug(f"音源を準備中: {song.title}")
@@ -451,15 +457,56 @@ class MusicPlayer:
         return os.path.isabs(path)
 
     async def add_to_queue(self, url: str, added_by=None) -> None:
-        """楽曲をキューに追加する"""
+        """楽曲をキューに追加する。
+
+        同時に何曲も追加されても「追加した順」がキューの順になるように、
+        まずプレースホルダ（pending=True）を即座に追加してからバックグラウンドで情報を取得し、
+        取得できたら同じ位置に差し替える。失敗したらプレースホルダを取り除く。
+        プレースホルダは即座にクライアントへ通知されるので、UI には「読み込み中」として見える。
+        """
+        placeholder = Song(
+            source=None,
+            title="読み込み中…",
+            url=url,
+            thumbnail="",
+            artist="",
+            added_by=added_by,
+            pending=True,
+        )
+        self.queue.append(placeholder)
+        await self.notify_clients(self.guild_id)
+
         loop = asyncio.get_event_loop()
-        songs = await loop.run_in_executor(self.executor, self.get_song_info, url, added_by)
-        for s in songs:
-            self.queue.append(s)
+        try:
+            songs = await loop.run_in_executor(self.executor, self.get_song_info, url, added_by)
+            if not songs:
+                raise Exception("楽曲情報が空でした")
+        except Exception as e:
+            logger.error(f"曲の追加に失敗（プレースホルダを削除）: {url}: {e}")
+            self._replace_in_queue(placeholder, [])
+            await self.notify_clients(self.guild_id)
+            self.next.set()
+            raise
+
+        self._replace_in_queue(placeholder, songs)
         await self.notify_clients(self.guild_id)
         # 再生中でなければ必ず再生ループを再開する
         if self.voice_client and not self.voice_client.is_playing():
             self.next.set()
+
+    def _replace_in_queue(self, placeholder: "Song", songs: List["Song"]) -> None:
+        """キュー内のプレースホルダを songs（0件なら削除）に置き換える。見つからなければ末尾に追加"""
+        items = list(self.queue)
+        try:
+            idx = next(i for i, s in enumerate(items) if s is placeholder)
+        except StopIteration:
+            idx = None
+        if idx is None:
+            items.extend(songs)
+        else:
+            items[idx:idx + 1] = songs
+        self.queue.clear()
+        self.queue.extend(items)
 
     def get_song_info(self, url: str, added_by=None) -> List[Song]:
         """URLから楽曲情報を取得する"""

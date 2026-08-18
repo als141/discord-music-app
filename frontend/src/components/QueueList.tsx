@@ -4,7 +4,7 @@
 import React, { useState, useCallback, memo } from 'react';
 import { motion, AnimatePresence, Variants } from 'framer-motion';
 import { Track } from '@/utils/api';
-import { PlayIcon, PauseIcon, ChevronUpIcon, ChevronDownIcon, TrashIcon, User as UserIcon, Music2 } from 'lucide-react';
+import { PlayIcon, PauseIcon, ChevronUpIcon, ChevronDownIcon, TrashIcon, User as UserIcon, Music2, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -175,18 +175,26 @@ const QueueTrackItem = memo(({
         {index + 1}
       </div>
 
-      <Image
-        src={track.thumbnail || '/default_thumbnail.png'}
-        alt={track.title}
-        width={48}
-        height={48}
-        className="rounded-lg object-cover w-12 h-12 shadow-sm"
-        unoptimized
-      />
+      {track.pending ? (
+        <div className="w-12 h-12 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0" aria-hidden="true">
+          <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
+        </div>
+      ) : (
+        <Image
+          src={track.thumbnail || '/default_thumbnail.png'}
+          alt={track.title}
+          width={48}
+          height={48}
+          className="rounded-lg object-cover w-12 h-12 shadow-sm"
+          unoptimized
+        />
+      )}
 
       <div className="flex-grow overflow-hidden ml-3 min-w-0">
-        <h4 className="font-medium text-foreground truncate text-sm">{track.title}</h4>
-        <p className="text-xs text-muted-foreground truncate">{track.artist}</p>
+        <h4 className={`font-medium truncate text-sm ${track.pending ? 'text-muted-foreground italic' : 'text-foreground'}`}>
+          {track.pending ? '読み込み中…' : track.title}
+        </h4>
+        <p className="text-xs text-muted-foreground truncate">{track.pending ? '曲の情報を取得しています' : track.artist}</p>
         {track.added_by && (
           <div className="flex items-center mt-1">
             <Avatar className="h-4 w-4 mr-1">

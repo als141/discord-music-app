@@ -264,7 +264,8 @@ async def build_player_state(guild_id: str, *, bump_version: bool) -> dict:
     if player:
         version = player.increment_version() if bump_version else player.get_version()
         epoch = player.state_epoch
-        is_loading = bool(getattr(player, "is_preparing", False))
+        head = player.queue[0] if player.queue else None
+        is_loading = bool(getattr(player, "is_preparing", False)) or bool(head is not None and getattr(head, "pending", False))
     else:
         version = 0
         epoch = None
@@ -934,7 +935,8 @@ async def get_queue(guild_id: str):
                         artist=item.artist,
                         thumbnail=item.thumbnail,
                         url=item.url,
-                        added_by=item.added_by
+                        added_by=item.added_by,
+                        pending=bool(getattr(item, "pending", False)) or None,
                     ),
                     position=i,
                     isCurrent=(i == 0)

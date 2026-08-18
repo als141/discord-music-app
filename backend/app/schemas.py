@@ -13,6 +13,7 @@ class Track(BaseModel):
     url: str
     added_by: Optional[User] = None  # ユーザー情報を追加
     played_at: Optional[str] = None  # 再生履歴用（ISO8601 UTC）
+    pending: Optional[bool] = None  # 追加直後で情報取得中（キューのプレースホルダ）
 
 class QueueItem(BaseModel):
     track: Track

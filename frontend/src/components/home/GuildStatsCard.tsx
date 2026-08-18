@@ -16,7 +16,6 @@ export const GuildStatsCard = memo(({ guildId }: { guildId: string | null }) => 
   }, [guildId]);
 
   const topUsers = stats?.top_users?.slice(0, 4) ?? [];
-  const top = stats?.top_tracks?.[0];
 
   return (
     <div className="surface p-4 sm:p-5 flex flex-col justify-between h-full">
@@ -30,12 +29,7 @@ export const GuildStatsCard = memo(({ guildId }: { guildId: string | null }) => 
         </span>
         <span className="text-sm text-muted-foreground">曲</span>
       </div>
-      {top ? (
-        <p className="text-[13px] text-muted-foreground mt-2 truncate">
-          いちばん流れた曲: <span className="text-foreground font-medium">{top.title}</span>
-          <span className="ml-1 tabular-nums">({top.play_count}回)</span>
-        </p>
-      ) : (
+      {!stats?.total_plays && (
         <p className="text-[13px] text-muted-foreground mt-2">{guildId ? 'まだ再生履歴がありません' : 'サーバーを選ぶと表示されます'}</p>
       )}
       <div className="mt-3 flex items-center gap-2 min-h-[28px]">
