@@ -462,8 +462,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
   const [allView, setAllView] = useState<'history' | number | null>(null);
 
   const [versionInfo] = useState<VersionInfo>({
-    version: 'Ver. 0.9.0',
-    buildDate: '2025.2.28',
+    version: 'Ver. 1.0.0',
+    buildDate: '2026.8.18',
   });
 
   const handleSelectTrackCallback = useCallback(async (item: PlayableItem) => {

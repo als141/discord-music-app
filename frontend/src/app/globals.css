@@ -209,7 +209,8 @@
     flex-shrink: 0;
     border-left: 0.5px solid var(--color-border);
     background:
-      radial-gradient(120% 70% at 50% 0%, color-mix(in oklab, var(--accent-glow) 45%, transparent) 0%, transparent 55%),
+      /* にじみはアートワークの背後（上部 40%）だけ。曲名・アーティスト名の背景まで色を敷かない */
+      radial-gradient(110% 40% at 50% 0%, color-mix(in oklab, var(--accent-glow) 38%, transparent) 0%, transparent 100%),
       var(--color-background);
     transition: --accent-glow 0.6s ease;
   }
@@ -719,7 +720,7 @@
   /* 再生中アートワーク由来のにじみ背景（Now Playing） */
   .accent-wash {
     background:
-      radial-gradient(120% 80% at 50% 0%, color-mix(in oklab, var(--accent-glow) 55%, transparent) 0%, transparent 60%),
+      radial-gradient(110% 45% at 50% 0%, color-mix(in oklab, var(--accent-glow) 45%, transparent) 0%, transparent 100%),
       var(--color-background);
     transition: --accent-glow 0.6s ease;
   }

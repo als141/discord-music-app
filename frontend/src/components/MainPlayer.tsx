@@ -355,7 +355,8 @@ export const MainPlayer: React.FC<MainPlayerProps> = React.memo(({
       animate={{ scale: 1, opacity: 1 }}
       transition={{ duration: 0.45, ease: [0.25, 0.1, 0.25, 1] }}
       style={{
-        boxShadow: '0 30px 60px -18px color-mix(in oklab, var(--color-primary) 45%, rgba(40,20,10,0.35)), 0 8px 18px -8px rgba(40, 20, 10, 0.25)'
+        // 影は下方向に伸ばしすぎない（曲名の背景に色が被って見えていた）
+        boxShadow: '0 14px 32px -16px color-mix(in oklab, var(--color-primary) 30%, rgba(0,0,0,0.35)), 0 4px 12px -6px rgba(0, 0, 0, 0.18)'
       }}
     >
       {currentTrack && (
