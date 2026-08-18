@@ -105,6 +105,12 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 - `_normalize_album_type()` でロケール表記を正規化、`/related` は10件に制限、`/charts` は `songs` が無い場合 `videos`(list) にフォールバック
 - 検証: ローカルで `app.main` の関数を直接呼んで全フィルタ/related/recommendations/mood/album/playlist を確認 → 本番デプロイ → `scripts/smoke_test.sh` 全OK
 
+### 2026-08-18: デザイン刷新の試行と着地（commit 8b4fc7b5）
+- ブランチ `design/2026-listening-room` で「紙色＋明朝＋藍」の刷新案を作ったが、ユーザー評価は「明朝不要・フォントは前の方が良い・色味がAIっぽい・挨拶コピー不要」→ **見た目は元の白地＋ローズ＋システムサンセリフに戻し**、機能改善だけ main にマージ
+- 残ったもの: `use-artwork-accent.ts`（再生中サムネから代表色を抽出し `--color-primary`/`--accent-glow` を実行時上書き。@property でクロスフェード）、ヘッダーのワードマーク＋接続ピル、`GuildStatsCard`（この30日の再生 = /history-stats）、`ScrollRow`（横スクロール行の左右矢印。`scroll-snap` と `touch-action:pan-x` を撤去した理由もコメント）、`SectionAllDialog`（「すべて見る」）
+- **教訓（好み）**: 装飾的コピー・セリフ見出し・くすんだ配色は避ける。機能改善を優先（memory/user_preferences.md）
+- Before/After ギャラリー（不採用案の記録）: https://claude.ai/code/artifact/ee315839-8349-4a9c-9430-9550e024459d
+
 ### 2026-08-18: 再生履歴の SQLite 永続化 + 起動時 VC 自動復帰（commit bdadb627）
 - `backend/app/db.py` に `play_history` テーブル（guild_id / video_id / url / title / artist / thumbnail / added_by_id,name,image / played_at）。同じ `uploaded_songs.db` ファイル内（Pi の `backend/` cwd）。WAL + busy_timeout=5000
 - 記録タイミング: `MusicPlayer` の「再生開始」直後（`_record_play_history`、`asyncio.to_thread`、失敗しても再生継続）
