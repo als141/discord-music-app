@@ -592,7 +592,7 @@ async def handle_thread_message(message):
 
 @client.event
 async def on_ready():
-    await client.change_presence(status=discord.Status.online, activity=discord.CustomActivity(name='工藤夏生デバッグ中'))
+    await client.change_presence(status=discord.Status.online, activity=discord.CustomActivity(name='バージョン1.0.0'))
 
     # 各ギルドにグローバルコマンドをコピーして即座に同期
     for guild in client.guilds:
