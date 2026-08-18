@@ -117,9 +117,9 @@ export const Header: React.FC<HeaderProps> = React.memo(({
     <TooltipProvider>
       {/* Apple Music Style Frosted Glass Header */}
       <header className="fixed top-0 left-0 right-0 z-[100] h-14 glass border-b border-border/70">
-        <div className="flex items-center justify-between h-full px-3 sm:px-4">
+        <div className="flex items-center justify-between gap-2 h-full px-3 sm:px-4">
           {/* Left Section - Menu + ワードマーク */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-shrink-0">
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -142,11 +142,12 @@ export const Header: React.FC<HeaderProps> = React.memo(({
           </div>
 
           {/* Center Section - 接続状態（サーバー / VC）。クリックでサイドメニューを開く */}
-          <div className="absolute left-1/2 -translate-x-1/2 max-w-[46%] sm:max-w-[50%]">
+          {/* 中央は絶対配置にせず flex の残り幅に収める（狭い画面で検索ボタンと重ならない） */}
+          <div className="flex-1 min-w-0 flex justify-center sm:absolute sm:left-1/2 sm:-translate-x-1/2 sm:max-w-[46%] sm:flex-none">
             <button
               type="button"
               onClick={onOpenMenu}
-              className="flex items-center gap-2 h-9 pl-3 pr-2.5 rounded-full border border-border/80 bg-card/70 hover:bg-card transition-colors max-w-full shadow-sm"
+              className="flex items-center gap-1.5 sm:gap-2 h-9 pl-2.5 sm:pl-3 pr-2 sm:pr-2.5 rounded-full border border-border/80 bg-card/70 hover:bg-card transition-colors max-w-full min-w-0 shadow-sm"
               aria-label={activeServer ? `接続先: ${activeServer.name}${activeChannel ? ' / ' + activeChannel.name : ''}。サーバー・チャンネルを変更` : 'サーバーを選択'}
             >
               <span
@@ -160,11 +161,11 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                 aria-hidden="true"
               />
               <span className="flex flex-col items-start min-w-0 leading-tight">
-                <span className="text-[13px] font-semibold text-foreground truncate max-w-full">
+                <span className="text-[12px] sm:text-[13px] font-semibold text-foreground truncate max-w-full">
                   {activeServer ? activeServer.name : 'サーバー未選択'}
                 </span>
                 {activeServer && (
-                  <span className={`text-[11px] truncate max-w-full inline-flex items-center gap-1 ${isSyncing ? 'text-amber-600' : 'text-muted-foreground'}`}>
+                  <span className={`text-[10px] sm:text-[11px] truncate max-w-full inline-flex items-center gap-1 ${isSyncing ? 'text-amber-600' : 'text-muted-foreground'}`}>
                     <Volume2 className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
                     {isSyncing
                       ? (connectionStatus === 'connecting' ? '同期中…' : '再接続中…')
@@ -177,7 +178,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
           </div>
 
           {/* Right Section - Actions */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
             {/* Search Button */}
             <Tooltip>
               <TooltipTrigger asChild>
