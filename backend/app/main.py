@@ -1172,7 +1172,10 @@ async def search(query: str, filter: str = None):
 @app.get("/playlist/{browse_id}", response_model=List[Track])
 async def get_playlist_items(browse_id: str):
     try:
-        playlist = ytmusic.get_playlist(browse_id)
+        # 「マイ ミックス」等（RDTMAK… / RD…）は個人化プレイリスト。未ログインで取ると別人向けの中身が返るので、
+        # cookies のログイン済みインスタンスがあればそちらで取得する
+        client_inst = ytmusic_personal if (browse_id.startswith('RD') and ytmusic_personal is not None) else ytmusic
+        playlist = await asyncio.to_thread(client_inst.get_playlist, browse_id, 200)
         tracks = []
         for item in playlist.get('tracks', []):
             video_id = item.get('videoId')
