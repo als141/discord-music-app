@@ -464,9 +464,19 @@ async def get_bot_guilds():
 async def disconnect_voice_channel(guild_id: str):
     guild = client.get_guild(int(guild_id))
     if guild and guild.voice_client:
-        await guild.voice_client.disconnect()
-        if guild_id in music_players:
-            del music_players[guild_id]
+        # 先に MusicPlayer を止めてから辞書から外す。del だけだと player_loop が生き残り、
+        # 次に VC へ入ったときに古いキューを勝手に再生し始める（ゾンビプレイヤー）
+        player = music_players.pop(guild_id, None)
+        if player:
+            try:
+                await player.shutdown()
+            except Exception as e:
+                print(f"player shutdown error (guild: {guild_id}): {e}")
+        if guild.voice_client:
+            try:
+                await guild.voice_client.disconnect(force=True)
+            except Exception:
+                pass
         await notify_clients(guild_id)
         return {"message": "ボイスチャネルから切断しました"}
     raise HTTPException(status_code=404, detail="指定されたギルドでボットはボイスチャネルに接続されていません")
