@@ -105,6 +105,15 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 - `_normalize_album_type()` でロケール表記を正規化、`/related` は10件に制限、`/charts` は `songs` が無い場合 `videos`(list) にフォールバック
 - 検証: ローカルで `app.main` の関数を直接呼んで全フィルタ/related/recommendations/mood/album/playlist を確認 → 本番デプロイ → `scripts/smoke_test.sh` 全OK
 
+### 2026-08-18: 再生履歴の SQLite 永続化 + 起動時 VC 自動復帰（commit bdadb627）
+- `backend/app/db.py` に `play_history` テーブル（guild_id / video_id / url / title / artist / thumbnail / added_by_id,name,image / played_at）。同じ `uploaded_songs.db` ファイル内（Pi の `backend/` cwd）。WAL + busy_timeout=5000
+- 記録タイミング: `MusicPlayer` の「再生開始」直後（`_record_play_history`、`asyncio.to_thread`、失敗しても再生継続）
+- API: `GET /history/{guild_id}?limit=50&user_id=`（古い→新しい順、frontend が reverse）、`GET /history-stats/{guild_id}?days=30&top=10`（total_plays / top_tracks / top_users）。`Track.played_at` 追加
+- メモリの `player.history` deque は previous() 用に残している（UI からは未使用）
+- **バックアップ**: Pi の cron `30 4 * * * ~/backups/backup_irina_db.sh`（`sqlite3.Connection.backup`、14日保持、`~/backups/irina-YYYY-MM-DD.db`）
+- **起動時 VC 自動復帰**: `bot.py` `_rejoin_occupied_voice_channels()` — on_ready の3秒後、人がいる VC へ接続して MusicPlayer 作成。deploy 直後に「Rejoined voice channel ... on startup」がログに出れば OK。これで deploy 中に人がいても bot が戻る（再生中の曲は止まるので predeploy_check は引き続き必要）
+- 検証: live-playback-test 14/14（履歴3件含む）、smoke_test に /history /history-stats 追加
+
 ### 2026-08-17: リアルタイム同期の修正（commit 94044cf8 + 69878ae6）
 - **根本原因1**: `bot.py` の `notify_clients_local` が **no-op** だった。自動参加やスラッシュコマンドで作られた MusicPlayer（通常の利用経路）からはブラウザへ WebSocket 更新が一切飛んでいなかった → `register_notify_clients()` で main.py の `notify_clients` を登録して委譲
 - **根本原因2**: frontend の version 比較がサーバー再起動・ギルド切替の巻き戻りを考慮しておらず、deploy のたびに更新を全部無視 → MusicPlayer ごとの `state_epoch`（uuid）を送り、epoch が変わったら version リセット
@@ -244,6 +253,9 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 - `GET /uploaded-audio-list/{guild_id}` - アップロード済みオーディオ一覧
 - `GET /auto-connect-info/{guild_id}` - 自動接続情報
 - `GET /playlist/{browse_id}` - プレイリスト曲一覧
+- `GET /player-state/{guild_id}` - プレイヤー状態（WS update と同形）
+- `GET /history/{guild_id}?limit=&user_id=` - 再生履歴（SQLite）
+- `GET /history-stats/{guild_id}?days=&top=` - 再生統計
 
 ### Dead Code Removed (2026-03-04)
 - `MainPlayerContext.tsx`, `PlaybackContext.tsx`, `VolumeContext.tsx`, `GuildContext.tsx` 削除
