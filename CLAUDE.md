@@ -106,6 +106,14 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 - `_normalize_album_type()` でロケール表記を正規化、`/related` は10件に制限、`/charts` は `songs` が無い場合 `videos`(list) にフォールバック
 - 検証: ローカルで `app.main` の関数を直接呼んで全フィルタ/related/recommendations/mood/album/playlist を確認 → 本番デプロイ → `scripts/smoke_test.sh` 全OK
 
+### 2026-08-18: ホームのおすすめを YouTube アカウント個人化に（cookies.txt を ytmusicapi にも使用）
+- `main.py` `_build_ytmusic_personal()`: yt-dlp 用 `COOKIES_FILE`（Netscape 形式）から `SAPISID` 等を読み、ytmusicapi のブラウザ認証 JSON（`Authorization: SAPISIDHASH placeholder`。実値は ytmusicapi が毎回生成）で `ytmusic_personal` を作る。失敗時は None → 公開ホームにフォールバック。**読み取り専用でしか使わないこと**
+- `/recommendations`: 個人化ホームから `HOME_PERSONAL_SECTIONS`（おすすめ / 新作 / おすすめの話題の曲 / 毎日のおすすめ / おすすめのアルバム / おすすめのミュージック ビデオ / おすすめのミックス）だけをホワイトリスト。「もう一度聴く」「最近聞いていないお気に入り」「ショートで視聴した曲」「ライブラリから」等の履歴が透けるものは出さない。cookies 無効時は公開の 新作 + おすすめ。キャッシュ1時間
+- **ミックス（playlistId が `RD…`）は個人化プレイリスト**: 未ログインで `get_playlist` すると別人向けの中身（洋楽サントラ等）が返る。`/playlist/{id}` は `RD` 始まりなら `ytmusic_personal` で取得（ユーザー報告で発覚）
+- frontend: ホームのプレイリスト/アルバム/ミックスをタップ → `CollectionDialog`（曲一覧、1曲ずつ / 先頭50曲まとめて追加）。アーティスト → ArtistDialog。以前は browse URL を yt-dlp に投げていた
+- ホームアイテムの型判定: `browseId` が `MPRE` → アルバム（type からシングル/EP）、`UC` → アーティスト。`author` None 対応
+- 調査メモ: ログイン状態の `get_home` は21セクション、`get_history`(200件) `get_liked_songs` `get_library_playlists` 等も取れる（個人情報なので UI には出していない）
+
 ### 2026-08-18: Discord ステータスを「バージョン1.0.0」に変更
 - `bot.py:595` `CustomActivity(name='バージョン1.0.0')`（旧「工藤夏生デバッグ中」）。変更は bot 再起動を伴う
 
