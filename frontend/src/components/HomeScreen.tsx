@@ -391,9 +391,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
             <section key={`section-${index}`} className="w-full" aria-labelledby={`section-heading-${index}`}>
               <div className="flex items-end justify-between mb-4 sm:mb-5 px-4 sm:px-6">
                 <div className="flex items-baseline gap-3 min-w-0">
-                  <span className="font-display text-[13px] text-muted-foreground tabular-nums" aria-hidden="true">
-                    {String(index + 1).padStart(2, '0')}
-                  </span>
                   <h2 id={`section-heading-${index}`} className="font-display text-[22px] sm:text-[26px] font-medium text-foreground line-clamp-1">
                     {section.title}
                   </h2>

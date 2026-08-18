@@ -7,7 +7,7 @@ import { signIn } from 'next-auth/react';
 
 export const IntroPage = () => {
   return (
-    <div className="min-h-screen bg-[#FAFAFA] text-[#1D1D1F] flex flex-col">
+    <div className="min-h-screen bg-background text-foreground flex flex-col accent-wash grain">
       {/* Main Content */}
       <main className="flex-1 flex flex-col items-center justify-center px-6">
         <div className="w-full max-w-md mx-auto text-center">
@@ -18,20 +18,9 @@ export const IntroPage = () => {
             transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
             className="mb-10"
           >
-            <div className="inline-flex items-center justify-center w-[72px] h-[72px] rounded-[18px] bg-gradient-to-b from-[#FF2D55] to-[#E8234A] shadow-[0_4px_24px_rgba(232,35,74,0.24)]">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                className="w-9 h-9 text-white"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M9 18V5l12-2v13" />
-                <circle cx="6" cy="18" r="3" fill="currentColor" />
-                <circle cx="18" cy="16" r="3" fill="currentColor" />
-              </svg>
+            {/* モノグラム: 藍の円に見出し書体の I */}
+            <div className="inline-flex items-center justify-center w-[76px] h-[76px] rounded-full bg-primary text-primary-foreground shadow-[0_10px_30px_-10px_color-mix(in_oklab,var(--color-primary)_60%,transparent)]">
+              <span className="font-display text-[40px] leading-none -mt-1" aria-hidden="true">I</span>
             </div>
           </motion.div>
 
@@ -40,7 +29,7 @@ export const IntroPage = () => {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
-            className="text-[32px] sm:text-[40px] font-bold tracking-[-0.02em] mb-4"
+            className="font-display text-[44px] sm:text-[56px] font-medium tracking-[-0.01em] mb-3 leading-none"
           >
             Irina
           </motion.h1>
@@ -50,7 +39,7 @@ export const IntroPage = () => {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
-            className="text-[17px] text-[#86868B] leading-relaxed mb-12"
+            className="font-display text-[18px] sm:text-[20px] text-muted-foreground leading-relaxed mb-12"
           >
             みんなで音楽を楽しむ
           </motion.p>
@@ -81,7 +70,7 @@ export const IntroPage = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.6, delay: 0.4, ease: [0.22, 1, 0.36, 1] }}
-            className="text-[13px] text-[#86868B] mt-8"
+            className="text-[13px] text-muted-foreground mt-8"
           >
             ログインするとサーバーの音楽を操作できます
           </motion.p>
@@ -95,8 +84,8 @@ export const IntroPage = () => {
         transition={{ duration: 0.6, delay: 0.5, ease: [0.22, 1, 0.36, 1] }}
         className="py-6 text-center"
       >
-        <p className="text-[11px] text-[#86868B]/60 tracking-wide">
-          Irina Music
+        <p className="text-[11px] text-muted-foreground/70 tracking-[0.18em] uppercase">
+          Irina Music · Listening room for Discord
         </p>
       </motion.footer>
     </div>

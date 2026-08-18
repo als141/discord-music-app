@@ -16,12 +16,12 @@
 @property --color-primary {
   syntax: '<color>';
   inherits: true;
-  initial-value: #D9482B;
+  initial-value: #33508C;
 }
 @property --accent-glow {
   syntax: '<color>';
   inherits: true;
-  initial-value: #F2B9A8;
+  initial-value: #C9D3EA;
 }
 
 /* Theme configuration using @theme directive */
@@ -39,26 +39,26 @@
   --font-display: var(--font-display), "Fraunces", var(--font-display-jp), "Shippori Mincho", "Hiragino Mincho ProN", serif;
 
   /* Colors — 紙のような温かいニュートラル */
-  --color-background: #F5F1EA;      /* paper */
+  --color-background: #F1F0EC;      /* limestone（クリーム寄りにしない、わずかに灰みのある紙） */
   --color-foreground: #1C1917;      /* ink */
-  --color-card: #FFFCF7;            /* 少しだけ明るい紙 */
+  --color-card: #FBFAF7;            /* 少しだけ明るい紙 */
   --color-card-foreground: #1C1917;
-  --color-popover: #FFFCF7;
+  --color-popover: #FBFAF7;
   --color-popover-foreground: #1C1917;
 
-  /* Primary — 既定は朱（vermilion）。再生中はアートワーク由来の色に実行時上書きされる */
-  --color-primary: #D9482B;
+  /* Primary — 既定は藍（Japanese indigo）。再生中はアートワーク由来の色に実行時上書きされ、画面が「色づく」 */
+  --color-primary: #33508C;
   --color-primary-foreground: #FFFFFF;
-  --accent-glow: #F2B9A8;           /* primary の淡いにじみ（背景のグロー用） */
+  --accent-glow: #C9D3EA;           /* primary の淡いにじみ（背景のグロー用） */
 
   /* Secondary / Muted — 紙より一段沈んだ面 */
-  --color-secondary: #ECE6DC;
+  --color-secondary: #E7E5DF;
   --color-secondary-foreground: #1C1917;
-  --color-muted: #ECE6DC;
-  --color-muted-foreground: #78716C;
+  --color-muted: #E7E5DF;
+  --color-muted-foreground: #706C66;
 
   /* Accent（インタラクションの薄い面） */
-  --color-accent: #ECE6DC;
+  --color-accent: #E7E5DF;
   --color-accent-foreground: #1C1917;
 
   /* Destructive */
@@ -66,9 +66,9 @@
   --color-destructive-foreground: #FFFFFF;
 
   /* Border & Input */
-  --color-border: #E2DACD;
-  --color-input: #ECE6DC;
-  --color-ring: #D9482B;
+  --color-border: #DCD9D1;
+  --color-input: #E7E5DF;
+  --color-ring: #33508C;
 
   /* Border radius — 大きめの角丸で「箱」を作る */
   --radius-sm: 8px;
@@ -741,7 +741,7 @@
     position: absolute;
     inset: 0;
     pointer-events: none;
-    opacity: 0.045;
+    opacity: 0.028;
     mix-blend-mode: multiply;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
     background-size: 160px 160px;
@@ -770,7 +770,7 @@
 
   /* Text utilities */
   .text-primary-gradient {
-    background: linear-gradient(135deg, var(--color-primary) 0%, color-mix(in oklab, var(--color-primary) 60%, #F5F1EA) 100%);
+    background: linear-gradient(135deg, var(--color-primary) 0%, color-mix(in oklab, var(--color-primary) 60%, #F1F0EC) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;

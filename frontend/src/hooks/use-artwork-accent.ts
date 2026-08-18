@@ -11,8 +11,8 @@ import { useEffect } from 'react';
  * - CORS で読めない画像（tainted canvas）のときは既定色に戻す
  */
 
-const DEFAULT_PRIMARY = '#D9482B';
-const DEFAULT_GLOW = '#F2B9A8';
+const DEFAULT_PRIMARY = '#33508C';
+const DEFAULT_GLOW = '#C9D3EA';
 
 function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
   r /= 255; g /= 255; b /= 255;
