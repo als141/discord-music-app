@@ -48,7 +48,10 @@ try {
   console.log(`${ts()} 最終キュー:`, JSON.stringify(last));
   check('pending が残っていない', last && last.pending === 0);
   check('無効URLが除外され有効5曲が入っている', last && last.ids.length === 5, `ids=${last?.ids.join(',')}`);
-  check('追加した順序が保たれている', last && JSON.stringify(last.ids) === JSON.stringify(EXPECT_IDS), `got=${last?.ids.join(',')}`);
+  // 同時リクエストはサーバー到着順が確定順。プレースホルダの並び（到着順）が最終キューでも保たれていること
+  const expected = early.ids.filter(id => id !== 'this_is_not');
+  check('プレースホルダの順序（到着順）が最終キューでも保たれている', last && JSON.stringify(last.ids) === JSON.stringify(expected), `expected=${expected.join(',')} got=${last?.ids.join(',')}`);
+  check('有効な5曲がすべて含まれる', last && EXPECT_IDS.every(id => last.ids.includes(id)));
   const versions = events.map(e => e.v);
   check('version が単調増加', versions.every((v, i) => i === 0 || v >= versions[i - 1]));
   const st = await (await fetch(`${API}/player-state/${GUILD}`)).json();
