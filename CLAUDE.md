@@ -106,6 +106,9 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 - `_normalize_album_type()` でロケール表記を正規化、`/related` は10件に制限、`/charts` は `songs` が無い場合 `videos`(list) にフォールバック
 - 検証: ローカルで `app.main` の関数を直接呼んで全フィルタ/related/recommendations/mood/album/playlist を確認 → 本番デプロイ → `scripts/smoke_test.sh` 全OK
 
+### 2026-08-18: Discord ステータスを「バージョン1.0.0」に変更
+- `bot.py:595` `CustomActivity(name='バージョン1.0.0')`（旧「工藤夏生デバッグ中」）。変更は bot 再起動を伴う
+
 ### 2026-08-18: 同時追加の堅牢化・ゾンビプレイヤー修正（commits 48d58aa / 曲飛ばし修正 / disconnect修正）
 - **同時に複数曲を追加**: `MusicPlayer.add_to_queue` はプレースホルダ（`Song.pending=True`, title「読み込み中…」）を即座にキューへ入れ、yt-dlp 取得後に**同じ位置に差し替え**（失敗なら削除+通知）。到着順がそのままキュー順。UI は `Track.pending` でスピナー表示、先頭が pending なら `is_loading`
 - **曲飛ばしバグ（同時追加テストで発見）**: 追加完了時の `next.set()` で player_loop が早起きし、再生中の曲を再スタート→stop→after コールバック連鎖で曲が次々消えていた。→ loop は after コールバックの `_song_finished` でのみ次へ進み、早起きは待ち直す。`next.set()` は「再生中でも一時停止中でもない」時だけ
