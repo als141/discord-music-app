@@ -229,6 +229,7 @@ class MusicPlayer:
 
         # 状態バージョン管理（フロントエンドとの同期用）
         self.state_version: int = 0
+        self._song_finished: bool = False
         # プレイヤーインスタンスごとの世代ID。bot再起動やVC再参加で MusicPlayer が作り直されると
         # state_version が 0 に戻るため、クライアントはこの epoch が変わったら version 比較をリセットする
         self.state_epoch: str = uuid.uuid4().hex
@@ -351,18 +352,29 @@ class MusicPlayer:
                 self.queue.popleft()
                 continue
 
-            await self.next.wait()
+            # 曲が本当に終わる（after コールバック）まで待つ。
+            # 曲追加などによる next.set() で早起きしても、再生中なら待ち直す（以前は現在の曲が飛んでいた）
+            self._song_finished = False
+            while not self.shutdown_flag:
+                await self.next.wait()
+                if self._song_finished:
+                    break
+                vc = self.guild.voice_client or self.voice_client
+                if not vc or not vc.is_connected() or (not vc.is_playing() and not vc.is_paused()):
+                    break  # 切断/停止済みなら抜ける
+                self.next.clear()
 
         logger.info(f"音楽プレイヤーループを終了 (Guild: {self.guild_id})")
 
     def play_next_song(self, error):
-        """次の曲を再生する"""
+        """次の曲を再生する（voice_client の after コールバック。曲の終了/停止時にのみ呼ばれる）"""
         if error:
             logger.error(f"再生中にエラーが発生: {error}")
         if self.queue:
             self.queue.popleft()
         # 再生終了時に現在の曲をリセットする
         self.current = None
+        self._song_finished = True
         self.bot.loop.create_task(self.notify_clients_wrapper())
         self.next.set()
 
@@ -485,13 +497,14 @@ class MusicPlayer:
             logger.error(f"曲の追加に失敗（プレースホルダを削除）: {url}: {e}")
             self._replace_in_queue(placeholder, [])
             await self.notify_clients(self.guild_id)
-            self.next.set()
+            if self.voice_client and not self.voice_client.is_playing() and not self.voice_client.is_paused():
+                self.next.set()
             raise
 
         self._replace_in_queue(placeholder, songs)
         await self.notify_clients(self.guild_id)
-        # 再生中でなければ必ず再生ループを再開する
-        if self.voice_client and not self.voice_client.is_playing():
+        # 再生中/一時停止中でなければ再生ループを再開する（一時停止中に起こすと現在の曲が飛ぶ）
+        if self.voice_client and not self.voice_client.is_playing() and not self.voice_client.is_paused():
             self.next.set()
 
     def _replace_in_queue(self, placeholder: "Song", songs: List["Song"]) -> None:
@@ -624,8 +637,8 @@ class MusicPlayer:
             await self.notify_clients(self.guild_id)
 
     async def skip(self) -> None:
-        """現在の曲をスキップする"""
-        if self.voice_client and self.voice_client.is_playing():
+        """現在の曲をスキップする（一時停止中でも効く）"""
+        if self.voice_client and (self.voice_client.is_playing() or self.voice_client.is_paused()):
             self.voice_client.stop()
         await self.notify_clients(self.guild_id)
 
