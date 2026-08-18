@@ -39,6 +39,48 @@ from fastapi.staticfiles import StaticFiles  # ← 追加
 ytmusic = YTMusic(language='en', location='JP')
 ytmusic_ja = YTMusic(language='ja', location='JP')
 
+
+def _build_ytmusic_personal():
+    """yt-dlp 用の cookies.txt（YouTube アカウントのログイン cookie）から、
+    ytmusicapi のブラウザ認証インスタンスを作る。無ければ/壊れていれば None（公開ホームにフォールバック）。
+
+    ホームの「おすすめ」「毎日のおすすめ」等の個人化セクションはログイン状態でしか出ないため。
+    読み取り専用でしか使わない（高評価/登録などの書き込み API は呼ばない）。
+    """
+    import http.cookiejar
+    from .config import COOKIES_FILE
+    path = COOKIES_FILE
+    if not path or not os.path.exists(path):
+        return None
+    try:
+        cj = http.cookiejar.MozillaCookieJar(path)
+        cj.load(ignore_discard=True, ignore_expires=True)
+        cookies = {c.name: c.value for c in cj if 'youtube.com' in c.domain}
+        if 'SAPISID' not in cookies and '__Secure-3PAPISID' not in cookies:
+            print("[ytmusic personal] cookies に SAPISID が無いため個人化は無効")
+            return None
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36',
+            'Accept': '*/*', 'Accept-Language': 'ja-JP,ja;q=0.9', 'Content-Type': 'application/json',
+            'X-Goog-AuthUser': '0', 'x-origin': 'https://music.youtube.com',
+            'Cookie': '; '.join(f'{k}={v}' for k, v in cookies.items()),
+            'Authorization': 'SAPISIDHASH placeholder',  # 実際の値は ytmusicapi が SAPISID から毎回生成する
+        }
+        inst = YTMusic(auth=json.dumps(headers), language='ja', location='JP')
+        print("[ytmusic personal] cookies.txt からログイン済みインスタンスを作成")
+        return inst
+    except Exception as e:
+        print(f"[ytmusic personal] 初期化失敗（公開ホームにフォールバック）: {type(e).__name__}: {e}")
+        return None
+
+
+ytmusic_personal = _build_ytmusic_personal()
+
+# ホームに出す個人化セクション（YouTube Music の見出し名でホワイトリスト。履歴系は出さない）
+HOME_PERSONAL_SECTIONS = ['おすすめ', '新作', 'おすすめの話題の曲', '毎日のおすすめ', 'おすすめのアルバム', 'おすすめのミュージック ビデオ', 'おすすめのミックス']
+# 公開（未ログイン）ホームから常に出すセクション
+HOME_PUBLIC_SECTIONS = ['新作']
+
 # アルバム種別の正規化（ロケール依存の表記 → frontend が期待する 'album'/'single'/'ep'）
 _ALBUM_TYPE_MAP = {
     'album': 'album', 'アルバム': 'album',
@@ -167,7 +209,7 @@ VOICE_CONNECT_TIMEOUT_SECONDS = 15
 # キャッシュ用の変数を定義
 recommendations_cache = None
 recommendations_cache_timestamp = None
-CACHE_DURATION = timedelta(hours=3)  # キャッシュの有効期間
+CACHE_DURATION = timedelta(hours=1)  # キャッシュの有効期間（個人化ホームは日替わりなので短め）
 
 app.add_middleware(
     CORSMiddleware,
@@ -562,71 +604,108 @@ async def websocket_endpoint(websocket: WebSocket, guild_id: str):
         except Exception as cleanup_error:
             print(f"Error during WebSocket cleanup for guild {guild_id}: {str(cleanup_error)}")
             
+def _home_item_to_search_item(item: dict) -> Optional[SearchItem]:
+    """ytmusicapi get_home のアイテムを SearchItem に変換（曲/動画・プレイリスト/ミックス・アルバム・アーティスト）"""
+    thumbnail = item['thumbnails'][0]['url'] if item.get('thumbnails') else ""
+    artists = [a.get('name') for a in (item.get('artists') or []) if isinstance(a, dict) and a.get('name')]
+    if item.get('videoId'):
+        artist_data = (item.get('artists') or [{}])[0]
+        video_type = str(item.get('videoType') or '')
+        return SearchItem(
+            type='video' if ('OMV' in video_type or 'UGC' in video_type) else 'song',
+            title=item.get('title') or 'Unknown',
+            artist=', '.join(artists) or "Unknown Artist",
+            thumbnail=adjust_thumbnail_size(thumbnail),
+            url=f"https://music.youtube.com/watch?v={item['videoId']}",
+            artistId=extract_artist_id(artist_data) if isinstance(artist_data, dict) else None,
+        )
+    if item.get('playlistId'):
+        author = item.get('author')
+        if isinstance(author, list) and author:
+            author_name = (author[0] or {}).get('name')
+        elif isinstance(author, dict):
+            author_name = author.get('name')
+        else:
+            author_name = None
+        return SearchItem(
+            type='playlist',
+            title=item.get('title') or 'Unknown Playlist',
+            artist=author_name or item.get('description') or 'YouTube Music',
+            thumbnail=adjust_thumbnail_size(thumbnail),
+            url=f"https://music.youtube.com/playlist?list={item['playlistId']}",
+            browseId=item['playlistId'],
+        )
+    if item.get('browseId'):
+        bid = str(item['browseId'])
+        is_album = bid.startswith('MPRE') or bool(item.get('year')) or bool(item.get('type'))
+        return SearchItem(
+            type=_normalize_album_type(item.get('type')) if is_album else 'artist',
+            title=item.get('title') or 'Unknown',
+            artist=', '.join(artists) or ("Unknown Artist" if is_album else item.get('title') or ''),
+            thumbnail=adjust_thumbnail_size(thumbnail),
+            url=f"https://music.youtube.com/browse/{bid}",
+            browseId=bid,
+        )
+    return None
+
+
+def _convert_home_sections(home: list, allow: List[str]) -> List[dict]:
+    """タイトルのホワイトリストに一致するセクションだけを allow の順で返す"""
+    by_title = {}
+    for section in home or []:
+        title = section.get('title') or ''
+        if title in allow and title not in by_title:
+            contents = [x for x in (_home_item_to_search_item(i) for i in section.get('contents', [])) if x]
+            if contents:
+                by_title[title] = {"title": title, "contents": contents}
+    return [by_title[t] for t in allow if t in by_title]
+
+
 @app.get("/recommendations", response_model=List[dict])
 async def get_recommendations():
+    """ホームのおすすめ。
+    公開ホームの「新作」 + （cookies が有効なら）ログイン済みホームの個人化セクション
+    （おすすめ / 新作 / おすすめの話題の曲 / 毎日のおすすめ / おすすめのアルバム / おすすめのミュージック ビデオ / おすすめのミックス）。
+    履歴が透ける「もう一度聴く」「最近聞いていないお気に入り」等は出さない。1時間キャッシュ。
+    """
     global recommendations_cache, recommendations_cache_timestamp
     try:
         now = datetime.now()
         if recommendations_cache and recommendations_cache_timestamp:
             if now - recommendations_cache_timestamp < CACHE_DURATION:
                 return recommendations_cache
-        home = ytmusic_ja.get_home(limit=5)
-        sections = []
-        for section in home:
-            section_title = section.get('title', 'おすすめ')
-            contents = []
-            for item in section.get('contents', []):
-                if item.get('videoId'):
-                    video_url = f"https://music.youtube.com/watch?v={item['videoId']}"
-                    thumbnail = item['thumbnails'][0]['url'] if 'thumbnails' in item and item['thumbnails'] else ""
-                    artist_name = ', '.join([artist['name'] for artist in item.get('artists', [])]) or "Unknown Artist"
-                    artist_data = item.get('artists', [{}])[0]
-                    artist_browseId = extract_artist_id(artist_data)
-                    contents.append(
-                        SearchItem(
-                            type='song',
-                            title=item['title'],
-                            artist=artist_name,
-                            thumbnail=adjust_thumbnail_size(thumbnail),
-                            url=video_url,
-                            artistId=artist_browseId
-                        )
-                    )
-                elif item.get('playlistId'):
-                    playlist_url = f"https://music.youtube.com/playlist?list={item['playlistId']}"
-                    thumbnail = item['thumbnails'][0]['url'] if 'thumbnails' in item and item['thumbnails'] else ""
-                    contents.append(
-                        SearchItem(
-                            type='playlist',
-                            title=item['title'],
-                            artist=item.get('author', [{}])[0].get('name', 'Unknown Artist'),
-                            thumbnail=adjust_thumbnail_size(thumbnail),
-                            url=playlist_url,
-                            browseId=item['playlistId']
-                        )
-                    )
-                elif item.get('browseId'):
-                    browse_url = f"https://music.youtube.com/browse/{item['browseId']}"
-                    thumbnail = item['thumbnails'][0]['url'] if 'thumbnails' in item and item['thumbnails'] else ""
-                    contents.append(
-                        SearchItem(
-                            type='album' if item.get('year') else 'artist',
-                            title=item['title'],
-                            artist=', '.join([artist['name'] for artist in item.get('artists', [])]) or "Unknown Artist",
-                            thumbnail=adjust_thumbnail_size(thumbnail),
-                            url=browse_url,
-                            browseId=item['browseId']
-                        )
-                    )
-            if contents:
-                sections.append({
-                    "title": section_title,
-                    "contents": contents
-                })
+
+        sections: List[dict] = []
+        seen = set()
+
+        def _add(secs):
+            for sec in secs:
+                if sec["title"] not in seen:
+                    seen.add(sec["title"])
+                    sections.append(sec)
+
+        # 1) 個人化（あれば）
+        if ytmusic_personal is not None:
+            try:
+                personal_home = await asyncio.to_thread(ytmusic_personal.get_home, 30)
+                _add(_convert_home_sections(personal_home, HOME_PERSONAL_SECTIONS))
+            except Exception as e:
+                print(f"[recommendations] 個人化ホームの取得に失敗（公開のみで続行）: {type(e).__name__}: {e}")
+
+        # 2) 公開ホーム（常に）。個人化が取れなかったときは公開の「おすすめ」も足して空にならないようにする
+        public_home = await asyncio.to_thread(ytmusic_ja.get_home, 12)
+        public_allow = list(HOME_PUBLIC_SECTIONS) + ([] if any(s["title"] == 'おすすめ' for s in sections) else ['おすすめ'])
+        public_sections = _convert_home_sections(public_home, public_allow)
+        # 「新作」は先頭に、公開「おすすめ」は末尾に
+        for sec in public_sections:
+            if sec["title"] == '新作' and '新作' not in seen:
+                seen.add('新作'); sections.insert(0, sec)
+        for sec in public_sections:
+            if sec["title"] != '新作':
+                _add([sec])
 
         recommendations_cache = sections
         recommendations_cache_timestamp = now
-
         return sections
     except Exception as e:
         print(f"おすすめの曲と動画の取得中にエラーが発生しました: {e}")

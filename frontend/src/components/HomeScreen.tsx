@@ -30,9 +30,12 @@ import ArtistDialog from '@/components/ArtistDialog';
 import { ScrollRow } from './home/ScrollRow';
 import { SectionAllDialog } from './home/SectionAllDialog';
 import { GuildStatsCard } from './home/GuildStatsCard';
+import { CollectionDialog } from './home/CollectionDialog';
 
 interface HomeScreenProps {
   onSelectTrack: (item: PlayableItem) => void;
+  /** 画面遷移せずにキューへ追加（曲一覧ダイアログからの追加用）。未指定なら onSelectTrack */
+  onEnqueue?: (item: PlayableItem) => void | Promise<void>;
   guildId: string | null;
   activeTab: string;
   onTabChange: (tab: string) => void;
@@ -444,6 +447,7 @@ URLAddCard.displayName = 'URLAddCard';
 
 export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
   onSelectTrack,
+  onEnqueue,
   guildId,
   activeTab,
   onTabChange,
@@ -466,7 +470,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
     buildDate: '2026.8.18',
   });
 
+  // プレイリスト / アルバム / ミックスは曲一覧ダイアログ、アーティストはアーティストダイアログ、それ以外は再生キューへ
+  const [collectionItem, setCollectionItem] = useState<SearchItem | null>(null);
   const handleSelectTrackCallback = useCallback(async (item: PlayableItem) => {
+    const si = item as SearchItem;
+    if (si.type && si.browseId) {
+      if (['playlist', 'album', 'single', 'ep'].includes(si.type)) { setCollectionItem(si); return; }
+      if (si.type === 'artist') { setSelectedArtistId(si.browseId); setIsArtistDialogOpen(true); return; }
+    }
     await onSelectTrack(item);
   }, [onSelectTrack]);
 
@@ -775,6 +786,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
       </div>
 
       {allDialog}
+
+      <CollectionDialog item={collectionItem} onClose={() => setCollectionItem(null)} onAddTrack={(t) => (onEnqueue ?? onSelectTrack)(t)} />
 
       {/* Artist dialog */}
       {isArtistDialogOpen && selectedArtistId && (

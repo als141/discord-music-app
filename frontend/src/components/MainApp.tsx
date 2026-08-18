@@ -288,6 +288,7 @@ export const MainApp: React.FC = () => {
         addToQueue(item, getUserInfo());
         if (!isDesktop) setIsMainPlayerVisible(true);
       }}
+      onEnqueue={(item: PlayableItem) => addToQueue(item, getUserInfo())}
       guildId={activeServerId}
       activeTab={homeActiveTab}
       onTabChange={(tab) => setHomeActiveTab(tab)}
