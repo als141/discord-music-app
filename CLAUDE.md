@@ -42,6 +42,7 @@ Discord音楽ボットアプリケーション。フロントエンド（Next.js
 - **自動デプロイ**: **10秒ごと**にGitHubをチェック (`discord-music-bot-deploy.timer`, `OnUnitActiveSec=10s`)。mainへのpush＝即本番デプロイ＋再起動
 - **デプロイ前チェック（backend変更時は必須）**: `bash scripts/predeploy_check.sh` — 誰かが再生中（has_player=true のギルドあり）なら push を待つ。push＝10秒で bot 再起動＝再生が切れる
 - **本番スモークテスト**: `bash scripts/smoke_test.sh`（デプロイ後に毎回実行。全主要API+ルート欠落+Piのエラーログを確認）
+- **同時追加テスト（テストサーバー限定）**: `node scripts/concurrent-add-test.mjs`
 - **実再生テスト（テストサーバー限定）**: `node scripts/live-playback-test.mjs` — bot を テストサーバー(1080511818658762752)/VC 一般 に入れて add-url/pause/resume/skip/disconnect を REST で叩き、WS 更新を検証。人がいるサーバーでは絶対に実行しない
 - **リアルタイム同期のブラウザテスト**: `node scripts/realtime-sync-test.mjs`（dev サーバー必要。Playwright で WS を偽装、14 ケース）
 - **リファクタ実行計画**: `docs/refactoring_execution_and_test_plan_ja.md`
@@ -104,6 +105,13 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 - **注意（上流バグ）**: ytmusicapi 1.12.x は `language='ja'` だと **filter 付き search が空配列** になる（カテゴリ見出し「曲」と "song" を照合するため）。→ `main.py` は検索/関連/詳細取得用 `ytmusic = YTMusic(language='en', location='JP')` と、`get_home`/mood 用 `ytmusic_ja` の2インスタンス構成にした。**ytmusic を ja に戻してはいけない**
 - `_normalize_album_type()` でロケール表記を正規化、`/related` は10件に制限、`/charts` は `songs` が無い場合 `videos`(list) にフォールバック
 - 検証: ローカルで `app.main` の関数を直接呼んで全フィルタ/related/recommendations/mood/album/playlist を確認 → 本番デプロイ → `scripts/smoke_test.sh` 全OK
+
+### 2026-08-18: 同時追加の堅牢化・ゾンビプレイヤー修正（commits 48d58aa / 曲飛ばし修正 / disconnect修正）
+- **同時に複数曲を追加**: `MusicPlayer.add_to_queue` はプレースホルダ（`Song.pending=True`, title「読み込み中…」）を即座にキューへ入れ、yt-dlp 取得後に**同じ位置に差し替え**（失敗なら削除+通知）。到着順がそのままキュー順。UI は `Track.pending` でスピナー表示、先頭が pending なら `is_loading`
+- **曲飛ばしバグ（同時追加テストで発見）**: 追加完了時の `next.set()` で player_loop が早起きし、再生中の曲を再スタート→stop→after コールバック連鎖で曲が次々消えていた。→ loop は after コールバックの `_song_finished` でのみ次へ進み、早起きは待ち直す。`next.set()` は「再生中でも一時停止中でもない」時だけ
+- `skip()` が一時停止中に効かなかったのを修正
+- **ゾンビプレイヤー**: `/disconnect-voice-channel` が `del music_players[...]` だけで `shutdown()` していなかった → 古い `player_loop` が生き残り、次に VC に入った瞬間に古いキューを勝手に再生した。→ `pop` + `await player.shutdown()`
+- テスト: `node scripts/concurrent-add-test.mjs`（6件同時・1件無効、9ケース）、`live-playback-test.mjs`（14ケース）、`realtime-sync-test.mjs`（14ケース）全 OK
 
 ### 2026-08-18: デザイン刷新の試行と着地（commit 8b4fc7b5）
 - ブランチ `design/2026-listening-room` で「紙色＋明朝＋藍」の刷新案を作ったが、ユーザー評価は「明朝不要・フォントは前の方が良い・色味がAIっぽい・挨拶コピー不要」→ **見た目は元の白地＋ローズ＋システムサンセリフに戻し**、機能改善だけ main にマージ
