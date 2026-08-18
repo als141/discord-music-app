@@ -1,6 +1,29 @@
 import type { Metadata, Viewport } from "next"
+import { Fraunces, Zen_Kaku_Gothic_New, Shippori_Mincho } from "next/font/google"
 import "./globals.css"
 import { Providers } from "./providers"
+
+// 見出し: 可変セリフ（opsz/SOFT/WONK 軸）— 2026 のエディトリアル志向
+const fontDisplay = Fraunces({
+  subsets: ["latin"],
+  axes: ["opsz", "SOFT", "WONK"],
+  variable: "--font-display",
+  display: "swap",
+})
+// 見出し（和文）: しっぽり明朝
+const fontDisplayJp = Shippori_Mincho({
+  subsets: ["latin"],
+  weight: ["500", "700"],
+  variable: "--font-display-jp",
+  display: "swap",
+})
+// 本文（和文/欧文）
+const fontBody = Zen_Kaku_Gothic_New({
+  subsets: ["latin"],
+  weight: ["400", "500", "700"],
+  variable: "--font-body",
+  display: "swap",
+})
 
 export const metadata: Metadata = {
   title: "Irina Music Player",
@@ -26,7 +49,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: "#FFFFFF",
+  themeColor: "#F5F1EA",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -40,7 +63,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="ja" suppressHydrationWarning>
+    <html lang="ja" suppressHydrationWarning className={`${fontDisplay.variable} ${fontDisplayJp.variable} ${fontBody.variable}`}>
       <body>
         <Providers>
           {children}

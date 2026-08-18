@@ -119,7 +119,7 @@ const ServerListItem = memo(({
       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 ${
         isActive
           ? 'bg-primary/10 text-primary'
-          : 'hover:bg-black/5 text-foreground'
+          : 'hover:bg-secondary text-foreground'
       }`}
     >
       <div className={`flex items-center justify-center w-8 h-8 rounded-lg ${
@@ -193,7 +193,7 @@ const VoiceChannelItem = memo(({
         ? 'bg-green-50 text-green-700'
         : isActive
         ? 'bg-primary/5 text-primary'
-        : 'hover:bg-black/5 text-foreground'
+        : 'hover:bg-secondary text-foreground'
     }`}
   >
     <Mic className={`h-4 w-4 ${isBotInChannel ? 'text-green-600' : isActive ? 'text-primary' : 'text-muted-foreground'}`} />
@@ -210,7 +210,7 @@ VoiceChannelItem.displayName = 'VoiceChannelItem';
 
 // Info Panel Component
 const InfoPanel = memo(() => (
-  <div className="mx-4 mb-4 p-4 rounded-xl bg-secondary/50">
+  <div className="mx-4 mb-4 p-4 rounded-2xl bg-card border border-border/70">
     <div className="flex items-start gap-3">
       <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 flex-shrink-0">
         <Info className="w-4 h-4 text-primary" />
@@ -305,7 +305,7 @@ export const SideMenu: React.FC<SideMenuProps> = React.memo(({
               animate="open"
               exit="closed"
               variants={animations.overlay}
-              className="fixed inset-0 bg-black/30 z-[150] backdrop-blur-sm"
+              className="fixed inset-0 bg-foreground/25 z-[150] backdrop-blur-sm"
               onClick={onClose}
             />
 
@@ -324,7 +324,7 @@ export const SideMenu: React.FC<SideMenuProps> = React.memo(({
             >
               {/* Header */}
               <div className="flex items-center justify-between h-14 px-4 border-b border-border">
-                <h2 className="text-lg font-bold text-foreground">設定</h2>
+                <h2 className="font-display text-[22px] font-medium text-foreground">Irina <span className="text-muted-foreground text-[15px] font-sans font-normal ml-1">設定</span></h2>
                 <div className="flex items-center gap-1">
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -332,7 +332,7 @@ export const SideMenu: React.FC<SideMenuProps> = React.memo(({
                         variant="ghost"
                         size="icon"
                         onClick={onRefresh}
-                        className="h-8 w-8 rounded-full hover:bg-black/5"
+                        className="h-8 w-8 rounded-full hover:bg-secondary"
                       >
                         <RefreshCw className="h-4 w-4" />
                       </Button>
@@ -345,7 +345,7 @@ export const SideMenu: React.FC<SideMenuProps> = React.memo(({
                         variant="ghost"
                         size="icon"
                         onClick={onClose}
-                        className="h-8 w-8 rounded-full hover:bg-black/5"
+                        className="h-8 w-8 rounded-full hover:bg-secondary"
                       >
                         <X className="h-4 w-4" />
                       </Button>
@@ -490,7 +490,7 @@ export const SideMenu: React.FC<SideMenuProps> = React.memo(({
                         <Settings className="h-4 w-4 text-muted-foreground" />
                         <span className="text-sm text-foreground">バージョン</span>
                       </div>
-                      <span className="text-xs font-medium text-muted-foreground bg-white px-2 py-1 rounded-full">
+                      <span className="text-xs font-medium text-muted-foreground bg-card border border-border px-2 py-1 rounded-full">
                         {botVersion}
                       </span>
                     </div>

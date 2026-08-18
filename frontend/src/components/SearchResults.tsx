@@ -96,14 +96,14 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
           <div className="max-w-screen-xl mx-auto">
             {/* Title and close button */}
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg sm:text-xl font-bold text-foreground tracking-tight">
+              <h2 className="font-display text-[22px] sm:text-[26px] font-medium text-foreground">
                 検索結果
               </h2>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={onClose}
-                className="h-8 px-3 rounded-full hover:bg-black/5 active:bg-black/10 text-primary font-medium transition-all duration-150 flex items-center gap-1"
+                className="h-8 px-3 rounded-full hover:bg-secondary active:bg-secondary/80 text-primary font-medium transition-all duration-150 flex items-center gap-1"
               >
                 <span className="text-sm">閉じる</span>
               </Button>
@@ -124,7 +124,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
                   type="submit"
                   disabled={isLoading}
                   size="sm"
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-8 px-4 bg-primary hover:bg-primary/90 text-white rounded-full text-xs font-medium"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-8 px-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full text-xs font-medium"
                 >
                   {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : '検索'}
                 </Button>
@@ -175,7 +175,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
                     <TabsList className="inline-flex p-1 rounded-full bg-secondary/60 whitespace-nowrap">
                       <TabsTrigger
                         value="all"
-                        className="rounded-full px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-foreground text-muted-foreground transition-all flex-shrink-0"
+                        className="rounded-full px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-medium data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-foreground text-muted-foreground transition-all flex-shrink-0"
                       >
                         {categoryLabels.all}
                       </TabsTrigger>
@@ -184,7 +184,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
                           <TabsTrigger
                             key={category}
                             value={category}
-                            className="rounded-full px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-foreground text-muted-foreground transition-all flex-shrink-0"
+                            className="rounded-full px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-medium data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-foreground text-muted-foreground transition-all flex-shrink-0"
                           >
                             {categoryLabels[category]}
                             <span className="ml-1 sm:ml-1.5 text-[10px] sm:text-xs opacity-60">({items.length})</span>
@@ -203,7 +203,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ results, onAddToQu
                     return (
                       <section key={category}>
                         <div className="flex justify-between items-center mb-4">
-                          <h3 className="text-lg sm:text-xl font-bold text-foreground">
+                          <h3 className="font-display text-[20px] sm:text-[24px] font-medium text-foreground">
                             {categoryLabels[category]}
                           </h3>
                           {items.length > (category === 'artists' ? 1 : 5) && (
@@ -352,7 +352,7 @@ const SearchResultCardInner: React.FC<SearchResultCardProps> = ({
 
   return (
     <motion.div
-      className="bg-secondary/40 rounded-xl overflow-hidden transition-all duration-200 hover:bg-secondary/60 w-full"
+      className="bg-card border border-border/70 rounded-2xl overflow-hidden transition-all duration-200 hover:bg-secondary/50 w-full"
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
@@ -404,13 +404,13 @@ const SearchResultCardInner: React.FC<SearchResultCardProps> = ({
                 <Button
                   size="sm"
                   onClick={() => onAddToQueue(item)}
-                  className="h-8 w-8 sm:h-9 sm:w-9 rounded-full bg-black/[0.03] hover:bg-black/[0.08] active:bg-black/[0.12] text-primary hover:text-primary/80 transition-all duration-150 border border-black/[0.04]"
+                  className="h-8 w-8 sm:h-9 sm:w-9 rounded-full bg-secondary/70 hover:bg-secondary active:bg-secondary text-primary hover:text-primary/80 transition-all duration-150 border border-black/[0.04]"
                   variant="ghost"
                 >
                   <Plus className="w-[18px] h-[18px] sm:w-5 sm:h-5" strokeWidth={1.5} />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent className="bg-white/95 backdrop-blur-xl border-black/10">
+              <TooltipContent className="bg-card/95 backdrop-blur-xl border-border">
                 <p>キューに追加</p>
               </TooltipContent>
             </Tooltip>
@@ -441,7 +441,7 @@ const SearchResultCardInner: React.FC<SearchResultCardProps> = ({
                     全曲
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent className="bg-white/95 backdrop-blur-xl border-black/10">
+                <TooltipContent className="bg-card/95 backdrop-blur-xl border-border">
                   <p>全曲をキューに追加</p>
                 </TooltipContent>
               </Tooltip>
@@ -454,7 +454,7 @@ const SearchResultCardInner: React.FC<SearchResultCardProps> = ({
                     fetchPlaylistTracks(item);
                   }
                 }}
-                className="h-7 sm:h-8 px-2.5 sm:px-3 rounded-full text-[10px] sm:text-xs text-muted-foreground hover:text-foreground hover:bg-black/5 active:bg-black/10 transition-all duration-150"
+                className="h-7 sm:h-8 px-2.5 sm:px-3 rounded-full text-[10px] sm:text-xs text-muted-foreground hover:text-foreground hover:bg-secondary active:bg-secondary/80 transition-all duration-150"
               >
                 {isExpanded ? '閉じる' : 'トラック'}
               </Button>
@@ -481,7 +481,7 @@ const SearchResultCardInner: React.FC<SearchResultCardProps> = ({
                       {playlistTracks[item.browseId!].map((track, index) => (
                         <motion.div
                           key={index}
-                          className="flex items-center p-2.5 rounded-lg hover:bg-black/5 transition-colors"
+                          className="flex items-center p-2.5 rounded-lg hover:bg-secondary transition-colors"
                           initial={{ opacity: 0, x: -10 }}
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: index * 0.03 }}
@@ -504,7 +504,7 @@ const SearchResultCardInner: React.FC<SearchResultCardProps> = ({
                                 <Plus className="w-4 h-4" />
                               </Button>
                             </TooltipTrigger>
-                            <TooltipContent className="bg-white/95 backdrop-blur-xl border-black/10">
+                            <TooltipContent className="bg-card/95 backdrop-blur-xl border-border">
                               <p>追加</p>
                             </TooltipContent>
                           </Tooltip>

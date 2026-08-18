@@ -92,6 +92,14 @@ export interface SearchItem extends PlayableItem {
   items?: Track[];
 }
 
+export interface HistoryStats {
+  guild_id: string;
+  days: number;
+  total_plays: number;
+  top_users: { added_by_id: string; added_by_name: string | null; added_by_image: string | null; play_count: number }[];
+  top_tracks: { key: string; url: string; title: string; artist: string | null; thumbnail: string | null; play_count: number; last_played_at: string }[];
+}
+
 export interface PlayerStateSnapshot {
   current_track: Track | null;
   queue: QueueItem[];
@@ -278,6 +286,17 @@ export const api = {
     } catch (error) {
       handleApiError(error);
     }
+  },
+
+  /** サーバーごとの再生統計（30日など） */
+  getHistoryStats: async (guildId: string, days = 30): Promise<HistoryStats | null> => {
+    try {
+      const response = await apiClient.get(`/history-stats/${guildId}`, { params: { days } });
+      return response.data;
+    } catch (error) {
+      handleApiError(error);
+    }
+    return null;
   },
 
   /** WebSocket の update と同じ形のプレイヤー状態（再接続・タブ復帰時の再同期用） */

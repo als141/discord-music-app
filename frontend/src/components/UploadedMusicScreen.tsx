@@ -236,7 +236,7 @@ export const UploadedMusicScreen: React.FC<UploadedMusicScreenProps> = ({ guildI
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Music2 className="w-5 h-5 sm:w-6 sm:h-6" />
-              <h1 className="text-lg sm:text-2xl font-bold">ライブラリ</h1>
+              <h1 className="font-display text-[22px] sm:text-[28px] font-medium">ライブラリ</h1>
               <Badge variant="secondary" className="ml-1 sm:ml-2 text-xs">
                 {filteredAndSortedSongs.length}
               </Badge>

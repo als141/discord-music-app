@@ -116,17 +116,17 @@ export const Header: React.FC<HeaderProps> = React.memo(({
   return (
     <TooltipProvider>
       {/* Apple Music Style Frosted Glass Header */}
-      <header className="fixed top-0 left-0 right-0 z-[100] h-14 glass border-b border-black/5">
-        <div className="flex items-center justify-between h-full px-4">
-          {/* Left Section - Menu Button */}
-          <div className="flex items-center gap-2">
+      <header className="fixed top-0 left-0 right-0 z-[100] h-14 glass border-b border-border/70">
+        <div className="flex items-center justify-between h-full px-3 sm:px-4">
+          {/* Left Section - Menu + ワードマーク */}
+          <div className="flex items-center gap-1.5">
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   onClick={onOpenMenu}
                   variant="ghost"
                   size="icon"
-                  className="h-9 w-9 rounded-full hover:bg-black/5 text-foreground"
+                  className="h-9 w-9 rounded-full hover:bg-secondary text-foreground"
                   aria-label="メニューを開く"
                 >
                   <Menu className="h-5 w-5" />
@@ -136,6 +136,9 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                 <p>メニュー</p>
               </TooltipContent>
             </Tooltip>
+            <span className="font-display text-[20px] leading-none text-foreground select-none pl-1 hidden sm:inline" aria-label="Irina">
+              Irina
+            </span>
           </div>
 
           {/* Center Section - 接続状態（サーバー / VC）。クリックでサイドメニューを開く */}
@@ -143,7 +146,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
             <button
               type="button"
               onClick={onOpenMenu}
-              className="flex items-center gap-2 h-9 px-3 rounded-full hover:bg-black/5 transition-colors max-w-full"
+              className="flex items-center gap-2 h-9 pl-3 pr-2.5 rounded-full border border-border/80 bg-card/70 hover:bg-card transition-colors max-w-full shadow-sm"
               aria-label={activeServer ? `接続先: ${activeServer.name}${activeChannel ? ' / ' + activeChannel.name : ''}。サーバー・チャンネルを変更` : 'サーバーを選択'}
             >
               <span
@@ -188,7 +191,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                   className={`h-9 w-9 rounded-full transition-colors ${
                     isSearchActive
                       ? 'bg-primary text-white hover:bg-primary/90'
-                      : 'hover:bg-black/5 text-foreground'
+                      : 'hover:bg-secondary text-foreground'
                   }`}
                   aria-label="検索"
                 >
@@ -213,7 +216,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                   className={`h-9 w-9 rounded-full transition-colors ${
                     isUrlActive
                       ? 'bg-primary text-white hover:bg-primary/90'
-                      : 'hover:bg-black/5 text-foreground'
+                      : 'hover:bg-secondary text-foreground'
                   }`}
                   aria-label="URLを追加"
                 >
@@ -232,7 +235,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-9 w-9 rounded-full ml-1 hover:bg-black/5"
+                    className="h-9 w-9 rounded-full ml-1 hover:bg-secondary"
                     aria-label="ユーザーメニュー"
                   >
                     <Avatar className="h-7 w-7 ring-2 ring-white/20">
@@ -245,7 +248,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="end"
-                  className="w-56 bg-white/95 backdrop-blur-xl border-black/10 shadow-xl rounded-xl"
+                  className="w-56 bg-card/95 backdrop-blur-xl border-border shadow-xl rounded-2xl"
                 >
                   <div className="px-3 py-2">
                     <p className="text-sm font-medium text-foreground">{session.user.name}</p>
@@ -280,7 +283,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
-              className="absolute top-full left-0 right-0 bg-white border-b border-black/10 z-[101]"
+              className="absolute top-full left-0 right-0 bg-card border-b border-border z-[101]"
               style={{ boxShadow: '0 8px 40px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.08)' }}
             >
               <form onSubmit={handleSearch} className="max-w-screen-2xl mx-auto px-4 pt-4 pb-5">
@@ -300,7 +303,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                       variant="ghost"
                       size="icon"
                       onClick={() => setSearchQuery('')}
-                      className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full hover:bg-black/5"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full hover:bg-secondary"
                     >
                       <X className="h-4 w-4 text-muted-foreground" />
                     </Button>
@@ -316,7 +319,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                         <button
                           key={index}
                           onClick={() => handleSelectHistoryItem(query)}
-                          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-black/5 transition-colors text-left"
+                          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-secondary transition-colors text-left"
                         >
                           <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                           <span className="text-sm text-foreground truncate">{query}</span>
@@ -338,7 +341,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
-              className="absolute top-full left-0 right-0 bg-white border-b border-black/10 z-[101]"
+              className="absolute top-full left-0 right-0 bg-card border-b border-border z-[101]"
               style={{ boxShadow: '0 8px 40px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.08)' }}
             >
               <form onSubmit={handleAddUrl} className="max-w-screen-2xl mx-auto px-4 py-4 pb-6">
@@ -360,7 +363,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                           onClick={handlePaste}
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 rounded-full hover:bg-black/5"
+                          className="h-8 w-8 rounded-full hover:bg-secondary"
                         >
                           <Clipboard className="h-4 w-4 text-muted-foreground" />
                         </Button>

@@ -63,7 +63,7 @@ const CurrentTrackItem = memo(({
   };
 
   return (
-    <div className="flex items-center p-4 bg-primary/5 rounded-xl mx-4 mb-4" aria-label="現在再生中の曲">
+    <div className="flex items-center p-4 bg-primary/6 border border-primary/15 rounded-2xl mx-4 mb-4" aria-label="現在再生中の曲">
       <div className="relative">
         <Image
           src={track.thumbnail || '/default_thumbnail.png'}
@@ -130,7 +130,7 @@ const CurrentTrackItem = memo(({
             )}
           </Button>
         </TooltipTrigger>
-        <TooltipContent className="bg-white/95 backdrop-blur-xl border-black/10">
+        <TooltipContent className="bg-card/95 backdrop-blur-xl border-border">
           <p>{isPlaying ? "一時停止" : "再生"}</p>
         </TooltipContent>
       </Tooltip>
@@ -165,7 +165,7 @@ const QueueTrackItem = memo(({
     <motion.div
       variants={animations.item}
       layout
-      className="flex items-center p-3 bg-secondary/40 rounded-xl transition-colors duration-200 hover:bg-secondary/60"
+      className="flex items-center p-3 bg-card border border-border/70 rounded-2xl transition-colors duration-200 hover:bg-secondary/50"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       data-testid={`queue-item-${index}`}
@@ -221,12 +221,12 @@ const QueueTrackItem = memo(({
                     onClick={onMoveUp}
                     disabled={isFirst}
                     aria-label="上に移動"
-                    className={`h-8 w-8 rounded-full hover:bg-black/5 ${isFirst ? 'opacity-30 cursor-not-allowed' : ''}`}
+                    className={`h-8 w-8 rounded-full hover:bg-secondary ${isFirst ? 'opacity-30 cursor-not-allowed' : ''}`}
                   >
                     <ChevronUpIcon className="h-4 w-4 text-muted-foreground" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent className="bg-white/95 backdrop-blur-xl border-black/10">
+                <TooltipContent className="bg-card/95 backdrop-blur-xl border-border">
                   <p>上に移動</p>
                 </TooltipContent>
               </Tooltip>
@@ -239,12 +239,12 @@ const QueueTrackItem = memo(({
                     onClick={onMoveDown}
                     disabled={isLast}
                     aria-label="下に移動"
-                    className={`h-8 w-8 rounded-full hover:bg-black/5 ${isLast ? 'opacity-30 cursor-not-allowed' : ''}`}
+                    className={`h-8 w-8 rounded-full hover:bg-secondary ${isLast ? 'opacity-30 cursor-not-allowed' : ''}`}
                   >
                     <ChevronDownIcon className="h-4 w-4 text-muted-foreground" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent className="bg-white/95 backdrop-blur-xl border-black/10">
+                <TooltipContent className="bg-card/95 backdrop-blur-xl border-border">
                   <p>下に移動</p>
                 </TooltipContent>
               </Tooltip>
@@ -261,7 +261,7 @@ const QueueTrackItem = memo(({
                     <TrashIcon className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent className="bg-white/95 backdrop-blur-xl border-black/10">
+                <TooltipContent className="bg-card/95 backdrop-blur-xl border-border">
                   <p>削除</p>
                 </TooltipContent>
               </Tooltip>
@@ -321,7 +321,7 @@ export const QueueList: React.FC<QueueListProps> = ({
             className="flex flex-col h-full"
           >
             <div className="flex items-center justify-between p-4 border-b border-border">
-              <h2 className="text-xl font-bold text-foreground">キュー</h2>
+              <h2 className="font-display text-[22px] font-medium text-foreground">キュー</h2>
               <Button
                 onClick={onClose}
                 variant="ghost"
@@ -341,7 +341,7 @@ export const QueueList: React.FC<QueueListProps> = ({
             onPlayPause={onPlayPause}
           />
         ) : (
-          <div className="text-center p-8 mx-4 mb-4 bg-secondary/30 rounded-xl">
+          <div className="text-center p-8 mx-4 mb-4 bg-card border border-dashed border-border rounded-2xl">
             <Music2 className="w-10 h-10 mx-auto mb-2 text-muted-foreground/50" />
             <p className="text-muted-foreground text-sm">再生中の曲がありません</p>
           </div>
@@ -358,7 +358,7 @@ export const QueueList: React.FC<QueueListProps> = ({
         {/* Queue list */}
         <div className="flex-grow overflow-y-auto p-4 space-y-2">
           {queue.length === 0 ? (
-            <div className="text-center py-10 bg-secondary/30 rounded-xl">
+            <div className="text-center py-10 bg-card border border-dashed border-border rounded-2xl">
               <Music2 className="w-10 h-10 mx-auto mb-2 text-muted-foreground/40" />
               <p className="text-muted-foreground text-sm">キューに曲がありません</p>
               <p className="text-muted-foreground/60 text-xs mt-1">曲を追加してください</p>

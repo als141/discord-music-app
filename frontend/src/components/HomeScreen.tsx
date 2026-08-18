@@ -10,21 +10,12 @@ import {
   Clock,
   Home,
   ExternalLink,
-  Info,
   Music2,
-  Disc3,
-  ListMusic,
-  Radio,
-  Headphones,
-  Link2,
-  Clipboard,
-  Plus,
-  Sparkles,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useInView } from 'react-intersection-observer';
+import { ListeningRoomHero } from './home/ListeningRoomHero';
+import { useGuildStore } from '@/store';
 import { UploadedMusicScreen } from './UploadedMusicScreen';
 import ArtistDialog from '@/components/ArtistDialog';
 
@@ -37,10 +28,6 @@ interface HomeScreenProps {
   onAddUrl?: (url: string) => void;
 }
 
-interface VersionInfo {
-  version: string;
-  buildDate: string;
-}
 
 // Apple Music style animations
 const animations = {
@@ -102,7 +89,7 @@ const TrackCard = memo(({
             transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
           >
             {/* Album Art Container */}
-            <div className="relative aspect-square rounded-xl overflow-hidden bg-secondary/30 shadow-sm mb-3">
+            <div className="relative aspect-square rounded-2xl overflow-hidden bg-secondary/40 border border-border/60 shadow-sm mb-3">
               {inView && (
                 <>
                   <Image
@@ -154,7 +141,7 @@ const TrackCard = memo(({
             </div>
           </motion.div>
         </TooltipTrigger>
-        <TooltipContent className="bg-white/95 backdrop-blur-xl border-black/10 shadow-lg">
+        <TooltipContent className="bg-card/95 backdrop-blur-xl border-border shadow-lg">
           <p className="font-medium text-foreground">{item.title}</p>
           <p className="text-xs text-muted-foreground">{item.artist}</p>
         </TooltipContent>
@@ -191,7 +178,7 @@ const HistoryCard = memo(({
             transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
           >
             {/* Album Art Container */}
-            <div className="relative aspect-square rounded-xl overflow-hidden bg-secondary/30 shadow-sm mb-3">
+            <div className="relative aspect-square rounded-2xl overflow-hidden bg-secondary/40 border border-border/60 shadow-sm mb-3">
               {inView && (
                 <>
                   <Image
@@ -242,7 +229,7 @@ const HistoryCard = memo(({
             </div>
           </motion.div>
         </TooltipTrigger>
-        <TooltipContent className="bg-white/95 backdrop-blur-xl border-black/10 shadow-lg">
+        <TooltipContent className="bg-card/95 backdrop-blur-xl border-border shadow-lg">
           <p className="font-medium text-foreground">{item.track.title}</p>
           <p className="text-xs text-muted-foreground">{item.track.artist}</p>
           {item.track.added_by && (
@@ -259,183 +246,7 @@ const HistoryCard = memo(({
 
 HistoryCard.displayName = 'HistoryCard';
 
-// Version display component
-const VersionDisplay = memo(({ versionInfo }: { versionInfo: VersionInfo }) => (
-  <TooltipProvider>
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <div className="flex items-center justify-center text-[11px] text-muted-foreground/60 hover:text-muted-foreground transition-colors duration-200 py-1">
-          <Info className="w-3 h-3 mr-1" />
-          <span>{versionInfo.version}</span>
-        </div>
-      </TooltipTrigger>
-      <TooltipContent className="bg-white/95 backdrop-blur-xl border-black/10 shadow-lg">
-        <p>Version: {versionInfo.version}</p>
-        <p>Build Date: {versionInfo.buildDate}</p>
-      </TooltipContent>
-    </Tooltip>
-  </TooltipProvider>
-));
 
-VersionDisplay.displayName = 'VersionDisplay';
-
-// URL Add Card - Apple Music inspired floating card
-const URLAddCard = memo(({
-  onAddUrl,
-}: {
-  onAddUrl: (url: string) => void;
-}) => {
-  const [url, setUrl] = useState('');
-  const [isFocused, setIsFocused] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const { toast } = useToast();
-
-  const handlePaste = async () => {
-    try {
-      const text = await navigator.clipboard.readText();
-      setUrl(text);
-      toast({
-        title: "ペーストしました",
-        description: "URLを入力欄に貼り付けました",
-      });
-    } catch (err) {
-      console.error('クリップボードからの読み取りに失敗しました: ', err);
-      toast({
-        title: "エラー",
-        description: "クリップボードからの読み取りに失敗しました",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!url.trim()) return;
-
-    setIsSubmitting(true);
-    try {
-      await onAddUrl(url);
-      setUrl('');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  return (
-    <TooltipProvider>
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1], delay: 0.1 }}
-        className="px-4 sm:px-6 mb-6"
-      >
-      <div
-        className={`
-          relative overflow-hidden rounded-2xl
-          bg-gradient-to-br from-white via-white to-rose-50/30
-          border transition-all duration-300
-          ${isFocused
-            ? 'border-primary/30 shadow-lg shadow-primary/5'
-            : 'border-black/[0.04] shadow-sm'
-          }
-        `}
-      >
-        {/* Decorative gradient orb */}
-        <div className="absolute -top-12 -right-12 w-32 h-32 bg-gradient-to-br from-primary/10 via-rose-400/10 to-orange-300/10 rounded-full blur-2xl pointer-events-none" />
-        <div className="absolute -bottom-8 -left-8 w-24 h-24 bg-gradient-to-tr from-violet-400/10 to-primary/5 rounded-full blur-xl pointer-events-none" />
-
-        <div className="relative p-4 sm:p-5">
-          {/* Header */}
-          <div className="flex items-center gap-3 mb-4">
-            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 via-primary to-rose-600 shadow-md shadow-primary/20">
-              <Link2 className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h3 className="text-[15px] font-semibold text-foreground tracking-tight">
-                URLから追加
-              </h3>
-              <p className="text-[12px] text-muted-foreground">
-                YouTube URLを貼り付けて曲を追加
-              </p>
-            </div>
-          </div>
-
-          {/* Input Form */}
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <div className="relative">
-              <Input
-                type="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                onFocus={() => setIsFocused(true)}
-                onBlur={() => setIsFocused(false)}
-                placeholder="https://youtube.com/watch?v=..."
-                className={`
-                  w-full h-12 pl-4 pr-24
-                  bg-secondary/60 hover:bg-secondary/80
-                  border-0 rounded-xl
-                  text-[14px] placeholder:text-muted-foreground/60
-                  transition-all duration-200
-                  focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:bg-white
-                `}
-              />
-
-              {/* Action buttons inside input */}
-              <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      onClick={handlePaste}
-                      variant="ghost"
-                      size="icon"
-                      className="h-9 w-9 rounded-lg hover:bg-black/5 active:bg-black/10 transition-colors"
-                    >
-                      <Clipboard className="h-4 w-4 text-muted-foreground" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="bg-foreground text-background text-xs px-2 py-1">
-                    ペースト
-                  </TooltipContent>
-                </Tooltip>
-
-                <Button
-                  type="submit"
-                  disabled={!url.trim() || isSubmitting}
-                  size="sm"
-                  className={`
-                    h-9 px-4 rounded-lg font-medium text-[13px]
-                    bg-primary hover:bg-primary/90 active:bg-primary/80
-                    text-white shadow-sm
-                    disabled:opacity-50 disabled:cursor-not-allowed
-                    transition-all duration-200
-                  `}
-                >
-                  {isSubmitting ? (
-                    <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                    >
-                      <Sparkles className="h-4 w-4" />
-                    </motion.div>
-                  ) : (
-                    <span className="flex items-center gap-1.5">
-                      <Plus className="h-4 w-4" />
-                      追加
-                    </span>
-                  )}
-                </Button>
-              </div>
-            </div>
-          </form>
-        </div>
-      </div>
-      </motion.div>
-    </TooltipProvider>
-  );
-});
-
-URLAddCard.displayName = 'URLAddCard';
 
 export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
   onSelectTrack,
@@ -446,6 +257,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
   onAddUrl,
 }) => {
   const { toast } = useToast();
+  const guildName = useGuildStore(s => s.mutualServers.find(g => g.id === guildId)?.name ?? null);
   const cacheTime = useRef<number | null>(null);
   const cachedSections = useRef<Section[] | null>(null);
 
@@ -454,10 +266,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
   const [isArtistDialogOpen, setIsArtistDialogOpen] = useState(false);
   const [selectedArtistId, setSelectedArtistId] = useState<string | null>(null);
 
-  const [versionInfo] = useState<VersionInfo>({
-    version: 'Ver. 0.9.0',
-    buildDate: '2025.2.28',
-  });
 
   const handleSelectTrackCallback = useCallback(async (item: PlayableItem) => {
     await onSelectTrack(item);
@@ -544,26 +352,21 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
     return (
       <div className="h-full overflow-y-auto overflow-x-hidden bg-background">
         <div className="py-4 sm:py-6 space-y-8 sm:space-y-10">
-          {/* URL Add Card - Apple Music Style */}
-          {onAddUrl && (
-            <URLAddCard onAddUrl={onAddUrl} />
-          )}
+          {/* Listening room hero（見出し + URL 追加 + サーバー統計） */}
+          <ListeningRoomHero guildId={guildId} guildName={guildName} onAddUrl={onAddUrl} />
 
           {/* Recently Played - Apple Music Style */}
           {reversedHistory.length > 0 && guildId && (
             <section key="section-history" className="w-full" aria-labelledby="history-heading">
-              <div className="flex items-center justify-between mb-4 sm:mb-5 px-4 sm:px-6">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary to-pink-500 flex items-center justify-center shadow-sm">
-                    <Clock className="w-4 h-4 text-white" />
-                  </div>
-                  <h2 id="history-heading" className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
+              <div className="flex items-end justify-between mb-4 sm:mb-5 px-4 sm:px-6">
+                <div className="flex items-baseline gap-3">
+                  <h2 id="history-heading" className="font-display text-[22px] sm:text-[26px] font-medium text-foreground">
                     最近再生した曲
                   </h2>
+                  <span className="text-[11px] tracking-[0.16em] uppercase text-muted-foreground inline-flex items-center gap-1">
+                    <Clock className="w-3 h-3" aria-hidden="true" />Recently played
+                  </span>
                 </div>
-                <button className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">
-                  すべて見る
-                </button>
               </div>
 
               {/* Horizontal scroll container */}
@@ -584,40 +387,17 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
 
           {/* Recommendation sections - Apple Music Style */}
           {sections.map((section, index) => {
-            // セクションごとに異なるグラデーションカラーを使用
-            const gradients = [
-              'from-rose-500 to-orange-400',      // 温かみのあるレッド→オレンジ
-              'from-violet-500 to-purple-400',    // バイオレット→パープル
-              'from-cyan-500 to-blue-400',        // シアン→ブルー
-              'from-emerald-500 to-teal-400',     // エメラルド→ティール
-              'from-amber-500 to-yellow-400',     // アンバー→イエロー
-            ];
-            const gradient = gradients[index % gradients.length];
-
-            // セクションごとのアイコン
-            const icons = [
-              <Music2 key="music" className="w-4 h-4 text-white" />,
-              <Disc3 key="disc" className="w-4 h-4 text-white" />,
-              <ListMusic key="list" className="w-4 h-4 text-white" />,
-              <Radio key="radio" className="w-4 h-4 text-white" />,
-              <Headphones key="headphones" className="w-4 h-4 text-white" />,
-            ];
-            const icon = icons[index % icons.length];
-
             return (
             <section key={`section-${index}`} className="w-full" aria-labelledby={`section-heading-${index}`}>
-              <div className="flex items-center justify-between mb-4 sm:mb-5 px-4 sm:px-6">
-                <div className="flex items-center gap-2.5">
-                  <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${gradient} flex items-center justify-center shadow-sm`}>
-                    {icon}
-                  </div>
-                  <h2 id={`section-heading-${index}`} className="text-lg sm:text-xl font-bold tracking-tight text-foreground line-clamp-1">
+              <div className="flex items-end justify-between mb-4 sm:mb-5 px-4 sm:px-6">
+                <div className="flex items-baseline gap-3 min-w-0">
+                  <span className="font-display text-[13px] text-muted-foreground tabular-nums" aria-hidden="true">
+                    {String(index + 1).padStart(2, '0')}
+                  </span>
+                  <h2 id={`section-heading-${index}`} className="font-display text-[22px] sm:text-[26px] font-medium text-foreground line-clamp-1">
                     {section.title}
                   </h2>
                 </div>
-                <button className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">
-                  すべて見る
-                </button>
               </div>
 
               {/* Horizontal scroll container */}
@@ -655,45 +435,43 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
         </div>
       </div>
     );
-  }, [history, guildId, sections, loading, handleSelectTrackCallback, handleArtistClick, onAddUrl]);
+  }, [history, guildId, guildName, sections, loading, handleSelectTrackCallback, handleArtistClick, onAddUrl]);
 
   return (
     <div className="flex flex-col h-full bg-background">
-      {/* Header with tabs - Apple Music style */}
-      <div className="glass-subtle border-b border-border/50 z-25 flex flex-col items-center py-3 sm:py-4 sticky top-0">
-        {/* Tab Navigation */}
-        <div className="w-full max-w-full px-3 sm:px-4 overflow-x-auto scrollbar-thin">
-          <nav
-            className="flex space-x-1 p-1 rounded-full bg-secondary/60 w-fit mx-auto min-w-max"
-            aria-label="メインナビゲーション"
-            role="tablist"
-          >
-            {tabs.map((tab) => (
-              <motion.button
-                key={tab.id}
-                className={`flex items-center gap-1.5 px-4 sm:px-5 py-2 text-sm font-medium rounded-full transition-all duration-200 whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? 'bg-white text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                onClick={() => onTabChange(tab.id)}
-                whileHover={{ scale: activeTab === tab.id ? 1 : 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                role="tab"
-                aria-selected={activeTab === tab.id}
-                aria-controls={`panel-${tab.id}`}
-                id={`tab-${tab.id}`}
-                aria-label={tab.ariaLabel}
-              >
-                {tab.icon}
-                <span>{tab.label}</span>
-              </motion.button>
-            ))}
+      {/* タブ: 見出し書体のアンダーラインタブ（左寄せ、余計な装飾なし） */}
+      <div className="border-b border-border/70 sticky top-0 z-25 bg-background/85 backdrop-blur-md">
+        <div className="px-4 sm:px-6 overflow-x-auto scrollbar-thin">
+          <nav className="flex gap-6 sm:gap-8 min-w-max" aria-label="メインナビゲーション" role="tablist">
+            {tabs.map((tab) => {
+              const active = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  className={`relative flex items-center gap-2 py-3.5 text-[15px] transition-colors ${
+                    active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  onClick={() => onTabChange(tab.id)}
+                  role="tab"
+                  aria-selected={active}
+                  aria-controls={`panel-${tab.id}`}
+                  id={`tab-${tab.id}`}
+                  aria-label={tab.ariaLabel}
+                >
+                  <span className={active ? 'text-primary' : ''}>{tab.icon}</span>
+                  <span className="font-display text-[17px] font-medium">{tab.label}</span>
+                  {active && (
+                    <motion.span
+                      layoutId="home-tab-underline"
+                      className="absolute left-0 right-0 -bottom-px h-[2px] bg-primary rounded-full"
+                      transition={{ type: 'spring', stiffness: 500, damping: 40 }}
+                    />
+                  )}
+                </button>
+              );
+            })}
           </nav>
         </div>
-
-        {/* Version display */}
-        <VersionDisplay versionInfo={versionInfo} />
       </div>
 
       {/* Main content area */}

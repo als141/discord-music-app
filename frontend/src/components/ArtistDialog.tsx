@@ -219,7 +219,7 @@ export const ArtistDialog: React.FC<ArtistDialogProps> = ({
                 {artistData.songs.length > 0 && (
                   <section>
                     <div className="flex justify-between items-center mb-3 sm:mb-4 gap-2">
-                      <h3 className="text-base sm:text-xl font-bold flex-shrink-0">トップソング</h3>
+                      <h3 className="font-display text-[18px] sm:text-[22px] font-medium flex-shrink-0">トップソング</h3>
                       <Button
                         onClick={() => handleAddAllTracks(artistData.songs.map((song) => ({
                           title: song.title,
@@ -283,7 +283,7 @@ export const ArtistDialog: React.FC<ArtistDialogProps> = ({
                 {/* アルバム */}
                 {artistData.albums.length > 0 && (
                   <section>
-                    <h3 className="text-base sm:text-xl font-bold mb-3 sm:mb-4">アルバム</h3>
+                    <h3 className="font-display text-[18px] sm:text-[22px] font-medium mb-3 sm:mb-4">アルバム</h3>
                     <div className="space-y-4">
                       {artistData.albums.map((album, index) => (
                         <Collapsible
@@ -397,7 +397,7 @@ export const ArtistDialog: React.FC<ArtistDialogProps> = ({
                 {/* 似たアーティスト */}
                 {artistData.related.length > 0 && (
                   <section>
-                    <h3 className="text-base sm:text-xl font-bold mb-3 sm:mb-4">似たアーティスト</h3>
+                    <h3 className="font-display text-[18px] sm:text-[22px] font-medium mb-3 sm:mb-4">似たアーティスト</h3>
                     <div className="horizontal-scroll-container gap-2 sm:gap-4 -mx-3 sm:-mx-6">
                       {/* 左端スペーサー */}
                       <div className="w-3 min-w-[12px] sm:w-6 sm:min-w-[24px] flex-shrink-0" aria-hidden="true" />

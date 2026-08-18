@@ -17,7 +17,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const BASE = process.env.PREVIEW_BASE || 'http://localhost:3000';
-const OUT = join(dirname(fileURLToPath(import.meta.url)), 'screenshots');
+const OUT = process.env.SHOT_DIR || join(dirname(fileURLToPath(import.meta.url)), 'screenshots');
 mkdirSync(OUT, { recursive: true });
 
 const GUILD = '1093915551174234212';
@@ -58,13 +58,16 @@ async function setupMocks(context) {
   await context.route(`**/auto-connect-info/**`, r => json(r, { guild_id: GUILD, channel_id: 'vc1' }));
   await context.route(`**/current-track/**`, r => json(r, CURRENT));
   await context.route(`**/queue/**`, r => json(r, wsQueue));
-  await context.route(`**/history/**`, r => json(r, []));
+  await context.route(`**/history/**`, r => json(r, QUEUE.slice(0, 4).map((t, i) => ({ track: { ...t, played_at: '2026-08-17T15:00:00+00:00' }, position: i, isCurrent: false }))));
   await context.route(`**/is-playing/**`, r => json(r, { is_playing: true }));
   await context.route(`**/related/**`, r => json(r, { results: QUEUE.map(t => ({ type: 'song', ...t })) }));
   await context.route(`**/uploaded-audio-list/**`, r => json(r, []));
+  await context.route(`**/history-stats/**`, r => json(r, { guild_id: GUILD, days: 30, total_plays: 128,
+    top_users: [ { added_by_id: '1', added_by_name: 'als0028', added_by_image: 'https://cdn.discordapp.com/embed/avatars/1.png', play_count: 61 }, { added_by_id: '2', added_by_name: 'kairi', added_by_image: 'https://cdn.discordapp.com/embed/avatars/2.png', play_count: 40 }, { added_by_id: '3', added_by_name: 'yuki', added_by_image: 'https://cdn.discordapp.com/embed/avatars/3.png', play_count: 27 } ],
+    top_tracks: [ { key: 'by4SYYWlhEs', url: 'https://music.youtube.com/watch?v=by4SYYWlhEs', title: '夜に駆ける', artist: 'YOASOBI', thumbnail: thumb('by4SYYWlhEs'), play_count: 14, last_played_at: '2026-08-17T15:00:00+00:00' } ] }));
   // WebSocket: 実サーバーには繋がず、初期状態を1回だけ流す
   await context.routeWebSocket(/\/ws\//, ws => {
-    ws.send(JSON.stringify({ type: 'update', data: { queue: wsQueue, is_playing: true, history: [], version: 1, timestamp: Date.now() } }));
+    ws.send(JSON.stringify({ type: 'update', data: { queue: wsQueue, is_playing: true, history: QUEUE.slice(0, 4).map((t, i) => ({ track: t, position: i, isCurrent: false })), version: 1, epoch: 'e1', has_player: true, timestamp: Date.now() } }));
   });
 }
 

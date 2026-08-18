@@ -43,7 +43,7 @@ const RelatedTrackItem = memo(({ track, onAddToQueue }: {
 }) => (
   <motion.div
     key={track.url}
-    className="flex items-center p-3 bg-secondary/40 rounded-xl transition-colors duration-200 hover:bg-secondary/60"
+    className="flex items-center p-3 bg-card border border-border/70 rounded-2xl transition-colors duration-200 hover:bg-secondary/50"
     whileHover={{ scale: 1.01 }}
     whileTap={{ scale: 0.99 }}
   >
@@ -355,7 +355,7 @@ export const MainPlayer: React.FC<MainPlayerProps> = React.memo(({
       animate={{ scale: 1, opacity: 1 }}
       transition={{ duration: 0.45, ease: [0.25, 0.1, 0.25, 1] }}
       style={{
-        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 10px 20px -5px rgba(0, 0, 0, 0.15)'
+        boxShadow: '0 30px 60px -18px color-mix(in oklab, var(--color-primary) 45%, rgba(40,20,10,0.35)), 0 8px 18px -8px rgba(40, 20, 10, 0.25)'
       }}
     >
       {currentTrack && (
@@ -394,7 +394,7 @@ export const MainPlayer: React.FC<MainPlayerProps> = React.memo(({
       transition={{ delay: 0.15, ease: [0.25, 0.1, 0.25, 1] }}
     >
       <h2
-        className={`${isDocked ? 'text-lg xl:text-xl' : 'text-xl sm:text-2xl'} font-bold text-foreground truncate mb-1.5`}
+        className={`font-display ${isDocked ? 'text-[20px] xl:text-[22px]' : 'text-[24px] sm:text-[28px]'} font-medium text-foreground truncate mb-1.5 leading-tight`}
         title={currentTrack?.title}
       >
         {currentTrack?.title || '再生中の曲はありません'}
@@ -405,7 +405,7 @@ export const MainPlayer: React.FC<MainPlayerProps> = React.memo(({
           <button
             onClick={() => handleArtistClick(currentTrack.artist)}
             disabled={isArtistLoading}
-            className="group inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-primary/10 hover:bg-primary/15 transition-all duration-200 max-w-full"
+            className="group inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-primary/25 text-primary hover:bg-primary/8 transition-all duration-200 max-w-full"
             aria-label={`${currentTrack.artist}の詳細を表示`}
           >
             {isArtistLoading ? (
@@ -466,7 +466,7 @@ export const MainPlayer: React.FC<MainPlayerProps> = React.memo(({
             )}
           </motion.button>
         </TooltipTrigger>
-        <TooltipContent className="bg-white/95 backdrop-blur-xl border-black/10">
+        <TooltipContent className="bg-card/95 backdrop-blur-xl border-border">
           <p>{isLoading ? "読み込み中" : isPlaying ? "一時停止" : "再生"}</p>
         </TooltipContent>
       </Tooltip>
@@ -478,13 +478,13 @@ export const MainPlayer: React.FC<MainPlayerProps> = React.memo(({
             whileTap={{ scale: 0.9 }}
             onClick={onSkip}
             disabled={!currentTrack}
-            className="p-4 rounded-full bg-secondary/80 hover:bg-secondary transition-all duration-200 disabled:opacity-40"
+            className="p-4 rounded-full bg-card border border-border shadow-sm hover:bg-secondary transition-all duration-200 disabled:opacity-40"
             aria-label="次の曲へ"
           >
             <SkipForwardIcon size={24} className="text-foreground" />
           </motion.button>
         </TooltipTrigger>
-        <TooltipContent className="bg-white/95 backdrop-blur-xl border-black/10">
+        <TooltipContent className="bg-card/95 backdrop-blur-xl border-border">
           <p>次の曲へ</p>
         </TooltipContent>
       </Tooltip>
@@ -495,17 +495,17 @@ export const MainPlayer: React.FC<MainPlayerProps> = React.memo(({
   const panelTabs = (panelHeightStyle?: React.CSSProperties) => (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col min-h-0 flex-1">
       <div className="px-4 pt-3 flex-shrink-0">
-        <TabsList className="grid w-full grid-cols-2 bg-secondary/60 p-1 rounded-full">
+        <TabsList className="grid w-full grid-cols-2 bg-secondary/70 p-1 rounded-full">
           <TabsTrigger
             value="queue"
-            className="rounded-full data-[state=active]:bg-white data-[state=active]:shadow-sm text-foreground"
+            className="rounded-full data-[state=active]:bg-card data-[state=active]:shadow-sm text-foreground font-medium"
             aria-controls="queue-panel"
           >
             キュー{queue.length > 0 ? ` (${queue.length})` : ''}
           </TabsTrigger>
           <TabsTrigger
             value="related"
-            className="rounded-full data-[state=active]:bg-white data-[state=active]:shadow-sm text-foreground"
+            className="rounded-full data-[state=active]:bg-card data-[state=active]:shadow-sm text-foreground font-medium"
             aria-controls="related-panel"
           >
             関連曲
@@ -610,12 +610,13 @@ export const MainPlayer: React.FC<MainPlayerProps> = React.memo(({
           role="region"
           aria-label="再生中"
         >
-          <div className="flex flex-col items-center gap-4 px-6 pt-6 pb-4 flex-shrink-0">
+          <div className="flex flex-col items-center gap-4 px-6 pt-6 pb-5 flex-shrink-0">
+            <p className="self-start text-[11px] tracking-[0.18em] uppercase text-muted-foreground font-medium -mb-1">Now playing</p>
             {artwork}
             {trackInfo}
             {controls}
           </div>
-          <div className="flex-1 min-h-0 flex flex-col border-t border-border/50">
+          <div className="flex-1 min-h-0 flex flex-col border-t border-border/70 bg-card/60">
             {panelTabs()}
           </div>
           {artistDialog}
@@ -629,7 +630,7 @@ export const MainPlayer: React.FC<MainPlayerProps> = React.memo(({
     <TooltipProvider>
       <div
         {...swipeHandlers}
-        className="flex flex-col items-center h-full bg-gradient-to-b from-secondary/30 to-background overflow-hidden relative px-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+        className="accent-wash grain flex flex-col items-center h-full overflow-hidden relative px-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
         role="region"
         aria-label="音楽プレイヤー"
       >
@@ -637,14 +638,14 @@ export const MainPlayer: React.FC<MainPlayerProps> = React.memo(({
         <div className="w-full flex items-center justify-between h-12 flex-shrink-0">
           <Button
             onClick={onClose}
-            className="rounded-full bg-black/5 hover:bg-black/10 text-foreground"
+            className="rounded-full bg-card border border-border shadow-sm hover:bg-secondary text-foreground"
             variant="ghost"
             size="icon"
             aria-label="プレイヤーを閉じる"
           >
             <ChevronDownIcon size={26}/>
           </Button>
-          <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Now Playing</span>
+          <span className="text-[11px] font-medium tracking-[0.18em] text-muted-foreground uppercase">Now playing</span>
           <div className="w-10" aria-hidden="true" />
         </div>
 
@@ -658,7 +659,7 @@ export const MainPlayer: React.FC<MainPlayerProps> = React.memo(({
             <div className="flex flex-col items-center gap-3 flex-shrink-0">
               {controls}
               <motion.button
-                className="flex items-center justify-center bg-secondary/80 rounded-full px-5 py-2 gap-2"
+                className="flex items-center justify-center bg-card border border-border shadow-sm rounded-full px-5 py-2 gap-2"
                 onClick={() => setIsDrawerOpen(true)}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}

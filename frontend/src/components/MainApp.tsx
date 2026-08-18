@@ -21,6 +21,7 @@ import { ErrorBoundary } from './ErrorBoundary';
 import { HomeScreen } from './HomeScreen';
 import { useGuildStore, usePlayerStore, setupWebSocket, cleanupWebSocket } from '@/store';
 import { useIsDesktop } from '@/hooks/use-media-query';
+import { useArtworkAccent } from '@/hooks/use-artwork-accent';
 
 // API URL の取得
 
@@ -59,6 +60,8 @@ export const MainApp: React.FC = () => {
 
   // レイアウト: lg 以上は Now Playing パネルを右にドッキング
   const isDesktop = useIsDesktop();
+  // 再生中アートワークの色でアクセントを染める
+  useArtworkAccent(currentTrack?.thumbnail);
 
   // UI の状態
   const [isMenuOpen, setIsMenuOpen] = useState(false);
