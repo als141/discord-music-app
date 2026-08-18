@@ -1,27 +1,24 @@
-/* Tailwind CSS v4 - Irina "Listening Room" theme (2026-08) */
+/* Tailwind CSS v4 - Apple Music Inspired Light Theme */
 @import "tailwindcss";
 
 /*
- * Irina Design System — "Listening Room"
- * ======================================
- * 2026年夏の潮流を取り込みつつ、生成AI風の既視感（紫グラデ・過剰なガラス・無個性なサンセリフ）を避ける。
- *  - 紙のような温かいニュートラル（unbleached neutrals）を地にする
- *  - アクセントは再生中アートワークから抽出して画面全体を染める（--color-primary を実行時に上書き）
- *  - 見出しは可変セリフ（Fraunces）＋しっぽり明朝、本文は Zen Kaku Gothic New
- *  - 面は「箱」で区切る（bento）。影は温色で浅く、角丸は大きめ
- *  - 動きは状態変化を伝えるためだけに使う（色のクロスフェード、段階的な出現）
+ * Apple Music Design System
+ * ========================
+ * A clean, minimal aesthetic inspired by Apple Music's refined interface.
+ * Features: SF Pro typography, signature red accent (#FA243C),
+ * frosted glass effects, and generous white space.
  */
 
-/* アクセント色を実行時に滑らかに切り替えるために登録 */
+/* アクセント色（再生中アートワークから抽出）を実行時に滑らかに切り替えるために登録 */
 @property --color-primary {
   syntax: '<color>';
   inherits: true;
-  initial-value: #33508C;
+  initial-value: #FF2D55;
 }
 @property --accent-glow {
   syntax: '<color>';
   inherits: true;
-  initial-value: #C9D3EA;
+  initial-value: #FFD3DC;
 }
 
 /* Theme configuration using @theme directive */
@@ -34,53 +31,47 @@
   --breakpoint-xl: 1280px;
   --breakpoint-2xl: 1536px;
 
-  /* Fonts（next/font が --font-body / --font-display / --font-display-jp を注入する） */
-  --font-sans: var(--font-body), "Zen Kaku Gothic New", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
-  --font-display: var(--font-display), "Fraunces", var(--font-display-jp), "Shippori Mincho", "Hiragino Mincho ProN", serif;
+  /* Colors - Apple Music Light Theme */
+  --color-background: #FFFFFF;
+  --color-foreground: #1D1D1F;
+  --color-card: #FFFFFF;
+  --color-card-foreground: #1D1D1F;
+  --color-popover: #FFFFFF;
+  --color-popover-foreground: #1D1D1F;
 
-  /* Colors — 紙のような温かいニュートラル */
-  --color-background: #F1F0EC;      /* limestone（クリーム寄りにしない、わずかに灰みのある紙） */
-  --color-foreground: #1C1917;      /* ink */
-  --color-card: #FBFAF7;            /* 少しだけ明るい紙 */
-  --color-card-foreground: #1C1917;
-  --color-popover: #FBFAF7;
-  --color-popover-foreground: #1C1917;
-
-  /* Primary — 既定は藍（Japanese indigo）。再生中はアートワーク由来の色に実行時上書きされ、画面が「色づく」 */
-  --color-primary: #33508C;
+  /* Primary - Refined Rose (Apple Music inspired) */
+  --color-primary: #FF2D55;
   --color-primary-foreground: #FFFFFF;
-  --accent-glow: #C9D3EA;           /* primary の淡いにじみ（背景のグロー用） */
+  --accent-glow: #FFD3DC;           /* primary の淡いにじみ（Now Playing の背景用。再生中はアートワーク由来に上書き） */
 
-  /* Secondary / Muted — 紙より一段沈んだ面 */
-  --color-secondary: #E7E5DF;
-  --color-secondary-foreground: #1C1917;
-  --color-muted: #E7E5DF;
-  --color-muted-foreground: #706C66;
+  /* Secondary - Apple Light Gray */
+  --color-secondary: #F5F5F7;
+  --color-secondary-foreground: #1D1D1F;
 
-  /* Accent（インタラクションの薄い面） */
-  --color-accent: #E7E5DF;
-  --color-accent-foreground: #1C1917;
+  /* Muted - Subtle Gray for backgrounds */
+  --color-muted: #F5F5F7;
+  --color-muted-foreground: #86868B;
 
-  /* Destructive */
-  --color-destructive: #C0392B;
+  /* Accent */
+  --color-accent: #F5F5F7;
+  --color-accent-foreground: #1D1D1F;
+
+  /* Destructive - Apple Red for errors */
+  --color-destructive: #FF3B30;
   --color-destructive-foreground: #FFFFFF;
 
   /* Border & Input */
-  --color-border: #DCD9D1;
-  --color-input: #E7E5DF;
-  --color-ring: #33508C;
+  --color-border: #E8E8ED;
+  --color-input: #F5F5F7;
+  --color-ring: #FF2D55;
 
-  /* Border radius — 大きめの角丸で「箱」を作る */
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
-  --radius-2xl: 26px;
+  /* Border radius - Apple's signature rounded corners */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
   --radius-full: 9999px;
-
-  /* Shadows — 温色で浅く */
-  --shadow-soft: 0 1px 2px rgba(60, 40, 20, 0.05), 0 8px 24px -12px rgba(60, 40, 20, 0.18);
-  --shadow-lift: 0 2px 4px rgba(60, 40, 20, 0.06), 0 18px 40px -16px rgba(60, 40, 20, 0.28);
 
   /* Animations */
   --animate-accordion-down: accordion-down 0.2s ease-out;
@@ -147,13 +138,12 @@
   }
 
   html {
-    font-family: var(--font-sans);
-    /* アクセント色の切り替えは滑らかに */
-    transition: --color-primary 0.6s ease, --accent-glow 0.6s ease;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     font-feature-settings: 'kern' 1;
+    transition: --color-primary 0.6s ease, --accent-glow 0.6s ease;
     /* iOS PWA Safe Area 対応 */
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
@@ -171,12 +161,11 @@
     -webkit-overflow-scrolling: touch;
   }
 
-  /* Typography */
+  /* Apple-style Typography */
   h1, h2, h3, h4, h5, h6 {
     font-weight: 700;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.025em;
     color: var(--color-foreground);
-    font-feature-settings: 'palt' 1;
   }
 
   h1 { font-size: 2.5rem; line-height: 1.1; font-weight: 700; }
@@ -191,7 +180,7 @@
 
   /* Selection color */
   ::selection {
-    background-color: color-mix(in oklab, var(--color-primary) 18%, transparent);
+    background-color: rgba(255, 45, 85, 0.15);
     color: var(--color-foreground);
   }
 
@@ -296,10 +285,10 @@
     bottom: 0;
     left: 0;
     right: 0;
-    background: color-mix(in oklab, var(--color-card) 90%, transparent);
-    backdrop-filter: saturate(160%) blur(20px);
-    -webkit-backdrop-filter: saturate(160%) blur(20px);
-    border-top: 1px solid var(--color-border);
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-top: 0.5px solid rgba(0, 0, 0, 0.1);
     padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)) 16px;
     transition: all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
     box-shadow: 0 -1px 0 rgba(0, 0, 0, 0.04);
@@ -428,7 +417,7 @@
   }
 
   .apple-play-button:hover {
-    transform: scale(1.05);
+    transform: scale(1.06);
     box-shadow: 0 10px 30px -8px color-mix(in oklab, var(--color-primary) 65%, transparent);
   }
 
@@ -645,12 +634,13 @@
     display: flex;
     overflow-x: auto;
     overflow-y: hidden;
-    scroll-snap-type: x proximity;
+    /* snap と touch-action: pan-x は外した。
+       snap: ホイールで少し動かすと吸着して戻り「スクロールしにくい」原因になっていた
+       pan-x: 行の上で始めた縦スワイプがページをスクロールしなくなっていた */
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
     padding-bottom: 8px;
-    touch-action: pan-x;
-    scroll-behavior: smooth;
+    overscroll-behavior-x: contain;
     gap: 16px;
   }
 
@@ -659,7 +649,6 @@
   }
 
   .horizontal-scroll-container > * {
-    scroll-snap-align: start;
     flex-shrink: 0;
   }
 
@@ -701,60 +690,38 @@
 
   /* Glass effect utilities */
   .glass {
-    background: color-mix(in oklab, var(--color-background) 78%, transparent);
-    backdrop-filter: saturate(160%) blur(18px);
-    -webkit-backdrop-filter: saturate(160%) blur(18px);
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
   }
 
   .glass-subtle {
-    background: color-mix(in oklab, var(--color-background) 70%, transparent);
+    background: rgba(255, 255, 255, 0.6);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
   }
 
-  /* 見出し用の可変セリフ */
+  /* 見出し用（サンセリフのまま。以前の書体を維持） */
   .font-display {
-    font-family: var(--font-display);
-    font-variation-settings: "opsz" 72, "SOFT" 40, "WONK" 0;
-    letter-spacing: -0.01em;
-    font-feature-settings: 'palt' 1;
+    font-weight: 700;
+    letter-spacing: -0.02em;
   }
 
-  /* 「箱」— bento の基本面 */
+  /* 面（カード）— 白地に細い罫線と浅い影 */
   .surface {
     background: var(--color-card);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-2xl);
-    box-shadow: var(--shadow-soft);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px -14px rgba(0, 0, 0, 0.12);
   }
-  .surface-lift {
-    box-shadow: var(--shadow-lift);
-  }
+  .grain { position: relative; }
 
-  /* 紙の粒子（Config 2026 の「人の手ざわり」）— ごく薄く */
-  .grain {
-    position: relative;
-    isolation: isolate;
-  }
-  .grain::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    opacity: 0.028;
-    mix-blend-mode: multiply;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
-    background-size: 160px 160px;
-    border-radius: inherit;
-    z-index: 0;
-  }
-  .grain > * { position: relative; z-index: 1; }
-
-  /* アートワーク由来のにじみ背景（Now Playing） */
+  /* 再生中アートワーク由来のにじみ背景（Now Playing） */
   .accent-wash {
     background:
-      radial-gradient(120% 90% at 50% 0%, color-mix(in oklab, var(--accent-glow) 55%, transparent) 0%, transparent 60%),
+      radial-gradient(120% 80% at 50% 0%, color-mix(in oklab, var(--accent-glow) 55%, transparent) 0%, transparent 60%),
       var(--color-background);
+    transition: --accent-glow 0.6s ease;
   }
 
   /* Hover lift effect */
@@ -770,7 +737,7 @@
 
   /* Text utilities */
   .text-primary-gradient {
-    background: linear-gradient(135deg, var(--color-primary) 0%, color-mix(in oklab, var(--color-primary) 60%, #F1F0EC) 100%);
+    background: linear-gradient(135deg, var(--color-primary) 0%, #FF6B6B 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
