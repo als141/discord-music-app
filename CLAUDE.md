@@ -77,7 +77,7 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 | discord.py | 2.7.1 | >= 2.7.x |
 | davey | 0.1.6（2026-08-17更新） | 必須 |
 | fastapi / starlette / uvicorn | 0.141.1 / 1.6.0 / 0.52.3（2026-08-17更新） | - |
-| yt-dlp | 2026.7.4（2026-08-17更新） | >= 2026.7 |
+| yt-dlp | 2026.8.19（2026-09-09更新） | 最新追従（403が出たら更新） |
 | yt-dlp-ejs | 0.8.0 | >= 0.5.0 |
 | ytmusicapi | 1.12.2（2026-08-17更新） | >= 1.12 |
 
@@ -97,6 +97,17 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 - 同じDISCORD_TOKENで2台同時稼働すると Voice close code 4006/4017 が発生する。
 
 ## Key Technical Notes
+
+### 2026-09-09: 全曲ダウンロード403 → yt-dlp 2026.8.19 で復旧（commit 222bf9d）
+- **症状**: 全ての新規ダウンロードが `unable to download video data: HTTP Error 403: Forbidden`（当日34件。それ以前の7日間は再生試行ゼロ＝発生時期は特定不能、キャッシュ済み曲は再生できていた）
+- **切り分けの要点**:
+  1. サービス再起動では直らない（新プロセスでも403）
+  2. オプション（source_address / cookiefile 有無）も無関係
+  3. **動画による**: HLS(m3u8) フォーマットに逃げられる動画（dQw4w9WgXcQ 等）は成功、直リンク https フォーマットしか無い動画（SX_ViT4Ra7k 等）は403 → YouTube の PO Token 必須化に旧 yt-dlp が非対応のパターン
+- **修正**: `uv lock --upgrade-package yt-dlp --upgrade-package yt-dlp-ejs --upgrade-package bgutil-ytdlp-pot-provider` → yt-dlp 2026.7.4→**2026.8.19**、bgutil 1.3.1→**2.0.0**。Pi の隔離 venv（/tmp/ytnew）で失敗動画のダウンロード成功を確認してから lock 更新→push→自動デプロイ
+- 新版は `bestaudio` として正しく音声フォーマット(251)を選ぶようになった（旧版は動画 HLS 96 を掴んでいた）
+- 検証: 今日実際に失敗していた `5QpiAu-Ek4Q`（怪獣）をテストサーバーで実再生 → 再生開始 OK、smoke_test 全 OK
+- **教訓**: 「HTTP Error 403 (download時)」= yt-dlp が古い兆候。一部の曲だけ鳴る（=キャッシュ or HLS）ので気づきにくい。まず Pi の隔離 venv で最新版を試す
 
 ### 2026-08-17: 関連曲500 / アルバム非表示の修正（ytmusicapi 1.12.2）
 - **症状**: `/related/{video_id}` が `500 {"detail":"'endpoint'"}`、検索でアルバムが画面に出ない
@@ -326,6 +337,7 @@ journalctl -u discord-music-bot --since '7 days ago' --no-pager | grep -c 'ERROR
 - **検索500エラー**: SearchItemのartist/titleがNoneになっていないか確認。`or`演算子でNullセーフに
 - **push しても本番に反映されない**: Pi で `cd ~/discord-music-app && git status --porcelain` を確認。何か出ていれば deploy.sh が skip している（deploy.log 誤コミット事件参照）
 - **ブラウザに再生状態が反映されない**: ①Pi の journal で `notify_clients failed` / `WebSocket通知エラー` を確認 ②ブラウザで `wss://api.atoriba.jp/ws/{guild}` に接続して update が来るか（Node: `new WebSocket(...)`）③ヘッダーのドットが黄色（再接続中）なら WS 断。`/player-state/{guild}` を直接叩いて backend 側の状態を見る
+- **ダウンロード時 HTTP Error 403: Forbidden**: yt-dlp が YouTube の PO Token 必須化に置いていかれた兆候（2026-09-09 事例）。キャッシュ済み・HLS 可の曲は鳴るので部分的に動いて見える。隔離 venv で最新版を試し、lock 更新でデプロイ
 - **yt-dlp 更新後に「Requested format is not available」**: `verbose: True` で JS runtime が `(unsupported)` になっていないか確認。Node のバージョン要件が上がっていることが多い
 - **/related が 500 / 検索が空 / アルバムが出ない**: ytmusicapi のバージョンと `YTMusic(language=...)` を確認。上流の応答変更が原因のことが多い。ローカル venv で新版を試してから lock 更新
 - **Discord Gateway 520エラー**: Discord側のインフラ問題。指数バックオフで自動復旧する。コード対処不要
