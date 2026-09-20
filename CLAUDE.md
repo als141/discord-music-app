@@ -35,12 +35,19 @@ Discord音楽ボットアプリケーション。フロントエンド（Next.js
 ### Production (Raspberry Pi 4)
 - **SSH**: `ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13`
 - **Pi上のuv**: `~/.local/bin/uv`（パスが通っていないのでフルパス指定が必要）
-- **サービス**: `discord-music-bot.service` (systemd)
-- **ログ確認**: `journalctl -u discord-music-bot -f`
+- **サービス（2026-09-21 からプロセス分割）**:
+  - `discord-music-bot.service` = **voice プロセス**（`IRINA_ROLE=voice`, Discord bot + MusicPlayer, 内部 `127.0.0.1:8081`）。ドロップイン `/etc/systemd/system/discord-music-bot.service.d/role.conf`（ExecStart 上書き）と `killmode.conf`（KillMode=mixed）
+  - `discord-music-web.service` = **web プロセス**（`IRINA_ROLE=web`, 公開 API `0.0.0.0:8080` ← Cloudflare Tunnel）。bot は起動せず、bot 依存ルート21本と `/ws/{guild}` を voice へ中継（`backend/app/api/voice_proxy.py`）
+  - どちらも同じ `app.main:app`。ローカル開発は `IRINA_ROLE` 未設定＝`all`（従来の1プロセス）
+- **ログ確認**: `journalctl -u discord-music-bot -f`（音声）/ `journalctl -u discord-music-web -f`（API）/ 両方 `journalctl -u discord-music-bot -u discord-music-web -f`
 - **過去ログ**: `journalctl -u discord-music-bot --since '24 hours ago' --no-pager`
 - **デプロイログ**: `~/discord-music-app/deploy.log`
-- **自動デプロイ**: **10秒ごと**にGitHubをチェック (`discord-music-bot-deploy.timer`, `OnUnitActiveSec=10s`)。mainへのpush＝即本番デプロイ＋再起動
-- **デプロイ前チェック（backend変更時は必須）**: `bash scripts/predeploy_check.sh` — 誰かが再生中（has_player=true のギルドあり）なら push を待つ。push＝10秒で bot 再起動＝再生が切れる
+- **自動デプロイ**: **10秒ごと**にGitHubをチェック (`discord-music-bot-deploy.timer`, `OnUnitActiveSec=10s`)。mainへのpush＝即本番デプロイ。**どのプロセスを再起動するかは `deploy.sh` が変更ファイルで判定**:
+  - `backend/app/bot.py` / `services/**` / `db.py` / `config.py` / `logging.py` / `api/voice.py` / `__init__.py` / `pyproject.toml` / `uv.lock` に当たる → **voice + web を再起動**（数秒無音 → レジューム①で同じ位置から再開）
+  - それ以外の `backend/` 変更（main.py の検索/おすすめ/履歴、api/chat 等）→ **web だけ再起動**（音楽は止まらない）
+  - 例外: コミットメッセージに `[restart-voice]` を含めると voice も再起動（lifespan や main.py の配線を変えた時に使う）
+  - `backend/` 以外の変更 → pull のみ（auto-deploy.sh）
+- **デプロイ前チェック（voice 再起動を伴う変更のとき）**: `bash scripts/predeploy_check.sh` — 誰かが再生中（has_player=true のギルドあり）なら push を待つ（レジュームで復帰はするが数秒切れる）。web だけの変更なら不要
 - **本番スモークテスト**: `bash scripts/smoke_test.sh`（デプロイ後に毎回実行。全主要API+ルート欠落+Piのエラーログを確認）
 - **同時追加テスト（テストサーバー限定）**: `node scripts/concurrent-add-test.mjs`
 - **実再生テスト（テストサーバー限定）**: `node scripts/live-playback-test.mjs` — bot を テストサーバー(1080511818658762752)/VC 一般 に入れて add-url/pause/resume/skip/disconnect を REST で叩き、WS 更新を検証。人がいるサーバーでは絶対に実行しない
@@ -99,6 +106,18 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 - 同じDISCORD_TOKENで2台同時稼働すると Voice close code 4006/4017 が発生する。
 
 ## Key Technical Notes
+
+### 2026-09-21: プロセス分割（無停止アップデート②、commit 04f47d7c）
+- **構成**: 同じ `app.main:app` を `IRINA_ROLE` で2つ起動。**voice**（`discord-music-bot.service`, 127.0.0.1:8081）= Discord bot + MusicPlayer + `backend/app/api/voice.py` の21ルート+`/ws`。**web**（`discord-music-web.service`, 0.0.0.0:8080 ← Cloudflare）= 検索/おすすめ/履歴/アップロード等 + `api/voice_proxy.py` が voice ルーターから自動生成した中継ルート（HTTP は aiohttp で素通し、WS は双方向ポンプ）。`all`（既定）= 従来の1プロセス（ローカル `uv run uvicorn app.main:app` はこれ）
+- **voice に新しいルートを足すとき**: `api/voice.py` の `router` に足すだけ。web 側の中継は `build_proxy_router()` が openapi ごと自動追加（smoke_test のルート欠落検知もそのまま効く）
+- **voice 停止中の挙動**: 中継ルートは `503 {"detail":"音声サービスに接続できません…"}`、`/ws` は code 1011 で閉じる（frontend は自動再接続）、`/` は `"voice":"down"`。検索等の web ルートは生きている
+- **deploy.sh の再起動判定**: 上の Infrastructure 節を参照（voice パターン一致 or `[restart-voice]` で voice も再起動、それ以外は web のみ）。`discord-music-web` が無い環境では従来どおり bot だけ再起動（後方互換）
+- **Pi 上の repo 外ファイル**: `/etc/systemd/system/discord-music-web.service`、`/etc/systemd/system/discord-music-bot.service.d/role.conf`（`Environment=IRINA_ROLE=voice` + `ExecStart=` 上書きで 127.0.0.1:8081）、同 `killmode.conf`。Pi を作り直すときは手で入れる（内容はこの節と `deploy.sh` から復元可能）
+- **切替手順（実施済み）**: timer 停止 → push → Pi で `git reset --hard origin/main` + `uv sync --frozen` → ユニット導入 + `daemon-reload` + `enable discord-music-web` → `restart discord-music-bot`（voice, 状態保存→復元）→ `start discord-music-web` → `curl localhost:8080/`=`{"role":"web","voice":"ok"}`, `localhost:8081/`=`{"role":"voice"}` → timer 再開
+- **検証**: ローカル（テストbot を voice、web 別プロセス）で WS 中継 OK・live-playback 13/14（1件は yt-dlp のローカル速度によるタイミング）・voice kill → 503/1011/検索生存・復旧 OK。本番: smoke（`health voice` 含む）全 OK、`wss://api.atoriba.jp/ws/…` で update/pong、`resume-test.sh` 7/7（voice 再起動を web が中継したまま復元）
+- **無停止デプロイの実測（2026-09-21）**: テストサーバーで再生中に main.py のコメントだけ変えて push → deploy.log `Restarting: discord-music-web (voice restart needed: 0)`、voice の MainPID 495985 → 495985（不変）、web 495722 → 496288、`/player-state` は `夜に駆ける|True|v0|32e6da` のまま（epoch も不変＝プレイヤーそのもの）。**音楽は一切止まらなかった**
+- **診断**: `curl https://api.atoriba.jp/` の `voice` が `down` なら voice プロセス停止（`journalctl -u discord-music-bot`）。web が落ちていれば Cloudflare 経由が全部 502/530（`journalctl -u discord-music-web`）。両方のログを一度に: `journalctl -u discord-music-bot -u discord-music-web -f`
+- **ローカルで分割構成を再現**: `cd backend; set -a; . ./.env; set +a; DISCORD_TOKEN="$TEST_DISCORD_TOKEN" IRINA_ROLE=voice .venv/bin/python -m uvicorn app.main:app --port 8081` と `IRINA_ROLE=web IRINA_VOICE_UPSTREAM=http://127.0.0.1:8081 .venv/bin/python -m uvicorn app.main:app --port 8080` → `API_BASE=http://127.0.0.1:8080 node scripts/live-playback-test.mjs`（テストbot「０才児」がテストサーバーの VC に入る）
 
 ### 2026-09-21: デプロイ跨ぎのレジューム（無停止アップデート①、commits 5951df3〜cb71a80 系）
 - **目的**: backend の push（=bot再起動）でキュー・再生中の曲が消えていた → 「数秒無音のあと同じ曲の同じ位置から自動再開」に。Discord は 1トークン=1ボイス接続なので Web 流のブルーグリーンは音声に使えない前提での最適解
