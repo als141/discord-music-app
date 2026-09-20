@@ -104,6 +104,7 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 #   all   : 従来どおり 1 プロセスで bot + 公開 API（既定。ローカル開発）
 #   voice : Discord bot + MusicPlayer を持つ内部プロセス（Pi では 127.0.0.1:8081）
 #   web   : 公開 API（Pi では :8080）。bot は起動せず、bot 依存ルートは voice へ中継する
+#   （web だけに関わる変更は deploy.sh が web プロセスだけ再起動する＝再生中の音楽は止まらない）
 IRINA_ROLE = (os.getenv("IRINA_ROLE") or "all").strip().lower()
 if IRINA_ROLE not in ("all", "voice", "web"):
     raise RuntimeError(f"IRINA_ROLE は all / voice / web のいずれか: {IRINA_ROLE!r}")
