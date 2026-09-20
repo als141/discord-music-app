@@ -3,7 +3,7 @@
 - 対象: `IRINA_CHAT_CHANNEL_IDS`（既定: テストサーバー #riona、ドデカサーバー bot 専用）とその中のスレッドだけ。
   それ以外の場所ではイリーナは自分から一切喋らない
 - メンション不要。人間の投稿すべてに返す（bot・空メッセージ・`/ ! ? ;` 始まりは無視）
-- モデル: `XAI_MODEL`（既定 grok-4.6）、`XAI_REASONING_EFFORT`（none/low/medium/high/xhigh、既定 low）、
+- モデル: `XAI_MODEL`（既定 grok-4.6）、`XAI_REASONING_EFFORT`（none/low/medium/high/xhigh、既定 medium）、
   `XAI_SERVICE_TIER`（default / priority）
 - **ストリーミング**: `chat.stream()` で受け取りながら Discord の返信を 1.5 秒ごとに編集して育てる（`IRINA_CHAT_STREAM=0` で従来の一括送信）
 - **会話履歴は xAI 側に保存**（`store_messages=True` + `previous_response_id`）。チャンネルごとの
@@ -40,7 +40,7 @@ JST = timezone(timedelta(hours=9))
 DEFAULT_CHANNEL_IDS = "1232618506303045702,1156255909446680676"  # テストサーバー #riona / ドデカサーバー bot 専用
 XAI_MODEL = (os.getenv("XAI_MODEL") or "grok-4.6").strip()
 # 思考の深さ。xai-sdk 1.19 で none/low/medium/high/xhigh。既定 low（未指定だと雑談に 60 秒かかった実測から）
-XAI_REASONING_EFFORT = (os.getenv("XAI_REASONING_EFFORT") or "low").strip().lower()
+XAI_REASONING_EFFORT = (os.getenv("XAI_REASONING_EFFORT") or "medium").strip().lower()  # 既定 medium（ユーザー指定）
 # default / priority（priority は優先処理でレイテンシが下がるがコスト増）
 XAI_SERVICE_TIER = (os.getenv("XAI_SERVICE_TIER") or "default").strip().lower()
 STREAM_ENABLED = os.getenv("IRINA_CHAT_STREAM", "1") != "0"
