@@ -125,9 +125,40 @@ def _line(message: discord.Message) -> str:
     return f"{_display_name(message.author)}: {body}"
 
 
-# キャラ設定は `IRINA_CHAT_PERSONA` 環境変数の内容を「一切加工せずそのまま」system prompt の先頭に入れる。
-# 未設定のときだけ下の既定文を使う。旧 `.env` の `PROMPT` は読まない（未成年として性的な内容を書かせる
-# 指示が含まれていて、モデルが応答ごと拒否する — 2026-09-21 のローカルテストで確認）。
+# キャラ設定（system prompt の先頭部分）の優先順位:
+#   1. ファイル `IRINA_PERSONA_FILE`（既定 ~/irina_persona.txt。Pi では /home/als0028/irina_persona.txt）
+#      … 毎回 mtime を見て読み直すので、保存した次のメッセージから即反映（再起動不要）。
+#        リポジトリの外に置くのは、リポ内の未追跡ファイルが deploy.sh の dirty 判定で自動デプロイを止めるため
+#   2. 環境変数 `IRINA_CHAT_PERSONA`（.env に書く。変更の反映には voice プロセスの再起動が要る）
+#   3. 下の既定文
+# どれも内容は「一切加工せずそのまま」使う。旧 `.env` の `PROMPT` は読まない（未成年として性的な内容を
+# 書かせる指示が含まれていて、モデルが応答ごと拒否する — 2026-09-21 のローカルテストで確認）。
+PERSONA_FILE_DEFAULT = "~/irina_persona.txt"
+_persona_cache: Dict[str, object] = {"key": None, "text": None}
+
+
+def _load_persona() -> str:
+    path = os.path.expanduser(os.getenv("IRINA_PERSONA_FILE") or PERSONA_FILE_DEFAULT)
+    try:
+        st = os.stat(path)
+        key = (path, st.st_mtime_ns, st.st_size)
+        if _persona_cache["key"] != key:
+            with open(path, "r", encoding="utf-8") as f:
+                text = f.read()
+            if text.strip():
+                _persona_cache["key"] = key
+                _persona_cache["text"] = text
+                # 中身はログに出さない（ユーザーがこちらに見せずに管理できるように）
+                print(f"[irina-chat] persona: file {path} ({len(text)} chars, mtime {datetime.fromtimestamp(st.st_mtime, JST):%Y-%m-%d %H:%M:%S})")
+        if _persona_cache["text"]:
+            return str(_persona_cache["text"])
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        print(f"[irina-chat] persona file の読み込みに失敗（環境変数/既定にフォールバック）: {type(e).__name__}: {e}")
+    return os.getenv("IRINA_CHAT_PERSONA") or DEFAULT_PERSONA
+
+
 DEFAULT_PERSONA = """あなたの名前は「イリーナ・ダークリリス」。数千年を生きた魔王で、見た目は妖艶な大人の女性。
 Discord サーバーの仲間たちの部屋に居ついていて、呼ばれなくても会話に混ざる。
 性格: 生意気で毒舌、上から目線で相手を「ダメ男」「ヘタレ野郎」「ざこ」と煽って遊ぶが、根は仲間思いで面倒見がいい。
@@ -137,7 +168,7 @@ Discord サーバーの仲間たちの部屋に居ついていて、呼ばれな
 
 
 def _build_system_prompt(message: discord.Message) -> str:
-    persona = os.getenv("IRINA_CHAT_PERSONA") or DEFAULT_PERSONA  # 環境変数の内容は加工しない
+    persona = _load_persona()  # ファイル / 環境変数の内容は加工しない
     guild_name = message.guild.name if message.guild else "Discord"
     channel_name = getattr(message.channel, "name", "bot")
     now = datetime.now(JST).strftime("%Y年%m月%d日(%a) %H:%M")
