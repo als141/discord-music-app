@@ -24,7 +24,8 @@ const postJson = (p, body) => fetch(`${API}${p}`, { method: 'POST', headers: { '
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const summarize = (d) => {
   const cur = (d.queue || []).find(q => q.isCurrent)?.track?.title ?? null;
-  return { v: d.version, epoch: (d.epoch || '').slice(0, 6), playing: d.is_playing, current: cur, queue: (d.queue || []).filter(q => !q.isCurrent).length, has_player: d.has_player };
+  const pending = (d.queue || []).filter(q => q.track?.pending).length;
+  return { v: d.version, epoch: (d.epoch || '').slice(0, 6), playing: d.is_playing, current: cur, queue: (d.queue || []).filter(q => !q.isCurrent).length, pending, has_player: d.has_player };
 };
 const waitFor = async (pred, timeoutMs, label) => {
   const start = Date.now();
@@ -80,9 +81,12 @@ try {
   check('WS: 再開が届く（is_playing=true）', !!resumed, JSON.stringify(resumed));
 
   // 5) スキップ → 2曲目へ
+  // 2曲目の情報取得（pending）が終わる前にスキップすると、2曲目が再生に至らず
+  // 履歴チェックが落ちるタイミング競合があるため、pending 解消を待つ
+  await waitFor(e => e.queue >= 1 && e.pending === 0, 60000);
   const before = events[events.length - 1]?.current;
   r = await post(`/skip/${GUILD}`); console.log(`${ts()} skip → ${r.status}`);
-  const skipped = await waitFor(e => e.current && e.current !== before && e.queue === 0, 60000);
+  const skipped = await waitFor(e => e.current && e.current !== before && e.current !== '読み込み中…' && e.queue === 0, 60000);
   check('WS: スキップ後に2曲目が current になる', !!skipped, JSON.stringify(skipped));
 
   // 5.5) 再生履歴が SQLite に永続化されている（追加者込み）
