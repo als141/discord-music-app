@@ -16,7 +16,8 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 # xAI SDK (Grok 4.1 Agent Tools API)
-from .services import irina_chat
+from .services import irina_chat, shared_links, now_playing_status
+from .services import music_player as _music_player_module
 from PIL import Image
 from io import BytesIO
 import base64
@@ -148,6 +149,7 @@ _VOICE_AUTO_JOIN_COOLDOWN_SEC = 30  # クールダウン秒数
 _VOICE_AUTO_JOIN_MAX_FAILURES = 3   # 最大連続失敗回数（超えたら自動参加停止）
 # ボット切断イベントの重複防止
 _voice_disconnect_processing: set = set()
+_shelf_resolver_task = None
 
 # 画像をローカルに保存するヘルパー関数 (変更なし)
 async def save_image(image_data, prefix="img"):
@@ -572,6 +574,13 @@ async def handle_thread_message(message):
 @client.event
 async def on_ready():
     await client.change_presence(status=discord.Status.online, activity=discord.CustomActivity(name='バージョン1.0.0'))
+    # 「いま鳴っている曲」を Presence / VC ステータスに映す（投稿ゼロ）
+    now_playing_status.configure(client)
+    _music_player_module.register_now_playing_hook(now_playing_status.update)
+    # 「棚」のメタ情報解決（起動後と10分ごと）。on_ready は再接続でも呼ばれるので1回だけ起動
+    global _shelf_resolver_task
+    if _shelf_resolver_task is None or _shelf_resolver_task.done():
+        _shelf_resolver_task = client.loop.create_task(shared_links.resolver_loop())
 
     # 各ギルドにグローバルコマンドをコピーして即座に同期
     for guild in client.guilds:
@@ -629,8 +638,10 @@ async def _rejoin_occupied_voice_channels():
 
 @client.event
 async def on_message(message: discord.Message):
-    # bot 専用チャンネル（とその中のスレッド）だけ、メンション無しでイリーナが返答する。
-    # 対象外・bot・空メッセージなどの判定は irina_chat 側で行い、それ以外の場所では何もしない
+    # ① 「棚」: 貼られた YouTube リンクを黙って集める（絶対に send しない。判定は shared_links 側）
+    await shared_links.collect(message)
+    # ② bot 専用チャンネル（とその中のスレッド）だけ、メンション無しでイリーナが返答する。
+    #    対象外・bot・空メッセージなどの判定は irina_chat 側で行い、それ以外の場所では何もしない
     try:
         await irina_chat.handle_message(message)
     except Exception as e:

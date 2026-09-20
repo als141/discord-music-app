@@ -72,6 +72,50 @@ def init_db():
             updated_at TEXT NOT NULL
         )
         """)
+        # 「棚」: テキストチャンネルに貼られた YouTube リンク（本文は保存しない。URL とメタだけ）
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS shared_links (
+            id               INTEGER PRIMARY KEY,
+            guild_id         TEXT NOT NULL,
+            channel_id       TEXT NOT NULL,
+            channel_name     TEXT,
+            message_id       TEXT NOT NULL,
+            video_id         TEXT NOT NULL,
+            url              TEXT NOT NULL,
+            posted_by_id     TEXT,
+            posted_by_name   TEXT,
+            posted_by_image  TEXT,
+            posted_at        TEXT NOT NULL,
+            title            TEXT,
+            artist           TEXT,
+            thumbnail        TEXT,
+            resolved_at      TEXT,
+            resolve_attempts INTEGER NOT NULL DEFAULT 0,
+            UNIQUE(guild_id, message_id, video_id)
+        )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_shared_guild_time ON shared_links(guild_id, posted_at DESC)")
+        # イリーナのチャット（bot 専用チャンネル）: xAI 側に保存された会話の続き（previous_response_id）と要約・メモ
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS chat_sessions (
+            channel_id       TEXT PRIMARY KEY,
+            guild_id         TEXT,
+            last_response_id TEXT,
+            turn_count       INTEGER NOT NULL DEFAULT 0,
+            summary          TEXT,
+            persona_key      TEXT,
+            updated_at       TEXT NOT NULL
+        )
+        """)
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS chat_memory (
+            id         INTEGER PRIMARY KEY,
+            guild_id   TEXT NOT NULL,
+            note       TEXT NOT NULL,
+            created_by TEXT,
+            created_at TEXT NOT NULL
+        )
+        """)
 
 
 # ---------------------------------------------------------------------------
@@ -310,3 +354,145 @@ def load_player_state(guild_id: str, max_age_sec: int = 1800) -> Optional[Dict[s
 def clear_player_state(guild_id: str) -> None:
     with _connect() as conn:
         conn.execute("DELETE FROM player_state WHERE guild_id = ?", (guild_id,))
+
+
+# ---------------------------------------------------------------------------
+# 「棚」= テキストチャンネルに貼られた YouTube リンク
+# ---------------------------------------------------------------------------
+
+def add_shared_link(*, guild_id: str, channel_id: str, channel_name: Optional[str], message_id: str, video_id: str,
+                    url: str, posted_by_id: Optional[str], posted_by_name: Optional[str], posted_by_image: Optional[str],
+                    posted_at: str) -> bool:
+    """1 リンクを保存。同じメッセージ・同じ動画は無視（False）"""
+    with _connect() as conn:
+        cur = conn.execute(
+            """INSERT OR IGNORE INTO shared_links
+               (guild_id, channel_id, channel_name, message_id, video_id, url, posted_by_id, posted_by_name, posted_by_image, posted_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (guild_id, channel_id, channel_name, message_id, video_id, url, posted_by_id, posted_by_name, posted_by_image, posted_at),
+        )
+        return cur.rowcount > 0
+
+
+def _shared_row_to_dict(r) -> Dict[str, Any]:
+    (rid, guild_id, channel_id, channel_name, message_id, video_id, url, pb_id, pb_name, pb_image, posted_at, title, artist, thumbnail) = r
+    return {
+        "id": rid,
+        "video_id": video_id,
+        "url": url,
+        "title": title,
+        "artist": artist,
+        "thumbnail": thumbnail,
+        "channel_id": channel_id,
+        "channel_name": channel_name,
+        "posted_by": {"id": pb_id, "name": pb_name or "", "image": pb_image or ""} if pb_id else None,
+        "posted_at": posted_at,
+        "message_url": f"https://discord.com/channels/{guild_id}/{channel_id}/{message_id}",
+    }
+
+
+def get_shared_links(guild_id: str, limit: int = 200, channel_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """新しい順。同じ動画が複数回貼られていても最新の 1 件だけ返す"""
+    with _connect() as conn:
+        params: List[Any] = [guild_id]
+        where = "guild_id = ?"
+        if channel_id:
+            where += " AND channel_id = ?"
+            params.append(channel_id)
+        rows = conn.execute(
+            f"""SELECT id, guild_id, channel_id, channel_name, message_id, video_id, url,
+                       posted_by_id, posted_by_name, posted_by_image, posted_at, title, artist, thumbnail
+                FROM shared_links WHERE {where}
+                  AND id IN (SELECT MAX(id) FROM shared_links WHERE {where} GROUP BY video_id)
+                ORDER BY posted_at DESC LIMIT ?""",
+            params + params + [limit],
+        ).fetchall()
+    return [_shared_row_to_dict(r) for r in rows]
+
+
+def get_shared_link_channels(guild_id: str) -> List[Dict[str, Any]]:
+    with _connect() as conn:
+        rows = conn.execute(
+            """SELECT channel_id, MAX(channel_name), COUNT(DISTINCT video_id) FROM shared_links
+               WHERE guild_id = ? GROUP BY channel_id ORDER BY 3 DESC""",
+            (guild_id,),
+        ).fetchall()
+    return [{"id": r[0], "name": r[1] or "", "count": r[2]} for r in rows]
+
+
+def list_unresolved_shared_links(limit: int = 20) -> List[Dict[str, Any]]:
+    with _connect() as conn:
+        rows = conn.execute(
+            """SELECT id, video_id FROM shared_links
+               WHERE resolved_at IS NULL AND resolve_attempts < 3 ORDER BY id DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+    return [{"id": r[0], "video_id": r[1]} for r in rows]
+
+
+def update_shared_link_meta(link_id: int, *, title: Optional[str], artist: Optional[str], thumbnail: Optional[str], ok: bool) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    with _connect() as conn:
+        if ok:
+            # 同じ動画の他の行にも反映（バックフィルで同じ曲が複数回貼られている場合）
+            vid = conn.execute("SELECT video_id FROM shared_links WHERE id = ?", (link_id,)).fetchone()
+            conn.execute(
+                "UPDATE shared_links SET title=?, artist=?, thumbnail=?, resolved_at=? WHERE video_id = ? AND resolved_at IS NULL",
+                (title, artist, thumbnail, now, vid[0] if vid else None),
+            )
+        else:
+            conn.execute("UPDATE shared_links SET resolve_attempts = resolve_attempts + 1 WHERE id = ?", (link_id,))
+
+
+# ---------------------------------------------------------------------------
+# イリーナのチャット: セッション（xAI 側の会話の続き）とメモ
+# ---------------------------------------------------------------------------
+
+def get_chat_session(channel_id: str) -> Optional[Dict[str, Any]]:
+    with _connect() as conn:
+        r = conn.execute(
+            "SELECT channel_id, guild_id, last_response_id, turn_count, summary, persona_key, updated_at FROM chat_sessions WHERE channel_id = ?",
+            (channel_id,),
+        ).fetchone()
+    if not r:
+        return None
+    return {"channel_id": r[0], "guild_id": r[1], "last_response_id": r[2], "turn_count": r[3], "summary": r[4], "persona_key": r[5], "updated_at": r[6]}
+
+
+def save_chat_session(channel_id: str, guild_id: Optional[str], last_response_id: Optional[str], turn_count: int,
+                      summary: Optional[str], persona_key: Optional[str]) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    with _connect() as conn:
+        conn.execute(
+            """INSERT INTO chat_sessions (channel_id, guild_id, last_response_id, turn_count, summary, persona_key, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(channel_id) DO UPDATE SET guild_id=excluded.guild_id, last_response_id=excluded.last_response_id,
+                 turn_count=excluded.turn_count, summary=excluded.summary, persona_key=excluded.persona_key, updated_at=excluded.updated_at""",
+            (channel_id, guild_id, last_response_id, turn_count, summary, persona_key, now),
+        )
+
+
+def delete_chat_session(channel_id: str) -> None:
+    with _connect() as conn:
+        conn.execute("DELETE FROM chat_sessions WHERE channel_id = ?", (channel_id,))
+
+
+def add_chat_memory(guild_id: str, note: str, created_by: Optional[str]) -> int:
+    now = datetime.now(timezone.utc).isoformat()
+    with _connect() as conn:
+        cur = conn.execute("INSERT INTO chat_memory (guild_id, note, created_by, created_at) VALUES (?, ?, ?, ?)", (guild_id, note, created_by, now))
+        return int(cur.lastrowid)
+
+
+def list_chat_memory(guild_id: str, limit: int = 40) -> List[Dict[str, Any]]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT id, note, created_by, created_at FROM chat_memory WHERE guild_id = ? ORDER BY id DESC LIMIT ?", (guild_id, limit)
+        ).fetchall()
+    return [{"id": r[0], "note": r[1], "created_by": r[2], "created_at": r[3]} for r in reversed(rows)]
+
+
+def delete_chat_memory(guild_id: str, memory_id: int) -> bool:
+    with _connect() as conn:
+        cur = conn.execute("DELETE FROM chat_memory WHERE guild_id = ? AND id = ?", (guild_id, memory_id))
+        return cur.rowcount > 0

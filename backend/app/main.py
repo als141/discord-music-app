@@ -30,8 +30,9 @@ from .api.realtime import router as realtime_router
 from .db import (
     init_db, UploadedSong, add_uploaded_song, get_uploaded_songs_in_guild, find_uploaded_song_by_id,
     update_uploaded_song, delete_uploaded_song, get_top_tracks, get_history_stats,
-    clear_player_state,
+    clear_player_state, get_shared_links, get_shared_link_channels,
 )
+from .services import now_playing_status
 from contextlib import asynccontextmanager
 from fastapi.staticfiles import StaticFiles  # ← 追加
 
@@ -159,6 +160,12 @@ async def lifespan(app: FastAPI):
 
     if IRINA_ROLE == "web":
         await voice_proxy.close_sessions()
+
+    if IRINA_ROLE != "web":
+        try:
+            await asyncio.wait_for(now_playing_status.clear_all(), timeout=6)  # VC ステータスを消してから落ちる
+        except Exception:
+            pass
 
     # デプロイ跨ぎのレジューム: 全ギルドのキュー・再生位置を保存してから落ちる。
     # 先に shutdown_flag を立て、ffmpeg 強制終了の after コールバックが状態を壊すのを防ぐ
@@ -607,6 +614,21 @@ async def get_history(guild_id: str, limit: int = 50, user_id: Optional[str] = N
     """サーバーごとの再生履歴（SQLite 永続化。bot 再起動をまたいで残る）。
     互換のため古い→新しい順で返す（frontend 側で reverse して表示している）。"""
     return await load_history_queue_items(guild_id, limit, user_id)
+
+
+@app.get("/shared-tracks/{guild_id}")
+async def get_shared_tracks(guild_id: str, limit: int = 200, channel_id: Optional[str] = None):
+    """「棚」: テキストチャンネルに貼られた YouTube リンク（新しい順・同じ動画は最新 1 件）。
+    収集は voice プロセスの services/shared_links.py。ここは DB を読むだけなので web だけで動く。"""
+    limit = max(1, min(limit, 500))
+    tracks, channels = await asyncio.gather(
+        asyncio.to_thread(get_shared_links, guild_id, limit, channel_id),
+        asyncio.to_thread(get_shared_link_channels, guild_id),
+    )
+    for t in tracks:
+        if not t.get("thumbnail"):
+            t["thumbnail"] = f"https://i.ytimg.com/vi/{t['video_id']}/hqdefault.jpg"
+    return {"channels": channels, "tracks": tracks}
 
 
 @app.get("/history-stats/{guild_id}")

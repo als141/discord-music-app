@@ -20,6 +20,15 @@ settings = get_settings()
 # ロガーを設定
 logger = get_logger(__name__)
 
+# 「いま鳴っている曲」を Discord（Presence / VC ステータス）に映すフック。bot.py が登録する。
+# シグネチャ: async fn(guild, song_or_None)
+_now_playing_hook = None
+
+
+def register_now_playing_hook(fn) -> None:
+    global _now_playing_hook
+    _now_playing_hook = fn
+
 def get_ytdl_format_options() -> dict:
     """
     yt-dlp の設定オプションを取得
@@ -368,6 +377,7 @@ class MusicPlayer:
                 self._play_started_at = time.monotonic()
                 await self._record_play_history(song)
                 await self.notify_clients(self.guild_id)
+                self._emit_now_playing(song)
                 await asyncio.to_thread(self._save_state_sync)
             except Exception as e:
                 logger.error(f"再生エラー: {e}", exc_info=True)
@@ -407,11 +417,22 @@ class MusicPlayer:
         # キューが空になった場合も含めて状態を保存/掃除（after コールバックは非イベントループ文脈）
         self.bot.loop.create_task(asyncio.to_thread(self._save_state_sync))
         self.bot.loop.create_task(self.notify_clients_wrapper())
+        if not self.queue:
+            self._emit_now_playing(None)  # 次の曲があれば「再生開始」側で上書きされる
         self.next.set()
 
     async def notify_clients_wrapper(self):
         """クライアント通知のラッパー"""
         await self.notify_clients(self.guild_id)
+
+    def _emit_now_playing(self, song) -> None:
+        """Presence / VC ステータス更新（登録されていれば）。失敗しても再生に影響させない"""
+        if _now_playing_hook is None:
+            return
+        try:
+            self.bot.loop.create_task(_now_playing_hook(self.guild, song))
+        except Exception as e:
+            logger.debug(f"now_playing hook scheduling failed: {e}")
 
     async def set_volume(self, volume: float):
         """ボリュームを設定する（0.0 - 1.0）"""
@@ -872,7 +893,8 @@ class MusicPlayer:
         """プレイヤーを適切にシャットダウンする"""
         try:
             logger.info(f"音楽プレイヤーをシャットダウン中 (Guild: {self.guild_id})")
-            
+            self._emit_now_playing(None)
+
             # 再生停止
             if self.voice_client and self.voice_client.is_playing():
                 self.voice_client.stop()
