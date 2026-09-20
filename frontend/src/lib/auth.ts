@@ -14,6 +14,19 @@ const ACCESS_TOKEN_DEFAULT_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000; // Discord の
 const REFRESH_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 期限の24時間前になったら更新
 
 /**
+ * 同じ refresh_token での同時リフレッシュを 1 回にまとめるための in-flight / 直近結果のキャッシュ。
+ *
+ * Discord の refresh_token は使い捨て（refresh のたびにローテーション）。複数タブや PWA が同時に
+ * /api/auth/session を叩いて二重に refresh すると、後発が invalid_grant で失敗し、その失敗側の
+ * レスポンスが最後に Cookie を書くと「使用済みの refresh_token」が残って以後ずっと更新できなくなる
+ * （＝数日後に「再ログイン」）。サーバーレスの同一インスタンス内でしか効かないが、Vercel は
+ * インスタンスを使い回すので大半のケースを防げる。完了後も短時間は結果を返して、遅れて来た
+ * 同じ古い refresh_token のリクエストに新しいトークン一式を渡す。
+ */
+const REFRESH_RESULT_TTL_MS = 60 * 1000;
+const refreshResults = new Map<string, { promise: Promise<JWT>; createdAt: number }>();
+
+/**
  * refresh_token で Discord の access_token を更新する。
  * - Discord は refresh_token もローテーションするので、返ってきた新しい値へ必ず差し替える
  * - 失敗しても accessToken は消さない（まだ生きている可能性があり、消すと即ログアウトになるため）
@@ -76,11 +89,38 @@ async function refreshDiscordAccessToken(token: JWT): Promise<JWT> {
   }
 }
 
+async function refreshDiscordAccessTokenDeduped(token: JWT): Promise<JWT> {
+  const key = token.refreshToken;
+  if (!key) {
+    return refreshDiscordAccessToken(token);
+  }
+
+  const now = Date.now();
+  for (const [k, entry] of refreshResults) {
+    if (now - entry.createdAt > REFRESH_RESULT_TTL_MS) refreshResults.delete(k);
+  }
+
+  let entry = refreshResults.get(key);
+  if (!entry) {
+    entry = { promise: refreshDiscordAccessToken(token), createdAt: now };
+    refreshResults.set(key, entry);
+  }
+  const refreshed = await entry.promise;
+  // 先行リクエストの結果（新しいトークン一式）をこの JWT に反映する。id/picture など他のフィールドは自分のものを保つ
+  return {
+    ...token,
+    accessToken: refreshed.accessToken,
+    refreshToken: refreshed.refreshToken,
+    accessTokenExpires: refreshed.accessTokenExpires,
+    error: refreshed.error,
+  };
+}
+
 export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
   session: {
     strategy: 'jwt',
-    maxAge: 90 * 24 * 60 * 60, // 90日（友人サーバー用途。「たまに開くと切れている」を防ぐ）
+    maxAge: 365 * 24 * 60 * 60, // 1年（友人サーバー用途。再ログインを極力なくす。Discord 側は refresh_token で更新し続ける）
     updateAge: 24 * 60 * 60, // 24時間ごとにセッションCookieを書き戻してローリング延長
   },
   providers: [
@@ -137,7 +177,7 @@ export const authOptions: NextAuthOptions = {
         return token;
       }
 
-      return refreshDiscordAccessToken(token);
+      return refreshDiscordAccessTokenDeduped(token);
     },
   },
 };
