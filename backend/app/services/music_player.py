@@ -235,6 +235,9 @@ class MusicPlayer:
         # 再生位置トラッキング（デプロイ跨ぎのレジューム用）
         self._elapsed_base: float = 0.0      # 一時停止までに再生済みの秒数（+ start_offset）
         self._play_started_at: Optional[float] = None  # 再生中なら monotonic 時刻
+        # True の間は状態を保存しない。シャットダウン時の最終保存のあと、voice_client の teardown で
+        # after コールバック（play_next_song）が走って良いスナップショットを上書きするのを防ぐ
+        self._state_frozen: bool = False
         # プレイヤーインスタンスごとの世代ID。bot再起動やVC再参加で MusicPlayer が作り直されると
         # state_version が 0 に戻るため、クライアントはこの epoch が変わったら version 比較をリセットする
         self.state_epoch: str = uuid.uuid4().hex
@@ -782,8 +785,14 @@ class MusicPlayer:
             'queue': [self._song_to_dict(s) for s in self.queue if not s.pending],
         }
 
-    def _save_state_sync(self) -> None:
+    def freeze_state(self) -> None:
+        """以後の自動保存を止める（最終保存の直後に呼ぶ）"""
+        self._state_frozen = True
+
+    def _save_state_sync(self, force: bool = False) -> None:
         """状態を SQLite に保存（同期。async からは asyncio.to_thread で呼ぶ）"""
+        if self._state_frozen and not force:
+            return
         try:
             snap = self.snapshot_state()
             if snap['current'] is None and not snap['queue']:
@@ -813,6 +822,13 @@ class MusicPlayer:
             logger.warning(f"プレイヤー状態の読込に失敗: {type(e).__name__}: {e}")
             return False
         if not state:
+            return False
+        if self.queue or self.current:
+            # 既に曲が入っているプレイヤーには重ねない（二重復元の防止）。保存行だけ捨てる
+            try:
+                await asyncio.to_thread(history_db.clear_player_state, self.guild_id)
+            except Exception:
+                pass
             return False
 
         def _to_song(d: dict, offset: float = 0.0) -> Song:
@@ -860,6 +876,7 @@ class MusicPlayer:
             
             # プレイヤーループを停止
             self.shutdown_flag = True
+            self._state_frozen = True  # teardown 中の after コールバックで状態を書かない
             self.next.set()  # ループを終了させる
             
             # Executor をシャットダウン

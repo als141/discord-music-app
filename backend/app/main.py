@@ -145,7 +145,8 @@ async def lifespan(app: FastAPI):
     saved = 0
     for gid, player in list(music_players.items()):
         try:
-            player._save_state_sync()
+            player._save_state_sync(force=True)
+            player.freeze_state()  # この後の voice teardown で上書きされないように
             saved += 1
         except Exception as e:
             print(f"状態保存に失敗 (guild: {gid}): {e}")
