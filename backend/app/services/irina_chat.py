@@ -2,7 +2,7 @@
 
 - 対象: `IRINA_CHAT_CHANNEL_IDS`（既定: テストサーバー #riona、ドデカサーバー bot 専用）とその中のスレッドだけ。
   それ以外の場所ではイリーナは自分から一切喋らない
-- メンション不要。人間の投稿すべてに返す（bot・空メッセージ・`/ ! ? ;` 始まりは無視）
+- メンション不要。人間の投稿すべてに返す（bot と空メッセージだけ無視）
 - モデル: `XAI_MODEL`（既定 grok-4.6）、`XAI_REASONING_EFFORT`（none/low/medium/high/xhigh、既定 medium）、
   `XAI_SERVICE_TIER`（default / priority）
 - **ストリーミング**: `chat.stream()` で受け取りながら Discord の返信を 1.5 秒ごとに編集して育てる（`IRINA_CHAT_STREAM=0` で従来の一括送信）
@@ -14,7 +14,8 @@
   クライアント側 = `http_request`（curl 相当。イリーナ API と Discord API を 1 つのツールで。`irina_tools.py`）
   + `remember` / `forget`（サーバーごとの長期メモ。system prompt に入る）
 - 生成画像は Discord に添付して返す。コスト（USD）と reasoning トークンをログに出す
-- キャラ設定: `~/irina_persona.txt` を無加工で使用（mtime で即反映）。変わったらチェーンを切り替える
+- キャラ設定: `~/irina_persona.txt` を無加工で使用（mtime で即反映）。変わったらチェーンを切り替える。
+  system prompt はこのファイル + ツールや Discord 表現の【参考情報】+ メモ/要約だけで、応答の長さ等の「ルール」は入れない
 - voice プロセス（Discord クライアントを持つ側）で動く。LLM 呼び出しは非同期なので音声再生を止めない
 """
 import asyncio
@@ -71,7 +72,6 @@ STREAM_EDIT_INTERVAL_SEC = 1.5   # 返信メッセージを編集する最短間
 STREAM_FIRST_SEND_CHARS = 24     # これだけ溜まったら最初の返信を送る
 RATE_LIMIT_PER_MINUTE = 12       # チャンネルごと。超えた分は黙って無視（暴走・荒らし対策）
 ERROR_NOTICE_COOLDOWN_SEC = 300  # 障害時の謝罪メッセージは 5 分に 1 回まで
-IGNORED_PREFIXES = ("/", "!", "?", ";")
 MEMORY_MAX_NOTES = 40
 
 _client: Optional[AsyncClient] = None
@@ -208,22 +208,20 @@ def _load_persona() -> Tuple[str, str]:
 # system prompt（キャラ設定 + 運用ルール + 環境 + メモ + 要約）
 # ---------------------------------------------------------------------------
 
-RULES = """
+# system prompt はキャラ設定ファイル（~/irina_persona.txt）の内容 + 下の【参考情報】だけ。
+# 応答の長さ・話し方・やってはいけないこと等の「ルール」はここでは一切設けない（ユーザー指定 2026-09-21）。
+REFERENCE_INTRO = """
 
-【運用ルール（上のキャラ設定を保ったまま、必ず守る）】
-- ここは Discord の bot 専用チャンネル。メンバーはここであなた（イリーナ）と雑談する。あなたは呼ばれなくても返事をする
-- 返答は日本語。普段は 1〜4 文、長くても 600 文字程度。箇条書きや見出しの乱発は避け、チャットとして自然に。Discord のマークダウンは軽く使ってよい
-- 発言は「[時刻] 名前 (user_id=…): 内容」の形で渡される。名前で呼び分けてよい。@everyone / @here / メンション記法は使わない
-- 最近の出来事・ニュース・ゲームのアップデートやパッチ・X（Twitter）で話題のこと・調べないと分からない事実は、web_search / x_search で調べてから答える。雑談や感想には使わない。調べたときは根拠の URL を 1〜2 個だけ文末に添える
-- 計算・データの集計・簡単なコードの実行は code_execution を使う（暗算しない）
-- 添付された画像・PDF・テキスト/コード・表計算などのファイルは、そのまま読める形で一緒に渡される。音声・ボイスメッセージは文字起こしが添えられる。動画は中身を読めないのでそう言う
-- 貼られた URL の中身を聞かれたら fetch_url で本文を取ってから答える
-- 画像を作ってと頼まれたら image_generation で作る（頼まれたときだけ。1 日の枚数に上限がある）。画像は自動で添付されるので、本文には一言添えるだけでよい
-- このサーバー・音楽・キュー・履歴・VC・メンバー・チャンネルなど「イリーナや Discord の中のこと」を聞かれたら、推測せず http_request で実際に取ってから答える（irina の API と Discord API が使える。使い方は【環境】を参照）
-- 「曲を入れて」「スキップして」「VC に来て」のような操作は、頼まれたときに http_request で実行し、何をしたか一言添える。頼まれていない操作はしない。他のチャンネルへの投稿は、頼んだ人の責任であることを踏まえて必要最小限に
-- 覚えておくべきこと（メンバーの好み、約束、呼び方、進行中の話題）は remember で保存し、古くなったら forget で消す。個人の私生活・健康・人間関係に踏み込む内容は保存しない
-- ツールの結果は要点だけ話す。JSON をそのまま貼らない。失敗したら正直にそう言う
-- 分からないことは適当に断言せず、そう言う"""
+【参考情報（ルールではなく、いま使えるものの説明）】"""
+
+DISCORD_FORMATTING_REFERENCE = """
+- Discord の表現: Markdown が使える（**太字** *斜体* __下線__ ~~取り消し~~ `コード` ```言語 コードブロック``` > 引用 >>> 複数行引用 -# 小さい字 # ## ### 見出し - リスト 1. 番号リスト ||スポイラー|| [テキスト](URL) <URL> で URL の埋め込みプレビューを抑止）。絵文字は :name: やサーバー絵文字 <:name:id>。返信は 2000 文字を超えると自動で分割して送られる
+- 埋め込み（embed）やボタン付きメッセージ、リアクション、別チャンネルへの投稿は http_request の service="discord" で Discord API を直接叩けば作れる（例: POST /channels/{id}/messages に {"embeds":[{"title":"…","description":"…","color":16729344,"fields":[{"name":"…","value":"…"}],"image":{"url":"…"}}]}、PUT /channels/{id}/messages/{message_id}/reactions/{emoji}/@me）
+- 返信でのメンション通知はこちら側で無効化されている（<@id> と書いても通知は飛ばない）"""
+
+
+def _reference_block(message: discord.Message) -> str:
+    return REFERENCE_INTRO + _environment_block(message) + DISCORD_FORMATTING_REFERENCE
 
 
 def _environment_block(message: discord.Message) -> str:
@@ -232,21 +230,23 @@ def _environment_block(message: discord.Message) -> str:
     me = guild.me if guild else None
     return "\n".join([
         "",
-        "【環境】",
-        f"- サーバー: {guild.name} (guild_id={guild.id})",
-        f"- このチャンネル: #{getattr(channel, 'name', 'bot')} (channel_id={channel.id})",
-        f"- あなた（bot）の user_id={me.id if me else '?'}",
-        "- http_request の service=\"irina\"（このボット自身の API。web プロセス）: 主なエンドポイント →"
+        f"- 場所: Discord サーバー「{guild.name}」(guild_id={guild.id}) の #{getattr(channel, 'name', 'bot')} (channel_id={channel.id})。あなた（bot）の user_id={me.id if me else '?'}",
+        "- 発言は「[時刻(JST)] 名前 (user_id=…): 内容」の形で届く。添付があれば [添付: …] と書かれ、画像・PDF・Word/Excel/PowerPoint・テキスト/コードはそのまま読める形で一緒に渡される。音声・ボイスメッセージは文字起こしが本文に添えられる。動画は中身が渡らない",
+        "- 使えるツール:",
+        "  - web_search / x_search: Web と X（Twitter）の検索（xAI 側で実行。結果の URL は citations として付く）",
+        "  - code_execution: Python を実行して計算・集計・簡単なコードを試せる",
+        "  - image_generation: 画像を生成する。生成画像は自動で Discord に添付される（本文の次のメッセージとして届く）。添付された画像を参考にした生成や、直前に生成した画像の追加編集（「さっきの猫を白に」など）もできる",
+        "  - http_request: curl のように 1 回の HTTP を送る。service=\"irina\" はこのボット自身の API（web プロセス）で、主なエンドポイント →"
         " GET /bot-guilds / GET /voice-channels/{guild_id} / GET /bot-voice-status/{guild_id} / GET /user-voice-status/{guild_id}/{user_id}"
         " / POST /join-voice-channel/{guild_id}/{channel_id} / POST /disconnect-voice-channel/{guild_id}"
-        " / GET /player-state/{guild_id}（再生中・キュー・履歴）/ POST /add-url/{guild_id}（body {\"url\": \"...\", \"user\": {\"id\": \"...\", \"name\": \"...\", \"image\": \"\"}}）"
+        " / GET /player-state/{guild_id}（再生中・キュー・履歴）/ POST /add-url/{guild_id}（body {\"url\": \"...\", \"user\": {\"id\": \"...\", \"name\": \"...\", \"image\": \"\"}}。user には頼んだ人の user_id と名前）"
         " / POST /skip|pause|resume/{guild_id} / POST /remove-from-queue/{guild_id}?position=N / GET /search?query=...&filter=songs"
         " / GET /related/{video_id} / GET /recommendations / GET /history/{guild_id} / GET /history-stats/{guild_id}"
-        " / GET /shared-tracks/{guild_id}（曲置き場: チャンネルに貼られた曲）/ GET /openapi.json（全エンドポイント）。"
-        " 曲を入れるときの user は頼んだ人の user_id と名前を入れる",
-        "- http_request の service=\"discord\"（Discord REST API v10、bot トークンで実行）: path は /guilds/{guild_id}/channels, /channels/{id}/messages?limit=20,"
-        " POST /channels/{id}/messages（body {\"content\": \"...\"}）, /guilds/{guild_id}/members/{user_id}, /guilds/{guild_id}/voice-states/{user_id},"
-        " /guilds/{guild_id}/members?limit=100 など。サーバー削除・BAN・ロール/権限変更などは拒否される",
+        " / GET /shared-tracks/{guild_id}（曲置き場: チャンネルに貼られた曲）/ GET /openapi.json（全エンドポイント一覧）。"
+        " service=\"discord\" は Discord REST API v10（bot トークンで実行）で、path は /guilds/{guild_id}/channels, /channels/{id}/messages?limit=20,"
+        " POST /channels/{id}/messages（body {\"content\": \"...\"}）, /guilds/{guild_id}/members/{user_id}, /guilds/{guild_id}/voice-states/{user_id}, /guilds/{guild_id}/members?limit=100 など",
+        "  - fetch_url: 任意の公開 URL の本文テキストを取得（HTML はタグを落として最大 8000 文字）",
+        "  - remember / forget: このサーバーについて長く覚えておくメモの保存と削除（保存したメモは下の【覚えていること】として毎回渡される）",
     ])
 
 
@@ -261,7 +261,7 @@ def _memory_block(guild_id: str) -> str:
 
 
 def _build_system_prompt(message: discord.Message, persona: str, summary: Optional[str]) -> str:
-    parts = [persona, RULES, _environment_block(message), _memory_block(str(message.guild.id))]
+    parts = [persona, _reference_block(message), _memory_block(str(message.guild.id))]
     if summary:
         parts.append("\n\n【これまでの会話の要約（前のチェーンから引き継ぎ）】\n" + summary)
     return "".join(parts)
@@ -703,8 +703,6 @@ async def _ask(message: discord.Message, renderer: _Renderer, *, force_new_chain
         store_messages=True,
         tools=_tools(guild_id),
         tool_choice="auto",
-        max_tokens=1500,
-        temperature=0.8,
         reasoning_effort=XAI_REASONING_EFFORT,
         service_tier=XAI_SERVICE_TIER,
         user=f"discord:{message.author.id}",  # xAI 側の利用者識別（乱用検知用）
@@ -761,9 +759,6 @@ async def handle_message(message: discord.Message) -> None:
     content = (message.content or "").strip()
     if not content and not message.attachments:
         return
-    if content.startswith(IGNORED_PREFIXES):
-        return
-
     channel_id = message.channel.id
     if _rate_limited(channel_id):
         print(f"[irina-chat] rate limited (channel {channel_id})")
