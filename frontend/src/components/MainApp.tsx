@@ -42,7 +42,7 @@ export const MainApp: React.FC = () => {
   // useSession() を直接使わず useSessionGuard() 経由にする。
   // /api/auth/session の取得が一度失敗しただけで next-auth が unauthenticated のまま
   // 戻らなくなる（= ログインが外れたように見える）ため、復帰の再試行を挟む。
-  const { session, status } = useSessionGuard();
+  const { session, status, giveUp: giveUpSessionRecovery } = useSessionGuard();
   const { toast } = useToast();
   
   // Zustand ストアから状態を取得
@@ -280,8 +280,11 @@ export const MainApp: React.FC = () => {
   // セッション取得に失敗しただけの可能性があるので、再確認中はログイン画面に落とさない
   if (status === 'recovering') {
     return (
-      <div className="h-screen flex items-center justify-center">
+      <div className="h-screen flex flex-col items-center justify-center gap-6">
         <Loading size="large" text="接続を確認しています..." />
+        <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={giveUpSessionRecovery}>
+          ログイン画面へ
+        </Button>
       </div>
     );
   }

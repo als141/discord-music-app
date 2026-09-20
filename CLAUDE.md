@@ -145,6 +145,8 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
   - 既存ログイン中のユーザーは JWT に refresh_token が無い → 7日失効時に一度「再ログイン」を押してもらえば以後は自動リフレッシュに乗る
   - `src/utils/api.ts` の `api.getUserGuilds()` はどこからも呼ばれていないデッドコード（未削除）
   - **追加 75e999b2**: ①`refreshDiscordAccessTokenDeduped()` — 同じ refresh_token での同時リフレッシュを同一インスタンス内で1回にまとめ、直近60秒の結果を再利用（複数タブ/PWA の二重 refresh で後発が invalid_grant → 使用済み refresh_token が Cookie に残り以後更新不能＝数日後に再ログイン、を防ぐ）②`session.maxAge` 90日 → **1年** ③ユーザー実機: 修正前の JWT（refresh_token なし）の人は一度だけ「Discordの認証の有効期限が切れました → 再ログイン」が出る（2026-09-21 にオーナーで確認、再ログイン後はサーバー一覧 OK）。これは想定どおりの1回きりの移行
+  - **実ブラウザ検証（2026-09-21 02:20、オーナーがログインした Chromium で実施・全 OK）**: `/api/auth/session` user あり error なし / `/api/discord/userGuilds` 200（47件）/ メイン画面表示・「再ログイン」「サーバーがありません」なし。`window.fetch` を差し替えて `/api/auth/session` だけ失敗させる → 「接続を確認しています...」（IntroPage に落ちない）→ 解除後 2 秒で復帰。16 秒失敗し続けて再試行を使い切っても、`online` イベントで 1 秒で復帰。検証スクリプトはスクラッチパッドの `verify-login3.cjs`（要点: CDP 9222 に `connectOverCDP`、Service Worker が fetch を握るので `page.route` では失敗を注入できず、`window.fetch` のモンキーパッチで注入する）
+  - CDP オフライン emulation（`Network.emulateNetworkConditions offline`）では `navigator.onLine=false` になり `refetchWhenOffline={false}` で next-auth が再取得しないため、そもそも失敗しない（これも意図した保護）
   - **人のログインが要る検証のためのブラウザ**: `node scripts/open-login-browser.mjs` — WSLg 上に headed Chromium（プロフィール `.tmp/chrome-profile` 永続、CDP `http://127.0.0.1:9222`）。人がログインした後は Playwright の `chromium.connectOverCDP('http://127.0.0.1:9222')` で同じセッションを操作できる。Playwright の Chromium が無ければ `cd frontend && bunx playwright install chromium`
 
 ### テスト用 Discord bot（2026-09-21 追加）

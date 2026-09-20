@@ -26,10 +26,35 @@ export type SessionGuardStatus = 'loading' | 'authenticated' | 'recovering' | 'u
 export interface SessionGuardResult {
   session: Session | null;
   status: SessionGuardStatus;
+  /** 復帰待ちをやめてログイン画面へ行く（「接続を確認しています」画面の手動脱出用） */
+  giveUp: () => void;
 }
 
-/** 再試行のバックオフ（ms）。合計で約12秒待つ */
-const RETRY_DELAYS_MS = [1000, 3000, 8000];
+/**
+ * 再試行の間隔（ms）。最初は素早く、その後は 60 秒ごとに無期限で続ける。
+ * 「本当にログアウトしている」ときは probeSession() が 'none' を返して即終了するので、
+ * 無期限に続くのは通信/サーバー障害が続いている間だけ（その間はログイン画面に落とさない）。
+ */
+const RETRY_DELAYS_MS = [1000, 3000, 8000, 15000, 30000];
+const RETRY_STEADY_MS = 60000;
+
+type SessionProbe = 'ok' | 'none' | 'error';
+
+/**
+ * /api/auth/session を直接叩いて、「サーバーがセッション無しと答えた（本当に切れた）」のか
+ * 「通信やサーバーの失敗（一時的）」なのかを区別する。
+ * next-auth の getSession() はどちらでも null を返すので区別できない。
+ */
+async function probeSession(): Promise<SessionProbe> {
+  try {
+    const res = await fetch('/api/auth/session', { cache: 'no-store', credentials: 'same-origin' });
+    if (!res.ok) return 'error';
+    const body = await res.json().catch(() => null);
+    return body && typeof body === 'object' && body.user ? 'ok' : 'none';
+  } catch {
+    return 'error';
+  }
+}
 
 /**
  * 復帰したのに SessionProvider が追従しなかった（= フォールバックで動いている）場合の再確認間隔。
@@ -121,31 +146,48 @@ export function useSessionGuard(): SessionGuardResult {
     const generation = ++generationRef.current;
     setIsRecovering(true);
 
-    for (const delay of RETRY_DELAYS_MS) {
+    for (let attempt = 0; ; attempt++) {
+      const delay = RETRY_DELAYS_MS[attempt] ?? RETRY_STEADY_MS;
       await sleep(delay);
       if (generation !== generationRef.current) return; // 途中で復帰した/やり直された
 
-      let fetched: Session | null = null;
-      try {
-        fetched = await getSession();
-      } catch {
-        fetched = null;
-      }
+      const probe = await probeSession();
       if (generation !== generationRef.current) return;
 
-      if (fetched) {
-        setRecoveredSession(fetched);
-        notifySessionProvider();
+      if (probe === 'none') {
+        // サーバーが「セッション無し」と答えた = 本当にログアウトしている（次回のリロードでは即ログイン画面にする）
+        gaveUpRef.current = true;
+        writeSeen(false);
         setIsRecovering(false);
         return;
       }
-    }
 
-    if (generation !== generationRef.current) return;
-    // 全部失敗 = 本当に切れた（次回のリロードでは即ログイン画面にする）
+      if (probe === 'ok') {
+        let fetched: Session | null = null;
+        try {
+          fetched = await getSession();
+        } catch {
+          fetched = null;
+        }
+        if (generation !== generationRef.current) return;
+        if (fetched) {
+          setRecoveredSession(fetched);
+          notifySessionProvider();
+          setIsRecovering(false);
+          return;
+        }
+        // probe は ok なのに getSession が null → 一時的な不整合。次の周回で再確認する
+      }
+      // 'error'（通信/サーバーの失敗）はログアウト扱いにせず、待って再試行する
+    }
+  }, []);
+
+  const giveUp = useCallback(() => {
+    generationRef.current++; // 走っている再試行を止める
     gaveUpRef.current = true;
     writeSeen(false);
     setIsRecovering(false);
+    setRecoveredSession(null);
   }, []);
 
   // status の変化に応じて再試行を開始 / 打ち切る
@@ -202,20 +244,28 @@ export function useSessionGuard(): SessionGuardResult {
     };
   }, [recoveredSession, status]);
 
-  // オンラインに戻ったら、諦めたあとでも一度だけ確認し直す
+  // オンラインに戻った / タブが前面に来たら、待ち時間を飛ばしてすぐ確認し直す（諦めたあとでも一度だけ）
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const handleOnline = () => {
+    const retryNow = () => {
       if (!hasAuthenticatedRef.current) return;
-      if (status === 'authenticated' || recoveredSession || isRecovering) return;
+      if (status === 'authenticated' || recoveredSession) return;
       gaveUpRef.current = false;
-      void runRecovery();
+      void runRecovery(); // 走っている再試行があっても generation が進むので新しい周回に置き換わる
+    };
+    const handleOnline = () => retryNow();
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') retryNow();
     };
 
     window.addEventListener('online', handleOnline);
-    return () => window.removeEventListener('online', handleOnline);
-  }, [status, isRecovering, recoveredSession, runRecovery]);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [status, recoveredSession, runRecovery]);
 
   const effectiveSession = session ?? recoveredSession;
 
@@ -230,5 +280,5 @@ export function useSessionGuard(): SessionGuardResult {
     effectiveStatus = 'unauthenticated';
   }
 
-  return { session: effectiveSession, status: effectiveStatus };
+  return { session: effectiveSession, status: effectiveStatus, giveUp };
 }
