@@ -98,6 +98,27 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 
 ## Key Technical Notes
 
+### 2026-09-21: デプロイ跨ぎのレジューム（無停止アップデート①、commits 5951df3〜cb71a80 系）
+- **目的**: backend の push（=bot再起動）でキュー・再生中の曲が消えていた → 「数秒無音のあと同じ曲の同じ位置から自動再開」に。Discord は 1トークン=1ボイス接続なので Web 流のブルーグリーンは音声に使えない前提での最適解
+- `db.py`: `player_state`（guild_id / state_json / updated_at）+ `save_player_state`/`load_player_state`(30分期限)/`clear_player_state`
+- `MusicPlayer`: 位置トラッキング（`_elapsed_base`/`_play_started_at`/`current_position()`）、`snapshot_state`/`_save_state_sync`/`restore_saved_state`、30秒ごと定期保存。保存トリガ=再生開始・追加完了・pause/resume・remove・reorder・曲終了。再開は ffmpeg `-ss`（3秒未満は頭出しなし）。ログ「再生位置レジューム: <曲> (N秒から)」「保存済みキューを復元: N曲」
+- 復元タイミング=起動時VC復帰/自動入室/手動join（新規プレイヤー作成時）。破棄=明示切断/全員退出。障害切断（did not reconnect）では保存を残す
+- **落とし穴（修正済み）**: `systemctl restart` は既定 `KillMode=control-group` で ffmpeg 子まで即 SIGTERM → after コールバックが `play_next_song` を発火し current=None/pos=0 で保存し、レジュームが頭出しなしに劣化。対策 2 段: ①`play_next_song` は `shutdown_flag` 中は何もしない ②Pi の systemd ドロップイン `/etc/systemd/system/discord-music-bot.service.d/killmode.conf` に `KillMode=mixed` + `TimeoutStopSec=25`（SIGTERM を uvicorn 本体のみに送り、lifespan が live 状態を保存してから終了）。**この override は repo 外なので Pi 上にだけ存在する**
+- 検証: テストサーバーで 再生→22秒→restart → スナップショット `current:夜に駆ける position:25.2 queue:[...]` → 再join で「25秒から」レジューム。smoke/live-playback/realtime 全 OK
+
+### 2026-09-21: Discord ログイン頻繁切れの修正（commit fbf5135f, frontend/Vercel）
+- **原因**: `frontend/src/lib/auth.ts` が Discord アクセストークン（約7日で失効）を初回保存のみで **リフレッシュしていなかった**。NextAuth セッション Cookie は生きていても Discord トークンだけ死に、`/api/discord/userGuilds` が 401 → サーバー一覧が壊れ「ログインが外れた」体験に
+- **修正**: jwt コールバックで `expiresAt` を見て失効間近なら `refresh_token` で Discord トークンを黙って更新（`refreshDiscordToken`）。セッションを明示 90日 + `updateAge` 1日でローリング延長。Session/JWT 型に `refreshToken`/`expiresAt`/`error` 追加。refresh 失敗でも強制サインアウトしない
+- 注意: `NEXTAUTH_SECRET` を rotate すると全 JWT 失効=全員ログアウトになる。Vercel env を変えないこと
+- 未検証部分: 実トークン失効(7日)をまたぐ挙動は時間経過が要るため未実測。ビルド/型は通過、Vercel デプロイ success
+
+### テスト用 Discord bot（2026-09-21 追加）
+- `backend/.env` に `TEST_DISCORD_TOKEN` / `TEST_DISCORD_APP_ID` / `TEST_GUILD_ID`(=テストサーバー 1080511818658762752) を追加。プロセス分割（無停止②）検証・ローカル開発で本番 bot と別トークンを使うため。**本番 systemd は今まで通り `DISCORD_TOKEN` を使用**（テストbotはまだコード側で未使用＝箱だけ用意）
+
+### git push が "could not read Username for github" で失敗する時
+- このマシンの WSL シェルで git push が資格情報を拾えず失敗することがある。`gh auth setup-git` 済みなので `git -c credential.helper='!gh auth git-credential' push origin main` で通る（gh は als141 でログイン済み）
+
+
 ### 2026-09-21: 自動入室が9/15から停止していた（ゾンビプレイヤー、commit 3768b34）
 - **症状**: ドデカサーバーで 9/15 18:27 を最後に Auto-joined が出ない。`/player-state` は has_player=True なのに `/bot-voice-status` は channel_id=null（= VC に居ないのにプレイヤーだけ残存）
 - **原因**: 9/15 23:39 の Discord 大規模障害（gateway 503 / ギルド同期 500 連発がログに残る）で、切断イベント（on_voice_state_update）が来ないまま VC 接続が消え、MusicPlayer が music_players に残留。自動入室ガード `guild_id not in music_players` に恒久的にブロックされた
