@@ -138,7 +138,10 @@ async def lifespan(app: FastAPI):
     # アプリケーション終了時の処理
     print("アプリケーションをシャットダウンします...")
 
-    # デプロイ跨ぎのレジューム: 全ギルドのキュー・再生位置を保存してから落ちる
+    # デプロイ跨ぎのレジューム: 全ギルドのキュー・再生位置を保存してから落ちる。
+    # 先に shutdown_flag を立て、ffmpeg 強制終了の after コールバックが状態を壊すのを防ぐ
+    for _gid, _pl in list(music_players.items()):
+        _pl.shutdown_flag = True
     saved = 0
     for gid, player in list(music_players.items()):
         try:

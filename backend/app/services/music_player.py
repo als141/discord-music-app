@@ -389,6 +389,11 @@ class MusicPlayer:
         """次の曲を再生する（voice_client の after コールバック。曲の終了/停止時にのみ呼ばれる）"""
         if error:
             logger.error(f"再生中にエラーが発生: {error}")
+        # シャットダウン中（デプロイ再起動）は ffmpeg が強制終了されてこのコールバックが発火するが、
+        # それを「曲が終わった」と誤認して current をクリア/保存すると、レジューム用スナップショットが
+        # 壊れる（current=None, position=0 で保存される）。シャットダウン中は状態を触らない。
+        if self.shutdown_flag:
+            return
         if self.queue:
             self.queue.popleft()
         # 再生終了時に現在の曲をリセットする
