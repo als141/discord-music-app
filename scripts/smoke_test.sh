@@ -16,6 +16,10 @@ check() {  # check <名前> <期待コード> <URL> [<本文に含まれるべ�
 }
 
 check "health"           200 "$API/"                                   '"status":"ok"'
+# web ロール（プロセス分割）なら voice プロセスにも届いていること
+if curl -s -m 15 "$API/" | grep -q '"role":"web"'; then
+  check "health voice"   200 "$API/"                                   '"voice":"ok"'
+fi
 check "bot-guilds"       200 "$API/bot-guilds"                         '"id"'
 check "search all"       200 "$API/search?query=YOASOBI"               '"type":"song"'
 check "search songs"     200 "$API/search?query=YOASOBI&filter=songs"  '"type":"song"'
@@ -40,7 +44,7 @@ echo "OK   routes ($(echo "$paths" | wc -w) paths)"
 echo "--- Pi service / recent errors (5 min) ---"
 if [ -f "$KEY" ]; then
   ssh -i "$KEY" -o ConnectTimeout=10 "$PI" \
-    "systemctl is-active discord-music-bot; journalctl -u discord-music-bot --since '5 minutes ago' --no-pager | grep -E 'ERROR|Traceback|500 Internal' | tail -5; true"
+    "for s in discord-music-bot discord-music-web; do systemctl is-enabled --quiet \$s 2>/dev/null && echo \"\$s: \$(systemctl is-active \$s)\"; done; journalctl -u discord-music-bot -u discord-music-web --since '5 minutes ago' --no-pager | grep -E 'ERROR|Traceback|500 Internal' | tail -5; true"
 fi
 
 if [ $fail -eq 0 ]; then echo "SMOKE TEST PASSED"; else echo "SMOKE TEST FAILED"; exit 1; fi

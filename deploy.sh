@@ -30,21 +30,53 @@ if [ -n "$(git status --porcelain)" ]; then
 fi
 
 git reset --hard origin/main
+NEW_HASH="$(git rev-parse HEAD)"
 
 echo "[deploy] Installing dependencies..."
 export PATH="$HOME/.local/bin:$PATH"
 cd backend
 uv sync --frozen
 
-echo "[deploy] Restarting service..."
-sudo systemctl restart "$SERVICE_NAME"
+# --- どのプロセスを再起動するか（無停止アップデート②） ---
+# Pi では voice プロセス（discord-music-bot: bot + MusicPlayer, :8081）と
+# web プロセス（discord-music-web: 公開 API :8080, bot 依存ルートは voice へ中継）に分かれている。
+# 音声に関係するファイルが変わった時だけ voice を再起動し（＝数秒無音→レジューム）、
+# それ以外の backend 変更は web だけ再起動する（音楽は止まらない）。
+# 例外: コミットメッセージに [restart-voice] があれば voice も再起動する。
+WEB_SERVICE="discord-music-web"
+VOICE_PATTERN='^backend/(app/(bot\.py|services/|db\.py|config\.py|logging\.py|api/voice\.py|__init__\.py)|pyproject\.toml|uv\.lock)'
+CHANGED_FILES="$(git diff --name-only "$LOCAL_HASH" "$NEW_HASH")"
+restart_voice=0
+if echo "$CHANGED_FILES" | grep -Eq "$VOICE_PATTERN"; then restart_voice=1; fi
+if git log --format=%B "$LOCAL_HASH".."$NEW_HASH" | grep -q '\[restart-voice\]'; then restart_voice=1; fi
+
+if systemctl is-enabled --quiet "$WEB_SERVICE" 2>/dev/null; then
+    services_to_restart="$WEB_SERVICE"
+    if [ "$restart_voice" = 1 ]; then services_to_restart="$SERVICE_NAME $WEB_SERVICE"; fi
+else
+    # 分割前（単一プロセス）の構成: 従来どおり bot サービスだけ
+    services_to_restart="$SERVICE_NAME"
+fi
+echo "[deploy] Changed files:"; echo "$CHANGED_FILES" | sed 's/^/[deploy]   /'
+echo "[deploy] Restarting: $services_to_restart (voice restart needed: $restart_voice)"
+for svc in $services_to_restart; do
+    sudo systemctl restart "$svc"
+done
 
 echo "[deploy] Waiting for startup..."
 sleep 3
-if systemctl is-active --quiet "$SERVICE_NAME"; then
-    echo "[deploy] Deploy successful! Service is running."
+ok=1
+for svc in $services_to_restart; do
+    if systemctl is-active --quiet "$svc"; then
+        echo "[deploy] $svc is running."
+    else
+        echo "[deploy] $svc failed to start. Checking logs..."
+        journalctl -u "$svc" --no-pager -n 20
+        ok=0
+    fi
+done
+if [ "$ok" = 1 ]; then
+    echo "[deploy] Deploy successful!"
 else
-    echo "[deploy] Service failed to start. Checking logs..."
-    journalctl -u "$SERVICE_NAME" --no-pager -n 20
     exit 1
 fi
