@@ -714,8 +714,19 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
 
     # ユーザーがボイスチャンネルに参加した場合で、
     # ボットがまだどのボイスチャンネルにも接続していなければ、自動的に参加する
-    # 既にプレイヤーが存在する場合はスキップ（重複作成防止）
-    if after.channel is not None and guild.voice_client is None and guild_id not in music_players:
+    if after.channel is not None and guild.voice_client is None:
+        # プレイヤーが残っている場合:
+        # voice_client が無いのにプレイヤーだけある = Discord 障害等でイベント無しに VC 接続が消えた
+        # 「ゾンビプレイヤー」（2026-09-15 の Discord 障害で発生。これが残ると自動入室が永久にブロックされる）。
+        # 掃除してから通常の自動入室フローに進む。
+        stale = music_players.pop(guild_id, None)
+        if stale is not None:
+            print(f"Cleaning up stale MusicPlayer before auto-join (guild: {guild.name})")
+            try:
+                await asyncio.wait_for(stale.shutdown(), timeout=10)
+            except Exception as e:
+                print(f"Stale player shutdown error (guild: {guild.name}): {type(e).__name__}: {e}")
+
         now = _time.time()
         cooldown_info = _voice_auto_join_cooldowns.get(guild_id, (0, 0))
         last_attempt, failure_count = cooldown_info
