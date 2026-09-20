@@ -1,6 +1,7 @@
 import asyncio
 import os
 import uuid
+import time
 import threading
 import yt_dlp
 import discord
@@ -198,6 +199,7 @@ class Song:
     added_by: Optional[Any] = None  # User オブジェクトまたは None
     video_id: Optional[str] = None  # YouTubeのビデオID（キャッシュ検索用）
     pending: bool = False  # 追加直後で yt-dlp の情報取得がまだ終わっていないプレースホルダ
+    start_offset: float = 0.0  # 再生開始位置（秒）。デプロイ跨ぎのレジューム用
 
     def __post_init__(self):
         # デフォルト値の設定
@@ -230,6 +232,9 @@ class MusicPlayer:
         # 状態バージョン管理（フロントエンドとの同期用）
         self.state_version: int = 0
         self._song_finished: bool = False
+        # 再生位置トラッキング（デプロイ跨ぎのレジューム用）
+        self._elapsed_base: float = 0.0      # 一時停止までに再生済みの秒数（+ start_offset）
+        self._play_started_at: Optional[float] = None  # 再生中なら monotonic 時刻
         # プレイヤーインスタンスごとの世代ID。bot再起動やVC再参加で MusicPlayer が作り直されると
         # state_version が 0 に戻るため、クライアントはこの epoch が変わったら version 比較をリセットする
         self.state_epoch: str = uuid.uuid4().hex
@@ -240,6 +245,8 @@ class MusicPlayer:
         
         # 非同期で音楽ループを開始
         self.bot.loop.create_task(self.player_loop())
+        # 再生位置の定期スナップショット（デプロイ/クラッシュ跨ぎのレジューム用）
+        self.bot.loop.create_task(self._periodic_state_save())
 
     async def player_loop(self):
         """メインの音楽再生ループ"""
@@ -327,9 +334,18 @@ class MusicPlayer:
                 # ローカルファイルかどうかを判定
                 is_local = not source_path.startswith(('http://', 'https://'))
                 ffmpeg_opts = get_ffmpeg_options(is_local_file=is_local)
+                before_options = ffmpeg_opts['before_options']
+                resume_offset = max(0.0, float(song.start_offset or 0.0))
+                if resume_offset >= 3.0:
+                    # レジューム: 保存済み位置から再生（3秒未満は頭から）
+                    before_options = f"-ss {resume_offset:.1f} " + before_options
+                    logger.info(f"再生位置レジューム: {song.title} ({resume_offset:.0f}秒から)")
+                else:
+                    resume_offset = 0.0
+                song.start_offset = 0.0  # 再利用時（previous等）に再適用しない
                 audio_source = discord.FFmpegPCMAudio(
                     source_path,
-                    before_options=ffmpeg_opts['before_options'],
+                    before_options=before_options,
                     options=ffmpeg_opts['options']
                 )
                 
@@ -345,8 +361,11 @@ class MusicPlayer:
                         lambda: self.play_next_song(e)
                     )
                 )
+                self._elapsed_base = resume_offset
+                self._play_started_at = time.monotonic()
                 await self._record_play_history(song)
                 await self.notify_clients(self.guild_id)
+                await asyncio.to_thread(self._save_state_sync)
             except Exception as e:
                 logger.error(f"再生エラー: {e}", exc_info=True)
                 self.queue.popleft()
@@ -375,6 +394,10 @@ class MusicPlayer:
         # 再生終了時に現在の曲をリセットする
         self.current = None
         self._song_finished = True
+        self._elapsed_base = 0.0
+        self._play_started_at = None
+        # キューが空になった場合も含めて状態を保存/掃除（after コールバックは非イベントループ文脈）
+        self.bot.loop.create_task(asyncio.to_thread(self._save_state_sync))
         self.bot.loop.create_task(self.notify_clients_wrapper())
         self.next.set()
 
@@ -503,6 +526,7 @@ class MusicPlayer:
 
         self._replace_in_queue(placeholder, songs)
         await self.notify_clients(self.guild_id)
+        await asyncio.to_thread(self._save_state_sync)
         # 再生中/一時停止中でなければ再生ループを再開する（一時停止中に起こすと現在の曲が飛ぶ）
         if self.voice_client and not self.voice_client.is_playing() and not self.voice_client.is_paused():
             self.next.set()
@@ -623,18 +647,24 @@ class MusicPlayer:
             queue_list = list(self.queue)
             del queue_list[position]
             self.queue = deque(queue_list)
+            await asyncio.to_thread(self._save_state_sync)
 
     async def pause(self) -> None:
         """再生を一時停止する"""
         if self.voice_client and self.voice_client.is_playing():
+            self._elapsed_base = self.current_position()
+            self._play_started_at = None
             self.voice_client.pause()
             await self.notify_clients(self.guild_id)
+            await asyncio.to_thread(self._save_state_sync)
 
     async def resume(self) -> None:
         """再生を再開する"""
         if self.voice_client and self.voice_client.is_paused():
+            self._play_started_at = time.monotonic()
             self.voice_client.resume()
             await self.notify_clients(self.guild_id)
+            await asyncio.to_thread(self._save_state_sync)
 
     async def skip(self) -> None:
         """現在の曲をスキップする（一時停止中でも効く）"""
@@ -686,6 +716,7 @@ class MusicPlayer:
             item = queue_list.pop(start_index)
             queue_list.insert(end_index, item)
             self.queue = deque(queue_list)
+            await asyncio.to_thread(self._save_state_sync)
 
     def is_playing(self) -> bool:
         """現在再生中かどうかを返す"""
@@ -714,6 +745,95 @@ class MusicPlayer:
             )
         except Exception as e:
             logger.warning(f"再生履歴の保存に失敗: {type(e).__name__}: {e}")
+
+    # ------------------------------------------------------------------
+    # 状態スナップショット（デプロイ跨ぎのレジューム。db.player_state に保存）
+    # ------------------------------------------------------------------
+
+    def current_position(self) -> float:
+        """現在の曲の再生位置（秒）"""
+        pos = self._elapsed_base
+        if self._play_started_at is not None:
+            pos += time.monotonic() - self._play_started_at
+        return pos
+
+    @staticmethod
+    def _song_to_dict(song: "Song") -> dict:
+        added_by = song.added_by
+        if added_by is not None and not isinstance(added_by, dict):
+            added_by = {
+                'id': getattr(added_by, 'id', None),
+                'name': getattr(added_by, 'name', None),
+                'image': getattr(added_by, 'image', None),
+            }
+        return {'title': song.title, 'url': song.url, 'thumbnail': song.thumbnail,
+                'artist': song.artist, 'video_id': song.video_id, 'added_by': added_by}
+
+    def snapshot_state(self) -> dict:
+        return {
+            'current': self._song_to_dict(self.current) if self.current else None,
+            'position': round(self.current_position(), 1),
+            'is_paused': bool(self.voice_client and self.voice_client.is_paused()),
+            'queue': [self._song_to_dict(s) for s in self.queue if not s.pending],
+        }
+
+    def _save_state_sync(self) -> None:
+        """状態を SQLite に保存（同期。async からは asyncio.to_thread で呼ぶ）"""
+        try:
+            snap = self.snapshot_state()
+            if snap['current'] is None and not snap['queue']:
+                history_db.clear_player_state(self.guild_id)
+            else:
+                history_db.save_player_state(self.guild_id, snap)
+        except Exception as e:
+            logger.warning(f"プレイヤー状態の保存に失敗: {type(e).__name__}: {e}")
+
+    async def _periodic_state_save(self) -> None:
+        """再生中は30秒ごとに位置を保存（SIGKILL やクラッシュでも位置がほぼ残る）"""
+        await self.bot.wait_until_ready()
+        while not self.bot.is_closed() and not self.shutdown_flag:
+            await asyncio.sleep(30)
+            if self.current and self._play_started_at is not None:
+                await asyncio.to_thread(self._save_state_sync)
+
+    async def restore_saved_state(self, max_age_sec: int = 1800) -> bool:
+        """保存済みの状態（キュー・再生中の曲・位置）を復元する。
+
+        bot 再起動（デプロイ）や Discord 障害後の再参加時に呼ぶ。
+        復元したら保存行は消す（後で古いキューが蘇らないように）。
+        """
+        try:
+            state = await asyncio.to_thread(history_db.load_player_state, self.guild_id, max_age_sec)
+        except Exception as e:
+            logger.warning(f"プレイヤー状態の読込に失敗: {type(e).__name__}: {e}")
+            return False
+        if not state:
+            return False
+
+        def _to_song(d: dict, offset: float = 0.0) -> Song:
+            return Song(source=None, title=d.get('title') or 'Unknown', url=d.get('url') or '',
+                        thumbnail=d.get('thumbnail') or '', artist=d.get('artist') or '',
+                        added_by=d.get('added_by'), video_id=d.get('video_id'),
+                        start_offset=offset)
+
+        restored = 0
+        cur = state.get('current')
+        if cur and cur.get('url'):
+            self.queue.append(_to_song(cur, float(state.get('position') or 0.0)))
+            restored += 1
+        for d in state.get('queue') or []:
+            if d.get('url'):
+                self.queue.append(_to_song(d))
+                restored += 1
+        try:
+            await asyncio.to_thread(history_db.clear_player_state, self.guild_id)
+        except Exception:
+            pass
+        if restored:
+            pos = float(state.get('position') or 0.0)
+            logger.info(f"保存済みキューを復元: {restored}曲 (先頭 {cur.get('title') if cur else '-'} を {pos:.0f}秒から)")
+            self.next.set()
+        return restored > 0
 
     def increment_version(self) -> int:
         """状態バージョンをインクリメントして返す"""

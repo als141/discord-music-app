@@ -1,5 +1,6 @@
 import sqlite3
 import re
+import json
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
@@ -63,6 +64,14 @@ def init_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_hist_guild_time ON play_history(guild_id, played_at DESC)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_hist_guild_user ON play_history(guild_id, added_by_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_hist_guild_video ON play_history(guild_id, video_id)")
+        # デプロイ（bot再起動）をまたいでキュー・再生位置を引き継ぐためのスナップショット
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS player_state (
+            guild_id   TEXT PRIMARY KEY,
+            state_json TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """)
 
 
 # ---------------------------------------------------------------------------
@@ -265,3 +274,39 @@ def delete_uploaded_song(guild_id: str, song_id: str):
         DELETE FROM uploaded_songs
         WHERE guild_id = ? AND id = ?
         """, (guild_id, song_id))
+
+
+# ---------------------------------------------------------------------------
+# プレイヤー状態スナップショット（デプロイ跨ぎのレジューム用）
+# ---------------------------------------------------------------------------
+
+def save_player_state(guild_id: str, state: Dict[str, Any]) -> None:
+    """プレイヤー状態（キュー・再生中・位置）を保存する（同期）"""
+    ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO player_state (guild_id, state_json, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(guild_id) DO UPDATE SET state_json=excluded.state_json, updated_at=excluded.updated_at",
+            (guild_id, json.dumps(state, ensure_ascii=False), ts),
+        )
+
+
+def load_player_state(guild_id: str, max_age_sec: int = 1800) -> Optional[Dict[str, Any]]:
+    """保存されたプレイヤー状態を返す。max_age_sec より古いものは無視（同期）"""
+    with _connect() as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute("SELECT state_json, updated_at FROM player_state WHERE guild_id = ?", (guild_id,)).fetchone()
+    if not row:
+        return None
+    try:
+        age = (datetime.now(timezone.utc) - datetime.fromisoformat(row["updated_at"])).total_seconds()
+        if age > max_age_sec:
+            return None
+        return json.loads(row["state_json"])
+    except Exception:
+        return None
+
+
+def clear_player_state(guild_id: str) -> None:
+    with _connect() as conn:
+        conn.execute("DELETE FROM player_state WHERE guild_id = ?", (guild_id,))

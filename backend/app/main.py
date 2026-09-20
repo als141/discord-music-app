@@ -28,6 +28,7 @@ from .api.realtime import router as realtime_router
 from .db import (
     init_db, UploadedSong, add_uploaded_song, get_uploaded_songs_in_guild, find_uploaded_song_by_id,
     update_uploaded_song, delete_uploaded_song, get_play_history, get_top_tracks, get_history_stats,
+    clear_player_state,
 )
 from contextlib import asynccontextmanager
 from fastapi.staticfiles import StaticFiles  # ← 追加
@@ -136,7 +137,18 @@ async def lifespan(app: FastAPI):
     
     # アプリケーション終了時の処理
     print("アプリケーションをシャットダウンします...")
-    
+
+    # デプロイ跨ぎのレジューム: 全ギルドのキュー・再生位置を保存してから落ちる
+    saved = 0
+    for gid, player in list(music_players.items()):
+        try:
+            player._save_state_sync()
+            saved += 1
+        except Exception as e:
+            print(f"状態保存に失敗 (guild: {gid}): {e}")
+    if saved:
+        print(f"{saved}ギルドのプレイヤー状態を保存しました（再起動後にレジュームします）")
+
     try:
         # すべての背景タスクをキャンセル
         if background_tasks:
@@ -514,6 +526,11 @@ async def disconnect_voice_channel(guild_id: str):
                 await player.shutdown()
             except Exception as e:
                 print(f"player shutdown error (guild: {guild_id}): {e}")
+        # 明示的な切断 = セッション終了。保存済みキューも破棄
+        try:
+            await asyncio.to_thread(clear_player_state, guild_id)
+        except Exception:
+            pass
         if guild.voice_client:
             try:
                 await guild.voice_client.disconnect(force=True)
@@ -919,7 +936,9 @@ async def join_voice_channel(guild_id: str, channel_id: str):
 
         # 既存プレイヤーがあればそのまま使い、なければ新規作成
         if guild_id not in music_players:
-            music_players[guild_id] = MusicPlayer(client, guild, guild_id, notify_clients)
+            player = MusicPlayer(client, guild, guild_id, notify_clients)
+            music_players[guild_id] = player
+            await player.restore_saved_state()  # デプロイ/障害前のキュー・再生位置を引き継ぐ
         else:
             # voice_client参照を更新
             music_players[guild_id].voice_client = guild.voice_client

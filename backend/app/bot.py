@@ -635,7 +635,9 @@ async def _rejoin_occupied_voice_channels():
             await asyncio.sleep(1)
             if not vc.is_connected():
                 raise Exception("Voice connection was lost immediately after connect")
-            music_players[guild_id] = MusicPlayer(client, guild, guild_id, notify_clients_local)
+            player = MusicPlayer(client, guild, guild_id, notify_clients_local)
+            music_players[guild_id] = player
+            await player.restore_saved_state()  # デプロイ前のキュー・再生位置を引き継ぐ
             await notify_clients_local(guild_id)
             print(f"Rejoined voice channel {target.name} in guild {guild.name} on startup ({best} users present).")
         except Exception as e:
@@ -750,7 +752,9 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
             await asyncio.sleep(1)
             if not vc.is_connected():
                 raise Exception("Voice connection was lost immediately after connect")
-            music_players[guild_id] = MusicPlayer(client, guild, guild_id, notify_clients_local)
+            player = MusicPlayer(client, guild, guild_id, notify_clients_local)
+            music_players[guild_id] = player
+            await player.restore_saved_state()  # 障害切断やデプロイ前の状態があれば引き継ぐ
             await notify_clients_local(guild_id)
             # 成功したらカウンターリセット
             _voice_auto_join_cooldowns[guild_id] = (now, 0)
@@ -777,7 +781,19 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
                 current_members = sum(1 for m in guild.voice_client.channel.members if not m.bot)
                 if current_members == 0:
                     await guild.voice_client.disconnect()
-                    music_players.pop(guild_id, None)
+                    left_player = music_players.pop(guild_id, None)
+                    if left_player is not None:
+                        # ループを止めずに pop すると待機ループが残る（ゾンビ）ため必ず shutdown
+                        try:
+                            await asyncio.wait_for(left_player.shutdown(), timeout=10)
+                        except Exception as e:
+                            print(f"player shutdown error on empty-leave (guild: {guild.name}): {e}")
+                    # 全員退出 = セッション終了。保存済みキューも破棄（後で古いキューが蘇らないように）
+                    try:
+                        from . import db as _history_db
+                        await asyncio.to_thread(_history_db.clear_player_state, guild_id)
+                    except Exception:
+                        pass
                     # 自動参加カウンターもリセット
                     _voice_auto_join_cooldowns.pop(guild_id, None)
                     print(f"Left voice channel in {guild.name}: {before.channel.name} (no users remaining)")
