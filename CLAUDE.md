@@ -107,6 +107,11 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 
 ## Key Technical Notes
 
+### 2026-09-21: 浸透戦略の調査資料（`.tmp/research/`、PUBLIC リポなので未コミット・ローカルにのみ存在）
+- `irina_final_plan_ja.md` — **最終案**。順序: ①bot Presence を「Listening to 曲名」に ②VC チャンネルステータスに Now Playing（30 秒デバウンス必須・Forbidden で自己無効化・切断で None・招待権限に `1<<48`）③「棚」= 曲置き場/一般に貼られた YouTube リンクをアプリ内一覧→ワンタップ追加（収集は `services/shared_links.py`、本文は保存しない、絶対に send しない、API は main.py に）④ログイン前プレビュー ⑤前回の続き ⑥片手操作 ⑦PWA 導線。**やらない**: 定期投稿/ランキング/投票/スレッド/新チャンネル/プッシュ/Activities（今は）/Components V2（open バグ 3 件）
+- `adoption_strategy_ja.md`（浸透 7 原則・5 シナリオ・機能ランク・6 週ロードマップ）、`discord_platform_2026.md`（Discord API 2026-09 の事実。docs は `docs.discord.com/developers/*` に移転済み。VC ステータスは 2026-04-20 に bot 利用解禁、discord.py 2.7.1 で `vc.edit(status=)`）、`xai_api_2026.md`、`../dodeka_conversation_analysis_2026-09.md`（会話分析。実名なし）
+- **設計原則（ユーザー合意）**: イリーナはテキストチャンネルに自分から投稿しない（bot 専用チャンネルを除く）。増やすのは「常設の静かな面」。曲置き場は自動取り込みではなく「アプリで一覧→追加」
+
 ### 2026-09-21: bot 専用チャンネルでのイリーナ応答（xAI Grok 4.6、`services/irina_chat.py`）
 - **経緯**: ドデカサーバーの bot 専用チャンネル（1156255909446680676）で Grok が応答しなくなっていた → 原因は `bot.py` の `on_message` が「テキストチャットへの応答は無効化中 / return」で**丸ごと無効化**されていたこと（旧実装は OpenAI 互換クライアント + `search_parameters` の Live Search で、`grok-4-1-fast-reasoning`）
 - **新実装**: `backend/app/services/irina_chat.py`。`on_message` → `irina_chat.handle_message(message)` に委譲。対象は `IRINA_CHAT_CHANNEL_IDS`（既定 `1080511818658762755`=テストサーバー, `1156255909446680676`=ドデカ bot 専用）とその中のスレッドのみ。**それ以外では一切喋らない**。メンション不要で人間の投稿全部に返答。bot・空・`/ ! ? ;` 始まりは無視。チャンネルごと 12 回/分の上限、障害時の謝罪は 5 分に 1 回
