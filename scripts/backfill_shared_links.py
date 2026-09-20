@@ -92,6 +92,11 @@ def main() -> None:
         total_msgs += n_msgs
         total_links += n_links
     print(f"done: {len(channels)} channels, {total_msgs} messages scanned, {total_links} links saved (last {args.days} days)")
+    # タイトル/アーティスト/サムネをその場で解決（voice プロセスの 10 分ごとの解決を待たなくて済む）
+    import asyncio
+    from app.services.shared_links import resolve_pending
+    resolved = asyncio.run(resolve_pending(limit=500))
+    print(f"resolved metadata for {resolved} link(s)")
 
 
 if __name__ == "__main__":

@@ -25,6 +25,7 @@ _vc_desired: Dict[int, Optional[str]] = {}                      # channel_id -> 
 _vc_last_sent: Dict[int, Tuple[float, Optional[str]]] = {}      # channel_id -> (monotonic, 送ったテキスト)
 _vc_tasks: Dict[int, asyncio.Task] = {}
 _vc_disabled_guilds: Set[int] = set()
+_guild_channel: Dict[int, int] = {}                             # guild_id -> 最後にステータスを出した VC
 _presence_lock: Optional[asyncio.Lock] = None
 
 
@@ -54,6 +55,11 @@ async def update(guild: discord.Guild, song) -> None:
         await _apply_presence()
 
         vc = getattr(guild.voice_client, "channel", None) if guild.voice_client else None
+        if isinstance(vc, discord.VoiceChannel):
+            _guild_channel[guild.id] = vc.id
+        elif song is None and _client is not None:
+            # 切断後（voice_client が消えた後）に呼ばれた場合は、最後にステータスを出した VC を消す
+            vc = _client.get_channel(_guild_channel.get(guild.id, 0))
         if isinstance(vc, discord.VoiceChannel):
             _schedule_vc_status(guild, vc, _status_text(*_playing[guild.id]) if guild.id in _playing else None)
     except Exception as e:
