@@ -11,12 +11,13 @@ const CHANNEL = process.argv[3] || '1080511819103346828';
 const URLS = [
   'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
   'https://music.youtube.com/watch?v=by4SYYWlhEs',
-  'https://www.youtube.com/watch?v=x8VYWazR5mE',
+  // 年齢制限動画（x8VYWazR5mE 等）は Pi の cookies.txt の状態で落ちて偽陰性になるので使わない
+  'https://www.youtube.com/watch?v=TQ8WlA2GXbk',
   'https://www.youtube.com/watch?v=this_is_not_a_video_id_zzz', // 無効
   'https://music.youtube.com/watch?v=m9SMT5ipbxk',
   'https://www.youtube.com/watch?v=Sw1Flgub9s8',
 ];
-const EXPECT_IDS = ['dQw4w9WgXcQ', 'by4SYYWlhEs', 'x8VYWazR5mE', 'm9SMT5ipbxk', 'Sw1Flgub9s8'];
+const EXPECT_IDS = ['dQw4w9WgXcQ', 'by4SYYWlhEs', 'TQ8WlA2GXbk', 'm9SMT5ipbxk', 'Sw1Flgub9s8'];
 const t0 = Date.now(); const ts = () => ((Date.now() - t0) / 1000).toFixed(1).padStart(6) + 's';
 let pass = 0, fail = 0;
 const check = (n, ok, extra = '') => { ok ? pass++ : fail++; console.log(`${ok ? 'OK  ' : 'FAIL'} ${n}${extra ? '  (' + extra + ')' : ''}`); };

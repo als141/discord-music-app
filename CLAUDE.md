@@ -44,7 +44,9 @@ Discord音楽ボットアプリケーション。フロントエンド（Next.js
 - **本番スモークテスト**: `bash scripts/smoke_test.sh`（デプロイ後に毎回実行。全主要API+ルート欠落+Piのエラーログを確認）
 - **同時追加テスト（テストサーバー限定）**: `node scripts/concurrent-add-test.mjs`
 - **実再生テスト（テストサーバー限定）**: `node scripts/live-playback-test.mjs` — bot を テストサーバー(1080511818658762752)/VC 一般 に入れて add-url/pause/resume/skip/disconnect を REST で叩き、WS 更新を検証。人がいるサーバーでは絶対に実行しない
+- **レジューム実機テスト（テストサーバー限定）**: `bash scripts/resume-test.sh` — join→2曲追加→40秒再生→Pi で `sudo systemctl restart discord-music-bot`→再join で「保存済みキューを復元」「再生位置レジューム (40±秒)」→状態一致→disconnect で `player_state` 行が消えることまで 7 ケース。**bot を再起動するので人が再生中なら回さない**。2026-09-21 に 7/7
 - **リアルタイム同期のブラウザテスト**: `node scripts/realtime-sync-test.mjs`（dev サーバー必要。Playwright で WS を偽装、14 ケース）
+- **Pi を触るテストの前に**: `ListAgents` で同じリポを触っている別 Claude セッション（例: "Irina Discord bot の動作確認"）が busy でないか確認し、居れば `SendMessage` で restart / テストサーバー操作を止めてもらう。2026-09-21 に別セッションの restart 2回と join/disconnect が混入して resume-test が 5/7 に壊れた。誰が restart したかは Pi の `journalctl _COMM=sudo --since '30 min ago'` で分かる
 - **リファクタ実行計画**: `docs/refactoring_execution_and_test_plan_ja.md`
 - **手動デプロイ**: `cd ~/discord-music-app && bash deploy.sh`
 - **コード場所**: `/home/als0028/discord-music-app/backend/`
@@ -105,12 +107,24 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 - 復元タイミング=起動時VC復帰/自動入室/手動join（新規プレイヤー作成時）。破棄=明示切断/全員退出。障害切断（did not reconnect）では保存を残す
 - **落とし穴（修正済み）**: `systemctl restart` は既定 `KillMode=control-group` で ffmpeg 子まで即 SIGTERM → after コールバックが `play_next_song` を発火し current=None/pos=0 で保存し、レジュームが頭出しなしに劣化。対策 2 段: ①`play_next_song` は `shutdown_flag` 中は何もしない ②Pi の systemd ドロップイン `/etc/systemd/system/discord-music-bot.service.d/killmode.conf` に `KillMode=mixed` + `TimeoutStopSec=25`（SIGTERM を uvicorn 本体のみに送り、lifespan が live 状態を保存してから終了）。**この override は repo 外なので Pi 上にだけ存在する**
 - 検証: テストサーバーで 再生→22秒→restart → スナップショット `current:夜に駆ける position:25.2 queue:[...]` → 再join で「25秒から」レジューム。smoke/live-playback/realtime 全 OK
+- **追加修正 cd884b46（current 二重復元）**: このプレイヤーは `queue[0]` が再生中の曲そのもの（`play_next_song` で pop）なので、`snapshot_state()` の `queue` に current を含めると復元後に「夜に駆ける|夜に駆ける,アイドル」と二重になった。`rest = [s for s in self.queue if not s.pending and s is not self.current]` で除外。`scripts/resume-test.sh` を追加し 7/7 で確認（`保存済みキューを復元: 2曲 (先頭 夜に駆ける を 42秒から)` / `再生位置レジューム: 夜に駆ける (42秒から)`）
+- 既知の無害な競合: 起動時VC復帰（on_ready+3秒）はテスト中の手動 join/disconnect より遅れて発火することがあり、人が居る VC に直後に再入室する（`Rejoined voice channel ... on startup (1 users present)`）。テストスクリプトは冒頭で disconnect するので実害なし
 
-### 2026-09-21: Discord ログイン頻繁切れの修正（commit fbf5135f, frontend/Vercel）
+### 2026-09-21: Discord ログイン頻繁切れの修正（fbf5135f → 統合版 f6bfbbcd, frontend/Vercel 本番反映済み）
 - **原因**: `frontend/src/lib/auth.ts` が Discord アクセストークン（約7日で失効）を初回保存のみで **リフレッシュしていなかった**。NextAuth セッション Cookie は生きていても Discord トークンだけ死に、`/api/discord/userGuilds` が 401 → サーバー一覧が壊れ「ログインが外れた」体験に
 - **修正**: jwt コールバックで `expiresAt` を見て失効間近なら `refresh_token` で Discord トークンを黙って更新（`refreshDiscordToken`）。セッションを明示 90日 + `updateAge` 1日でローリング延長。Session/JWT 型に `refreshToken`/`expiresAt`/`error` 追加。refresh 失敗でも強制サインアウトしない
 - 注意: `NEXTAUTH_SECRET` を rotate すると全 JWT 失効=全員ログアウトになる。Vercel env を変えないこと
 - 未検証部分: 実トークン失効(7日)をまたぐ挙動は時間経過が要るため未実測。ビルド/型は通過、Vercel デプロイ success
+- **統合版 f6bfbbcd（fbf5135f の上に、サブエージェント実装 f909898c をマージ）** — 原因は2つあり、fbf5135f は原因Bのみだった:
+  - **原因A（セッション復帰不能）**: next-auth v4 のクライアントは `/api/auth/session` の取得が一度失敗すると `__NEXTAUTH._session=null` になり、以後 focus/refetchInterval のどちらでも取り直さない（`react/index.js` の `_getSession` が `_session===null` で早期 return）。オフライン・PWA 復帰で1回失敗しただけで IntroPage に落ちて戻らなかった → `src/hooks/use-session-guard.ts`（新規）: 一度 authenticated になった後に unauthenticated へ落ちたら `getSession()` を 1s/3s/8s で再試行、取れたら `nextauth.message` キーの合成 `StorageEvent` を dispatch して SessionProvider を復帰（同一タブでは storage イベントが飛ばない仕様の回避。**next-auth 内部実装依存**）。`MainApp` は `useSession()` → `useSessionGuard()` に置換し、`status==='recovering'` 中は「接続を確認しています...」。localStorage `irina.session.seen` で PWA 再起動直後の失敗も復帰対象。ログアウトボタンは `markExplicitSignOut()` で印を消してから `signOut()`
+  - **原因B の罠**: App Router の route handler 内で `getServerSession` を呼ぶと jwt callback は走るが**更新後の JWT がレスポンス Cookie に書き戻されない**。Discord は refresh_token をローテーションするので、書き戻されないまま refresh すると「使用済み refresh_token を毎回使う」状態で恒久失敗する → `app/api/discord/userGuilds/route.ts` は `getToken({req, secret})`（読み取りのみ）にし、リフレッシュは `/api/auth/session` 経由だけで起こす。401 は `code: NO_SESSION | DISCORD_REAUTH_REQUIRED`、429 `RATE_LIMITED`、その他 502 `UPSTREAM_ERROR`（Discord の本文は返さない）
+  - `store/useGuildStore.ts`: `fetchUserGuildsWithReauth()` — DISCORD_REAUTH_REQUIRED なら `getSession()` で refresh を促して**1回だけ**再試行、まだ 401 なら `needsReauth: true`。`SideMenu` はその時「再取得」ではなく「再ログイン」(`signIn('discord')`) を出す。`NO_SESSION` は即 needsReauth
+  - `app/providers.tsx`: `<SessionProvider refetchInterval={30*60} refetchOnWindowFocus refetchWhenOffline={false}>`
+  - `lib/auth.ts`: `refreshDiscordAccessToken()`（期限の24時間前で更新、失敗しても accessToken は消さず `error='RefreshAccessTokenError'`、本文はログに出さない）。`accessTokenExpires`（ms）が正だが、fbf5135f 期間に発行された JWT の `expiresAt`（秒）も `?? token.expiresAt*1000` で読む互換あり。maxAge は 90 日を維持
+  - **Vercel env 確認済み（2026-09-21, `vercel env ls`）**: `NEXTAUTH_SECRET` / `DISCORD_CLIENT_SECRET` / `NEXTAUTH_URL` / `NEXT_PUBLIC_DISCORD_CLIENT_ID` は Development・Preview・Production 共通の1値（環境間の不一致なし）。`NEXTAUTH_URL=https://discord-music-app.vercel.app`（https なので `getToken` の Cookie 名 `__Secure-next-auth.session-token` と整合）
+  - 本番確認: `curl https://discord-music-app.vercel.app/api/discord/userGuilds` → `{"code":"NO_SESSION","error":"ログインが必要です。"}`（新 route が生きている印）。ブラウザでの実確認（オフライン→復帰で IntroPage に落ちない / 401 時に「再ログイン」が出る）はユーザーの Discord ログインが必要で未実施
+  - 既存ログイン中のユーザーは JWT に refresh_token が無い → 7日失効時に一度「再ログイン」を押してもらえば以後は自動リフレッシュに乗る
+  - `src/utils/api.ts` の `api.getUserGuilds()` はどこからも呼ばれていないデッドコード（未削除）
 
 ### テスト用 Discord bot（2026-09-21 追加）
 - `backend/.env` に `TEST_DISCORD_TOKEN` / `TEST_DISCORD_APP_ID` / `TEST_GUILD_ID`(=テストサーバー 1080511818658762752) を追加。プロセス分割（無停止②）検証・ローカル開発で本番 bot と別トークンを使うため。**本番 systemd は今まで通り `DISCORD_TOKEN` を使用**（テストbotはまだコード側で未使用＝箱だけ用意）
@@ -242,6 +256,10 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 - **yt-dlp-ejs**: YouTube署名解読スクリプト。0.5.0以上が必要
 - **format**: `bestaudio*/bestaudio/best`（`bestaudio/best/139`は一部環境でフォーマットが見つからない）
 - **cookiefile**: YouTube Premium認証用。Pi上では絶対パスで指定
+- **cookies.txt は yt-dlp が毎回書き戻す**（`YoutubeDL.py` `if self.params.get('cookiefile') is not None: self.cookiejar.save()`）。Pi の `backend/cookies.txt` の mtime が常に最新なのはそのため。YouTube 側でセッションが回転（ブラウザで同じアカウントを使う等）すると first-party の `SID/HSID/SSID/APISID/SAPISID/LOGIN_INFO/__Secure-1P*` が応答で消され、ファイルが `__Secure-3P*` だけの「劣化状態」になる
+- **2026-09-21 時点の状態: 劣化済み**。Pi の cookies.txt は 1549 バイトで `__Secure-3PSID/3PAPISID/3PSIDTS/3PSIDCC` 等 12 個のみ（3月の元エクスポートは 3064 バイト・22 個）。yt-dlp は未ログイン扱いになり、**年齢制限動画が「Sign in to confirm your age」で落ちる**（concurrent-add-test の x8VYWazR5mE で発覚）。3月の元ファイル（ローカル `backend/cookies.txt`, gitignore）を Pi で試すと `The provided YouTube account cookies are no longer valid. They have likely been rotated in the browser` → 元も無効。**ブラウザから新規エクスポートが必要（ユーザー作業）**。`ytmusic_personal`（SAPISIDHASH は `__Secure-3PAPISID` でも作れる）は部分的に生きていて `/recommendations` は「おすすめ / 新作 / おすすめの話題の曲」の 3 セクション（劣化前は 7）
+- **cookie 再エクスポート手順（yt-dlp 公式推奨）**: ①Chrome のシークレットウィンドウで youtube.com にログイン ②拡張「Get cookies.txt LOCALLY」で youtube.com の cookie を Netscape 形式でエクスポート ③**そのシークレットウィンドウを閉じる**（開いたままだとブラウザ側が回転させて Pi の分が無効になる） ④`scp -i ~/.ssh/id_rsa_pi cookies.txt als0028@192.168.11.13:~/discord-music-app/backend/cookies.txt` ⑤同じ内容を `~/backups/cookies-YYYY-MM-DD.txt` にも置く（yt-dlp の書き戻しで劣化した時に戻せるように） ⑥`sudo systemctl restart discord-music-bot`（ytmusic_personal は起動時にしか作られない。predeploy_check で再生中でないことを確認） ⑦検証: Pi で `.venv/bin/python -m yt_dlp --cookies ~/discord-music-app/backend/cookies.txt --js-runtimes node --js-runtimes deno --simulate 'https://www.youtube.com/watch?v=x8VYWazR5mE'` が WARNING なしで通り、`curl https://api.atoriba.jp/recommendations` のセクションが 7 に戻る
+- **以後の運用で cookie を長持ちさせるコツ**: エクスポート元のブラウザセッションを使い続けない（yt-dlp 側だけが cookie を回転させれば長期間有効）。ローカル PC の普段使いの Chrome からのエクスポートは避ける
 - **Pi上のyt-dlp更新手順（重要）**:
   1. ローカルでlockファイルを更新: `uv lock --upgrade-package yt-dlp --upgrade-package yt-dlp-ejs`
   2. コミット＆プッシュ
@@ -367,6 +385,8 @@ journalctl -u discord-music-bot --since '7 days ago' --no-pager | grep -c 'ERROR
 - **push しても本番に反映されない**: Pi で `cd ~/discord-music-app && git status --porcelain` を確認。何か出ていれば deploy.sh が skip している（deploy.log 誤コミット事件参照）
 - **ブラウザに再生状態が反映されない**: ①Pi の journal で `notify_clients failed` / `WebSocket通知エラー` を確認 ②ブラウザで `wss://api.atoriba.jp/ws/{guild}` に接続して update が来るか（Node: `new WebSocket(...)`）③ヘッダーのドットが黄色（再接続中）なら WS 断。`/player-state/{guild}` を直接叩いて backend 側の状態を見る
 - **自動入室だけ効かない（手動参加は効く）**: ゾンビプレイヤーを疑う。`/player-state`=has_player:true かつ `/bot-voice-status`=null のギルドが該当（2026-09-21 事例。修正済みだが診断法として）
+- **再起動後にレジュームが頭出しなし（0秒から）/ current が無い**: ①Pi の `/etc/systemd/system/discord-music-bot.service.d/killmode.conf`（KillMode=mixed）が残っているか `systemctl show discord-music-bot -p KillMode` で確認 ②journal の「Nギルドのプレイヤー状態を保存しました」の直後に after コールバックの保存が走っていないか（`_state_frozen` で防いでいる）③テスト中に別セッションが restart していないか `journalctl _COMM=sudo`
+- **Web で「ログインが外れた」報告**: ①`/api/discord/userGuilds` の 401 の `code` を見る（NO_SESSION=Cookie なし / DISCORD_REAUTH_REQUIRED=Discord トークン失効） ②Vercel の Functions ログで `[auth] Discord token refresh failed with status` を探す ③`NEXTAUTH_SECRET` を変えていないか（変えると全員ログアウト）
 - **ダウンロード時 HTTP Error 403: Forbidden**: yt-dlp が YouTube の PO Token 必須化に置いていかれた兆候（2026-09-09 事例）。キャッシュ済み・HLS 可の曲は鳴るので部分的に動いて見える。隔離 venv で最新版を試し、lock 更新でデプロイ
 - **yt-dlp 更新後に「Requested format is not available」**: `verbose: True` で JS runtime が `(unsupported)` になっていないか確認。Node のバージョン要件が上がっていることが多い
 - **/related が 500 / 検索が空 / アルバムが出ない**: ytmusicapi のバージョンと `YTMusic(language=...)` を確認。上流の応答変更が原因のことが多い。ローカル venv で新版を試してから lock 更新
