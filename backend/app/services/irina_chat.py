@@ -29,7 +29,7 @@ from typing import Any, Deque, Dict, List, Optional, Set, Tuple
 
 import discord
 from xai_sdk import AsyncClient
-from xai_sdk.chat import image, system, text, tool, tool_result, user
+from xai_sdk.chat import file as xai_file, image, system, text, tool, tool_result, user
 from xai_sdk.tools import code_execution, get_tool_call_type, image_generation, web_search, x_search
 
 from .. import db
@@ -53,7 +53,18 @@ TOOL_ROUNDS_MAX = 8              # 1 メッセージあたりのツール往復�
 COMPACT_TURNS = 40               # このターン数で要約→新チェーン
 COMPACT_PROMPT_TOKENS = 150_000  # または直近のプロンプトがこのトークン数を超えたら
 SEED_HISTORY_LIMIT = 10          # 新チェーン開始時に「直近の流れ」として渡す件数
-MAX_IMAGES_PER_MESSAGE = 3       # 入力画像（添付）の上限
+MAX_ATTACHMENTS_PER_MESSAGE = 5  # 1 メッセージで読む添付の上限
+MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
+MAX_IMAGE_INLINE_BYTES = 8 * 1024 * 1024   # これ以下は base64 で直接渡す（Discord の署名 URL に依存しない）
+MAX_TEXT_FILE_CHARS = 60_000
+TRANSCRIBE_MODEL = os.getenv("IRINA_TRANSCRIBE_MODEL") or "gpt-4o-mini-transcribe"  # 音声/ボイスメッセージの文字起こし（OpenAI、任意）
+TEXT_EXTENSIONS = {"txt", "md", "markdown", "json", "csv", "tsv", "py", "js", "mjs", "ts", "tsx", "jsx", "html", "htm", "css", "yaml", "yml", "toml", "ini", "cfg", "log", "sh", "bash", "sql", "xml", "rs", "go", "java", "kt", "c", "h", "cpp", "cs", "rb", "php", "lua", "txt"}
+DOC_MIME_BY_EXT = {
+    "pdf": "application/pdf",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+}
 MAX_OUTPUT_IMAGES = 4            # 返信に添付する生成画像の上限
 DISCORD_MESSAGE_LIMIT = 1900     # 2000 の余裕分
 STREAM_EDIT_INTERVAL_SEC = 1.5   # 返信メッセージを編集する最短間隔（Discord のレート制限に合わせる）
@@ -205,6 +216,8 @@ RULES = """
 - 発言は「[時刻] 名前 (user_id=…): 内容」の形で渡される。名前で呼び分けてよい。@everyone / @here / メンション記法は使わない
 - 最近の出来事・ニュース・ゲームのアップデートやパッチ・X（Twitter）で話題のこと・調べないと分からない事実は、web_search / x_search で調べてから答える。雑談や感想には使わない。調べたときは根拠の URL を 1〜2 個だけ文末に添える
 - 計算・データの集計・簡単なコードの実行は code_execution を使う（暗算しない）
+- 添付された画像・PDF・テキスト/コード・表計算などのファイルは、そのまま読める形で一緒に渡される。音声・ボイスメッセージは文字起こしが添えられる。動画は中身を読めないのでそう言う
+- 貼られた URL の中身を聞かれたら fetch_url で本文を取ってから答える
 - 画像を作ってと頼まれたら image_generation で作る（頼まれたときだけ。1 日の枚数に上限がある）。画像は自動で添付されるので、本文には一言添えるだけでよい
 - このサーバー・音楽・キュー・履歴・VC・メンバー・チャンネルなど「イリーナや Discord の中のこと」を聞かれたら、推測せず http_request で実際に取ってから答える（irina の API と Discord API が使える。使い方は【環境】を参照）
 - 「曲を入れて」「スキップして」「VC に来て」のような操作は、頼まれたときに http_request で実行し、何をしたか一言添える。頼まれていない操作はしない。他のチャンネルへの投稿は、頼んだ人の責任であることを踏まえて必要最小限に
@@ -287,6 +300,11 @@ FORGET_TOOL = tool(
     description="remember で保存したメモを id で消す",
     parameters={"type": "object", "properties": {"id": {"type": "integer"}}, "required": ["id"]},
 )
+FETCH_URL_TOOL = tool(
+    name="fetch_url",
+    description="メッセージに貼られた URL など、任意の公開 Web ページの本文テキストを取得する（HTML はタグを落として最大 8000 文字）。検索ではなく『このリンクの中身』を読むときに使う",
+    parameters={"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"]},
+)
 
 
 def _tools(guild_id: str, *, allow_images: bool = True):
@@ -298,7 +316,7 @@ def _tools(guild_id: str, *, allow_images: bool = True):
         tools.append(code_execution())
     if IMAGE_GEN_ENABLED and allow_images and _images_left_today(guild_id) > 0:
         tools.append(image_generation())
-    tools += [HTTP_REQUEST_TOOL, REMEMBER_TOOL, FORGET_TOOL]
+    tools += [HTTP_REQUEST_TOOL, FETCH_URL_TOOL, REMEMBER_TOOL, FORGET_TOOL]
     return tools
 
 
@@ -315,6 +333,8 @@ async def _execute_tool(tc, message: discord.Message) -> str:
                 args.get("service", ""), args.get("method", "GET"), args.get("path", ""),
                 args.get("query"), args.get("body"), actor=actor,
             )
+        elif name == "fetch_url":
+            result = await irina_tools.fetch_url(str(args.get("url", "")))
         elif name == "remember":
             note = str(args.get("note", "")).strip()[:300]
             if not note:
@@ -353,6 +373,79 @@ def _line(message: discord.Message, *, with_time: bool = True, with_id: bool = T
     prefix = f"[{message.created_at.astimezone(JST):%m/%d %H:%M}] " if with_time else ""
     who = _display_name(message.author) + (f" (user_id={message.author.id})" if with_id else "")
     return f"{prefix}{who}: {body}"
+
+
+def _ext(name: str) -> str:
+    return name.rsplit(".", 1)[-1].lower() if "." in name else ""
+
+
+async def _transcribe_audio(data: bytes, filename: str, mime: str) -> Optional[str]:
+    """音声・ボイスメッセージを OpenAI で文字起こし（OPENAI_API_KEY が無ければ None）"""
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return None
+    try:
+        from openai import AsyncOpenAI
+        client = AsyncOpenAI(api_key=api_key)
+        for model in (TRANSCRIBE_MODEL, "whisper-1"):
+            try:
+                result = await asyncio.wait_for(
+                    client.audio.transcriptions.create(model=model, file=(filename or "audio.ogg", data, mime or "audio/ogg"), language="ja"),
+                    timeout=90,
+                )
+                return (getattr(result, "text", None) or "").strip() or None
+            except Exception as e:
+                print(f"[irina-chat] 文字起こし失敗（{model}）: {type(e).__name__}: {str(e)[:100]}")
+    except Exception as e:
+        print(f"[irina-chat] 文字起こしの初期化に失敗: {type(e).__name__}: {e}")
+    return None
+
+
+async def _attachment_parts(message: discord.Message) -> Tuple[list, List[str]]:
+    """添付を xAI の Content に変換する。戻り値 (parts, 補足テキスト)。
+    画像 → image（8MB 以下は base64 で直接、それ以上は Discord の URL）
+    PDF / Word / Excel / PowerPoint / テキスト・コード → file(data=…)
+    音声・ボイスメッセージ → 文字起こしテキスト（OpenAI）
+    動画・その他 → 名前だけ伝える"""
+    parts: list = []
+    notes: List[str] = []
+    for a in message.attachments[:MAX_ATTACHMENTS_PER_MESSAGE]:
+        mime = (a.content_type or "").split(";")[0].strip().lower()
+        ext = _ext(a.filename or "")
+        try:
+            if a.size and a.size > MAX_ATTACHMENT_BYTES:
+                notes.append(f"添付 {a.filename} は {a.size // (1024 * 1024)}MB で大きすぎて読めない")
+                continue
+            if mime.startswith("image/") or ext in ("png", "jpg", "jpeg", "gif", "webp"):
+                if (a.size or 0) <= MAX_IMAGE_INLINE_BYTES:
+                    data = await a.read()
+                    import base64
+                    parts.append(image(f"data:{mime or 'image/png'};base64,{base64.b64encode(data).decode()}", detail="auto"))
+                else:
+                    parts.append(image(a.url, detail="auto"))
+            elif mime.startswith("audio/") or ext in ("ogg", "mp3", "m4a", "wav", "flac", "aac", "opus"):
+                data = await a.read()
+                textv = await _transcribe_audio(data, a.filename, mime)
+                notes.append(f"音声 {a.filename} の文字起こし: 「{textv}」" if textv else f"音声 {a.filename} は文字起こしできなかった")
+            elif mime.startswith("video/") or ext in ("mp4", "mov", "webm", "mkv"):
+                notes.append(f"動画 {a.filename}（中身は読めない）")
+            elif mime == "application/pdf" or ext in DOC_MIME_BY_EXT:
+                data = await a.read()
+                parts.append(xai_file(data=data, filename=a.filename, mime_type=DOC_MIME_BY_EXT.get(ext, mime or "application/octet-stream")))
+            elif mime.startswith("text/") or mime in ("application/json", "application/xml", "application/x-yaml") or ext in TEXT_EXTENSIONS:
+                data = await a.read()
+                content = data.decode("utf-8", errors="replace")
+                if len(content) > MAX_TEXT_FILE_CHARS:
+                    content = content[:MAX_TEXT_FILE_CHARS] + "\n…（長いので省略）"
+                parts.append(xai_file(data=content.encode("utf-8"), filename=a.filename, mime_type="text/plain"))
+            else:
+                notes.append(f"添付 {a.filename}（{mime or '種類不明'}。この形式は読めない）")
+        except Exception as e:
+            print(f"[irina-chat] 添付の処理に失敗 {a.filename}: {type(e).__name__}: {e}")
+            notes.append(f"添付 {a.filename} を読めなかった")
+    if len(message.attachments) > MAX_ATTACHMENTS_PER_MESSAGE:
+        notes.append(f"添付が {len(message.attachments)} 個あり、最初の {MAX_ATTACHMENTS_PER_MESSAGE} 個だけ読んだ")
+    return parts, notes
 
 
 async def _recent_context(channel, bot_user_id: int, exclude_id: int) -> str:
@@ -511,7 +604,7 @@ async def _one_turn(chat, renderer: _Renderer):
     return final
 
 
-CLIENT_TOOL_NAMES = {"http_request", "remember", "forget"}
+CLIENT_TOOL_NAMES = {"http_request", "fetch_url", "remember", "forget"}
 
 
 def _client_tool_calls(response) -> list:
@@ -597,11 +690,11 @@ async def _ask(message: discord.Message, renderer: _Renderer, *, force_new_chain
         recent = await _recent_context(message.channel, message.guild.me.id, message.id)
         if recent:
             messages.append(user("（参考: 直近のこのチャンネルの流れ。返事はこの後の発言に対してする）\n" + recent))
-    parts = [text(_line(message))]
-    for a in message.attachments[:MAX_IMAGES_PER_MESSAGE]:
-        if (a.content_type or "").startswith("image/"):
-            parts.append(image(a.url, detail="auto"))  # Discord の署名付き URL を xAI 側が取得する
-    messages.append(user(*parts))
+    attach_parts, notes = await _attachment_parts(message)
+    line = _line(message)
+    if notes:
+        line += "\n" + "\n".join(f"（{n}）" for n in notes)
+    messages.append(user(text(line), *attach_parts))
 
     chat = client.chat.create(
         model=XAI_MODEL,

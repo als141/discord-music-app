@@ -157,6 +157,44 @@ async def http_request(service: str, method: str, path: str, query: Optional[Dic
     return {"error": "レート制限で再試行しても失敗"}
 
 
+_PRIVATE_HOST_RE = re.compile(r"^(localhost|127\.|10\.|192\.168\.|169\.254\.|0\.0\.0\.0|\[?::1\]?|172\.(1[6-9]|2\d|3[01])\.)")
+_TAG_RE = re.compile(r"<(script|style|noscript)[^>]*>.*?</\1>", re.S | re.I)
+_HTML_RE = re.compile(r"<[^>]+>")
+FETCH_MAX_BYTES = 2_000_000
+FETCH_MAX_CHARS = 8000
+
+
+async def fetch_url(url: str) -> Dict[str, Any]:
+    """任意の公開 URL を GET して本文テキスト（HTML はタグを落として）を返す。内部ネットワークは拒否"""
+    url = (url or "").strip()
+    if not re.match(r"^https?://", url):
+        return {"error": "http(s) の URL だけ"}
+    host = re.sub(r"^https?://", "", url).split("/")[0].split("@")[-1]
+    if _PRIVATE_HOST_RE.match(host):
+        return {"error": "内部アドレスは取得しない"}
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; IrinaBot/1.0; +https://discord-music-app.vercel.app)", "Accept": "text/html,application/json,text/plain,*/*"}
+    try:
+        async with _http().get(url, headers=headers, allow_redirects=True) as resp:
+            raw = await resp.content.read(FETCH_MAX_BYTES)
+            ctype = resp.headers.get("Content-Type", "")
+            body = raw.decode(resp.charset or "utf-8", errors="replace")
+            if "html" in ctype or body.lstrip()[:15].lower().startswith(("<!doctype html", "<html")):
+                title = re.search(r"<title[^>]*>(.*?)</title>", body, re.S | re.I)
+                body = _TAG_RE.sub(" ", body)
+                body = _HTML_RE.sub(" ", body)
+                body = re.sub(r"[ \t\r\f\v]+", " ", body)
+                body = re.sub(r"\n\s*\n+", "\n", body).strip()
+                if title:
+                    body = f"タイトル: {title.group(1).strip()}\n" + body
+            truncated = len(body) > FETCH_MAX_CHARS
+            print(f"[tool] fetch_url {url[:80]} → {resp.status} ({len(raw)} bytes)")
+            return {"status": resp.status, "ok": 200 <= resp.status < 300, "content_type": ctype, "text": body[:FETCH_MAX_CHARS] + ("…（省略）" if truncated else "")}
+    except asyncio.TimeoutError:
+        return {"error": "タイムアウト"}
+    except aiohttp.ClientError as e:
+        return {"error": f"取得失敗: {type(e).__name__}: {e}"}
+
+
 async def close() -> None:
     if _session is not None and not _session.closed:
         try:
