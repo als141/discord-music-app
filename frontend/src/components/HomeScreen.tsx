@@ -545,9 +545,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
     },
     {
       id: 'shelf',
-      label: '棚',
+      label: '曲置き場',
       icon: <Bookmark className="w-4 h-4" />,
-      ariaLabel: '棚（チャンネルに貼られた曲）を表示'
+      ariaLabel: '曲置き場（チャンネルに貼られた曲）を表示'
     },
     {
       id: 'uploaded-music',

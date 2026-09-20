@@ -13,7 +13,7 @@ import { Loading } from './ui/loading';
 /**
  * ログイン前プレビュー（読み取り専用）。
  *
- * 未ログインでもいま流れている曲・キュー・棚が見える。何かを操作しようとした瞬間に
+ * 未ログインでもいま流れている曲・キュー・曲置き場が見える。何かを操作しようとした瞬間に
  * `signIn('discord')` を出す（それまでは OAuth 画面に飛ばさない）。
  * backend は認証を要求しないので `GET /player-state/{guild_id}` と `GET /shared-tracks/{guild_id}`
  * をそのまま読める。プレビューでは WebSocket は張らず 30 秒ごとのポーリングで十分。
@@ -169,10 +169,10 @@ export const PreviewApp: React.FC = () => {
             )}
           </section>
 
-          {/* 棚（読み取り専用。タップでログイン） */}
+          {/* 曲置き場（読み取り専用。タップでログイン） */}
           <section aria-labelledby="preview-shelf-heading">
             <h2 id="preview-shelf-heading" className="text-lg sm:text-xl font-bold tracking-tight text-foreground mb-4">
-              棚
+              曲置き場
             </h2>
             <ShelfScreen
               guildId={guildId}

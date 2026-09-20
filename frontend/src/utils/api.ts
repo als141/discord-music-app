@@ -123,7 +123,7 @@ export interface QueueItem {
   isCurrent: boolean;
 }
 
-/** 「棚」: Discord のチャンネルに貼られた曲（`GET /shared-tracks/{guild_id}`） */
+/** 「曲置き場」: Discord のチャンネルに貼られた曲（`GET /shared-tracks/{guild_id}`） */
 export interface SharedTrack {
   id: number;
   video_id: string;
@@ -140,7 +140,7 @@ export interface SharedTrack {
   message_url: string | null;
 }
 
-/** 棚のチャンネル別件数（チップの絞り込みに使う） */
+/** 曲置き場のチャンネル別件数（チップの絞り込みに使う） */
 export interface SharedTrackChannel {
   id: string;
   name: string;
@@ -344,7 +344,7 @@ export const api = {
   },
 
   /**
-   * 「棚」: 曲置き場などに貼られた曲の一覧（新しい順）。認証不要。
+   * 「曲置き場」: 曲置き場などのチャンネルに貼られた曲の一覧（新しい順）。認証不要。
    * channelId を渡すとサーバー側で絞り込む（未指定なら全チャンネル）。
    */
   getSharedTracks: async (

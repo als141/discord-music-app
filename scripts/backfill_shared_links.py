@@ -4,6 +4,8 @@
 Pi 上で 1 回だけ実行する（DB は backend/uploaded_songs.db。voice/web プロセスが動いていても WAL なので同時アクセス可）:
   cd ~/discord-music-app/backend && set -a && . ./.env && set +a && \
   .venv/bin/python ../scripts/backfill_shared_links.py 1093915551174234212 --days 90
+  # 曲置き場チャンネルだけ全期間:
+  .venv/bin/python ../scripts/backfill_shared_links.py 1093915551174234212 --days 0 --channel-id 1426606582606860428
 
 - bot 専用チャンネル（IRINA_CHAT_CHANNEL_IDS / irina_chat の既定）と bot の投稿は対象外
 - メッセージ本文は保存しない（URL・動画ID・投稿者・時刻・チャンネルのみ）
@@ -43,7 +45,8 @@ def get(session: requests.Session, path: str, **params):
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("guild_id")
-    ap.add_argument("--days", type=int, default=90)
+    ap.add_argument("--days", type=int, default=90, help="0 なら全期間")
+    ap.add_argument("--channel-id", default=None, help="このチャンネルだけ対象にする")
     args = ap.parse_args()
     token = os.environ["DISCORD_TOKEN"]
     s = requests.Session()
@@ -51,9 +54,10 @@ def main() -> None:
 
     db.init_db()
     skip_ids = irina_chat._chat_channel_ids()
-    since = datetime.now(timezone.utc) - timedelta(days=args.days)
-    after_id = snowflake_after(since)
+    after_id = snowflake_after(datetime.now(timezone.utc) - timedelta(days=args.days)) if args.days > 0 else 0
     channels = [c for c in get(s, f"/guilds/{args.guild_id}/channels") if c.get("type") in (0, 2) and int(c["id"]) not in skip_ids]
+    if args.channel_id:
+        channels = [c for c in channels if c["id"] == args.channel_id]
     total_msgs = total_links = 0
     for ch in channels:
         last = after_id
@@ -91,7 +95,7 @@ def main() -> None:
             print(f"  #{ch['name']}: {n_msgs} msgs → {n_links} links")
         total_msgs += n_msgs
         total_links += n_links
-    print(f"done: {len(channels)} channels, {total_msgs} messages scanned, {total_links} links saved (last {args.days} days)")
+    print(f"done: {len(channels)} channels, {total_msgs} messages scanned, {total_links} links saved ({'all time' if args.days <= 0 else f'last {args.days} days'})")
     # タイトル/アーティスト/サムネをその場で解決（voice プロセスの 10 分ごとの解決を待たなくて済む）
     import asyncio
     from app.services.shared_links import resolve_pending

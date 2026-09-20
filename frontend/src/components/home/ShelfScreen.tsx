@@ -1,6 +1,6 @@
 'use client';
 
-import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
 import { Play } from 'lucide-react';
@@ -10,7 +10,7 @@ import { Loading } from '@/components/ui/loading';
 import { Button } from '@/components/ui/button';
 
 /**
- * 「棚」: Discord の曲置き場などに貼られた曲を一覧し、タップでキューに追加する画面。
+ * 「曲置き場」タブ: Discord の曲置き場などに貼られた曲を一覧し、タップでキューに追加する画面。
  *
  * - データは `GET /shared-tracks/{guild_id}`（認証不要）。30秒だけメモリにキャッシュする
  * - 見た目はホームの曲カード（HomeScreen の TrackCard / HistoryCard）に合わせる
@@ -189,7 +189,7 @@ export const ShelfScreen: React.FC<ShelfScreenProps> = ({
         setError(false);
       } catch (e) {
         if (cancelled) return;
-        console.error('棚の取得に失敗しました:', e);
+        console.error('曲置き場の取得に失敗しました:', e);
         setError(true);
       } finally {
         if (!cancelled) setLoading(false);
@@ -201,6 +201,15 @@ export const ShelfScreen: React.FC<ShelfScreenProps> = ({
       cancelled = true;
     };
   }, [guildId, reloadToken]);
+
+  // 初期表示は「曲置き場」チャンネルに絞る（あれば）。このタブの主役は曲置き場で、「一般」は補助
+  const initialChannelPickedRef = useRef(false);
+  useEffect(() => {
+    if (initialChannelPickedRef.current || !data) return;
+    initialChannelPickedRef.current = true;
+    const shelfChannel = data.channels.find((c) => c.name === '曲置き場');
+    if (shelfChannel) setChannelId(shelfChannel.id);
+  }, [data]);
 
   const handleSelect = useCallback(
     (item: SharedTrack) => {
@@ -239,7 +248,7 @@ export const ShelfScreen: React.FC<ShelfScreenProps> = ({
     if (error && !data) {
       return (
         <div className="py-12 flex flex-col items-center gap-3">
-          <p className="text-sm text-muted-foreground">棚を読み込めませんでした</p>
+          <p className="text-sm text-muted-foreground">曲置き場を読み込めませんでした</p>
           <Button variant="outline" size="sm" onClick={() => setReloadToken((v) => v + 1)}>
             再読み込み
           </Button>
