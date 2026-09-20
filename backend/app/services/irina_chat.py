@@ -224,6 +224,21 @@ def _reference_block(message: discord.Message) -> str:
     return REFERENCE_INTRO + _environment_block(message) + DISCORD_FORMATTING_REFERENCE
 
 
+def _harness_prompt_version() -> str:
+    """system prompt のうちハーネス側の部分（参考情報の文面と組み立てコード）のハッシュ。
+    ここが変わったら既存の会話チェーンを捨てて新しい system prompt で始める。
+    以前はキャラ設定ファイルの変更しか見ていなかったので、RULES を撤去しても xAI 側に保存された
+    古い会話（古い system prompt 入り）が使われ続け、短文のままだった（2026-09-21 05:16 の実害）"""
+    import hashlib
+    import inspect
+    src = REFERENCE_INTRO + DISCORD_FORMATTING_REFERENCE
+    try:
+        src += inspect.getsource(_environment_block) + inspect.getsource(_build_system_prompt)
+    except Exception:
+        pass
+    return hashlib.sha1(src.encode("utf-8")).hexdigest()[:10]
+
+
 def _environment_block(message: discord.Message) -> str:
     guild = message.guild
     channel = message.channel
@@ -673,13 +688,14 @@ async def _ask(message: discord.Message, renderer: _Renderer, *, force_new_chain
     channel_id = str(message.channel.id)
     guild_id = str(message.guild.id)
     persona, persona_key = _load_persona()
+    persona_key = f"{persona_key}|harness:{_harness_prompt_version()}"  # 参考情報や組み立てが変わってもチェーンを切り替える
 
     session = await asyncio.to_thread(db.get_chat_session, channel_id) or {}
     chain_id = None if force_new_chain else session.get("last_response_id")
     summary = session.get("summary")
     turn_count = int(session.get("turn_count") or 0)
     if chain_id and session.get("persona_key") != persona_key:
-        print("[irina-chat] キャラ設定が変わったので新しいチェーンで開始")
+        print("[irina-chat] キャラ設定またはハーネス側の system prompt が変わったので新しいチェーンで開始")
         chain_id = None
     if not chain_id:
         turn_count = 0
