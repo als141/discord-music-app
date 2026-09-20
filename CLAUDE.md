@@ -98,6 +98,14 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 
 ## Key Technical Notes
 
+### 2026-09-21: 自動入室が9/15から停止していた（ゾンビプレイヤー、commit 3768b34）
+- **症状**: ドデカサーバーで 9/15 18:27 を最後に Auto-joined が出ない。`/player-state` は has_player=True なのに `/bot-voice-status` は channel_id=null（= VC に居ないのにプレイヤーだけ残存）
+- **原因**: 9/15 23:39 の Discord 大規模障害（gateway 503 / ギルド同期 500 連発がログに残る）で、切断イベント（on_voice_state_update）が来ないまま VC 接続が消え、MusicPlayer が music_players に残留。自動入室ガード `guild_id not in music_players` に恒久的にブロックされた
+- **修正**: 自動入室時に「voice_client が None なのにプレイヤーが残っている」場合はゾンビと判断して `shutdown()`→pop してから入室続行（`bot.py` "Cleaning up stale MusicPlayer before auto-join"）
+- **診断コマンド**: has_player=True かつ channel_id=null のギルドがあればゾンビ。`curl /player-state/{gid}` と `/bot-voice-status/{gid}` を突き合わせる
+- 備考: Web の手動参加（/join-voice-channel）は voice_client 参照を張り替えるためゾンビでも動く。壊れるのは自動入室だけなので気づきにくい
+- 注意: `/player-state` 等を Python urllib（UAなし）で叩くと Cloudflare に 403 で弾かれる。検証は curl を使う
+
 ### 2026-09-09: 全曲ダウンロード403 → yt-dlp 2026.8.19 で復旧（commit 222bf9d）
 - **症状**: 全ての新規ダウンロードが `unable to download video data: HTTP Error 403: Forbidden`（当日34件。それ以前の7日間は再生試行ゼロ＝発生時期は特定不能、キャッシュ済み曲は再生できていた）
 - **切り分けの要点**:
@@ -337,6 +345,7 @@ journalctl -u discord-music-bot --since '7 days ago' --no-pager | grep -c 'ERROR
 - **検索500エラー**: SearchItemのartist/titleがNoneになっていないか確認。`or`演算子でNullセーフに
 - **push しても本番に反映されない**: Pi で `cd ~/discord-music-app && git status --porcelain` を確認。何か出ていれば deploy.sh が skip している（deploy.log 誤コミット事件参照）
 - **ブラウザに再生状態が反映されない**: ①Pi の journal で `notify_clients failed` / `WebSocket通知エラー` を確認 ②ブラウザで `wss://api.atoriba.jp/ws/{guild}` に接続して update が来るか（Node: `new WebSocket(...)`）③ヘッダーのドットが黄色（再接続中）なら WS 断。`/player-state/{guild}` を直接叩いて backend 側の状態を見る
+- **自動入室だけ効かない（手動参加は効く）**: ゾンビプレイヤーを疑う。`/player-state`=has_player:true かつ `/bot-voice-status`=null のギルドが該当（2026-09-21 事例。修正済みだが診断法として）
 - **ダウンロード時 HTTP Error 403: Forbidden**: yt-dlp が YouTube の PO Token 必須化に置いていかれた兆候（2026-09-09 事例）。キャッシュ済み・HLS 可の曲は鳴るので部分的に動いて見える。隔離 venv で最新版を試し、lock 更新でデプロイ
 - **yt-dlp 更新後に「Requested format is not available」**: `verbose: True` で JS runtime が `(unsupported)` になっていないか確認。Node のバージョン要件が上がっていることが多い
 - **/related が 500 / 検索が空 / アルバムが出ない**: ytmusicapi のバージョンと `YTMusic(language=...)` を確認。上流の応答変更が原因のことが多い。ローカル venv で新版を試してから lock 更新
