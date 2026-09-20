@@ -6,7 +6,7 @@ import { useSwipeable } from 'react-swipeable';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { useSession, signOut } from 'next-auth/react';
+import { useSession, signOut, signIn } from 'next-auth/react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -250,6 +250,7 @@ export const SideMenu: React.FC<SideMenuProps> = React.memo(({
     inviteServers,
     isLoadingServers,
     serversError,
+    needsReauth,
     isBotConnected,
     botVoiceChannelId,
     isLoadingBotStatus
@@ -382,15 +383,27 @@ export const SideMenu: React.FC<SideMenuProps> = React.memo(({
                     {serversError && (
                       <div className="p-3 mb-3 rounded-lg bg-destructive/5 border border-destructive/10">
                         <p className="text-xs text-destructive mb-2">{serversError}</p>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleFetchServers}
-                          disabled={isLoadingServers}
-                          className="h-7 text-xs border-destructive/20 text-destructive hover:bg-destructive/5"
-                        >
-                          再取得
-                        </Button>
+                        {needsReauth ? (
+                          // Discord の認可が切れている場合は再取得しても直らないので再ログインへ誘導
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => signIn('discord')}
+                            className="h-7 text-xs border-destructive/20 text-destructive hover:bg-destructive/5"
+                          >
+                            再ログイン
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleFetchServers}
+                            disabled={isLoadingServers}
+                            className="h-7 text-xs border-destructive/20 text-destructive hover:bg-destructive/5"
+                          >
+                            再取得
+                          </Button>
+                        )}
                       </div>
                     )}
 

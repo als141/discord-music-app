@@ -1,12 +1,65 @@
 // src/store/useGuildStore.ts
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { getSession } from 'next-auth/react';
 import { api, Server, VoiceChannel } from '@/utils/api';
 import { setActiveServerIdGetter } from './usePlayerStore';
 
 const MIN_SERVER_FETCH_INTERVAL_MS = 15000;
 let mutualServersRequest: Promise<void> | null = null;
 let lastServersFetchAt = 0;
+
+const REAUTH_REQUIRED_MESSAGE = 'Discordの認証の有効期限が切れました。再ログインしてください。';
+
+/**
+ * /api/discord/userGuilds を叩く。
+ * 401 + DISCORD_REAUTH_REQUIRED のときは **1回だけ** getSession() を挟んで再試行する。
+ * getSession() は /api/auth/session を叩くので、そこで next-auth の jwt callback が走り
+ * Discord の access_token がリフレッシュされてセッション Cookie が更新される
+ * （route handler 側でリフレッシュしても Cookie に書き戻されないため、この経路が必要）。
+ */
+async function fetchUserGuildsWithReauth(): Promise<
+  { ok: true; data: Server[] } | { ok: false; needsReauth: boolean; message: string }
+> {
+  const request = () => fetch('/api/discord/userGuilds', { cache: 'no-store' });
+  const readCode = async (res: Response): Promise<string | undefined> => {
+    try {
+      const body = await res.clone().json();
+      return typeof body?.code === 'string' ? body.code : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+
+  let response = await request();
+
+  if (response.status === 401) {
+    const code = await readCode(response);
+    if (code === 'DISCORD_REAUTH_REQUIRED') {
+      // セッション取得でリフレッシュを促してから 1 回だけ再試行
+      try {
+        await getSession();
+      } catch (error) {
+        console.error('セッションの再取得に失敗しました:', error);
+      }
+      response = await request();
+    }
+
+    if (response.status === 401) {
+      return { ok: false, needsReauth: true, message: REAUTH_REQUIRED_MESSAGE };
+    }
+  }
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      needsReauth: false,
+      message: 'ユーザーのサーバー一覧の取得に失敗しました',
+    };
+  }
+
+  return { ok: true, data: (await response.json()) as Server[] };
+}
 
 // ボイスステータスポーリング用タイマー
 let voiceStatusPollingTimer: NodeJS.Timeout | null = null;
@@ -31,6 +84,8 @@ interface GuildState {
   // 読み込み状態
   isLoadingServers: boolean;
   serversError: string | null;
+  /** Discord の認可が切れていて再ログインが必要（= signIn を促す） */
+  needsReauth: boolean;
   isLoadingChannels: boolean;
   isLoadingBotStatus: boolean;
 
@@ -72,6 +127,7 @@ export const useGuildStore = create<GuildState>()(
 
       isLoadingServers: false,
       serversError: null,
+      needsReauth: false,
       isLoadingChannels: false,
       isLoadingBotStatus: false,
 
@@ -120,14 +176,19 @@ export const useGuildStore = create<GuildState>()(
             const botGuilds = await api.getBotGuilds();
             const botGuildIds = new Set(botGuilds.map((guild) => guild.id));
 
-            // ユーザーが参加しているサーバーを取得
-            const userGuildsResponse = await fetch('/api/discord/userGuilds');
+            // ユーザーが参加しているサーバーを取得（401 は1回だけセッション更新して再試行）
+            const result = await fetchUserGuildsWithReauth();
 
-            if (!userGuildsResponse.ok) {
-              throw new Error('ユーザーのサーバー一覧の取得に失敗しました');
+            if (!result.ok) {
+              set({
+                isLoadingServers: false,
+                serversError: result.message,
+                needsReauth: result.needsReauth,
+              });
+              return;
             }
 
-            const userGuildsData = await userGuildsResponse.json();
+            const userGuildsData = result.data;
 
             // 共通のサーバーと招待可能なサーバーを分類
             const mutualGuilds = userGuildsData.filter((guild: Server) => botGuildIds.has(guild.id));
@@ -144,7 +205,8 @@ export const useGuildStore = create<GuildState>()(
             set({
               mutualServers: mutualGuilds,
               inviteServers: inviteGuilds,
-              isLoadingServers: false
+              isLoadingServers: false,
+              needsReauth: false
             });
           } catch (error) {
             console.error('サーバー一覧の取得中にエラーが発生しました:', error);
@@ -283,7 +345,7 @@ export const useGuildStore = create<GuildState>()(
       
       // エラーのリセット
       resetErrors: () => {
-        set({ serversError: null });
+        set({ serversError: null, needsReauth: false });
       },
 
       // 自動接続チェック

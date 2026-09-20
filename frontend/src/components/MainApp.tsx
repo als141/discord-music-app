@@ -13,7 +13,6 @@ import { Loading } from '@/components/ui/loading';
 import { PlayIcon, PauseIcon, Loader2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { useSwipeable } from 'react-swipeable';
-import { useSession } from 'next-auth/react';
 import { User } from '@/utils/api';
 import Image from 'next/image';
 import { IntroPage } from './IntroPage';
@@ -22,6 +21,7 @@ import { HomeScreen } from './HomeScreen';
 import { useGuildStore, usePlayerStore, setupWebSocket, cleanupWebSocket } from '@/store';
 import { useIsDesktop } from '@/hooks/use-media-query';
 import { useArtworkAccent } from '@/hooks/use-artwork-accent';
+import { useSessionGuard } from '@/hooks/use-session-guard';
 
 // API URL の取得
 
@@ -39,7 +39,10 @@ BigInt.prototype.toJSON = function() {
 // 主要なアプリケーションコンポーネント
 export const MainApp: React.FC = () => {
   // セッション情報
-  const { data: session, status } = useSession(); 
+  // useSession() を直接使わず useSessionGuard() 経由にする。
+  // /api/auth/session の取得が一度失敗しただけで next-auth が unauthenticated のまま
+  // 戻らなくなる（= ログインが外れたように見える）ため、復帰の再試行を挟む。
+  const { session, status } = useSessionGuard();
   const { toast } = useToast();
   
   // Zustand ストアから状態を取得
@@ -270,6 +273,15 @@ export const MainApp: React.FC = () => {
     return (
       <div className="h-screen flex items-center justify-center">
         <Loading size="large" text="読み込み中..." />
+      </div>
+    );
+  }
+
+  // セッション取得に失敗しただけの可能性があるので、再確認中はログイン画面に落とさない
+  if (status === 'recovering') {
+    return (
+      <div className="h-screen flex items-center justify-center">
+        <Loading size="large" text="接続を確認しています..." />
       </div>
     );
   }
