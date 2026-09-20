@@ -463,12 +463,16 @@ async def _attachment_parts(message: discord.Message) -> Tuple[list, List[str]]:
     return parts, notes
 
 
-async def _recent_context(channel, bot_user_id: int, exclude_id: int) -> str:
-    """新しいチェーンを始めるとき、直近のチャンネルの流れを参考情報として渡す"""
+async def _recent_context(channel, bot_user_id: int, exclude_id: int, *, include_bot: bool = True) -> str:
+    """新しいチェーンを始めるとき、直近のチャンネルの流れを参考情報として渡す。
+    キャラ設定を変えた直後は include_bot=False にして、イリーナ自身の古い口調の発言を混ぜない
+    （混ぜると新しい設定より過去の自分の文体を真似てしまい、「反映されていない」ように見える）"""
     try:
         lines: List[str] = []
-        async for m in channel.history(limit=SEED_HISTORY_LIMIT + 1):
+        async for m in channel.history(limit=SEED_HISTORY_LIMIT * 2 + 1):
             if m.id == exclude_id or not (m.content or "").strip():
+                continue
+            if m.author.id == bot_user_id and not include_bot:
                 continue
             who = "イリーナ" if m.author.id == bot_user_id else _display_name(m.author)
             lines.append(f"[{m.created_at.astimezone(JST):%m/%d %H:%M}] {who}: {m.content.strip()[:200]}")
@@ -694,7 +698,8 @@ async def _ask(message: discord.Message, renderer: _Renderer, *, force_new_chain
     chain_id = None if force_new_chain else session.get("last_response_id")
     summary = session.get("summary")
     turn_count = int(session.get("turn_count") or 0)
-    if chain_id and session.get("persona_key") != persona_key:
+    persona_changed = bool(session.get("persona_key")) and session.get("persona_key") != persona_key
+    if chain_id and persona_changed:
         print("[irina-chat] キャラ設定またはハーネス側の system prompt が変わったので新しいチェーンで開始")
         chain_id = None
     if not chain_id:
@@ -703,7 +708,7 @@ async def _ask(message: discord.Message, renderer: _Renderer, *, force_new_chain
     messages = []
     if not chain_id:
         messages.append(system(_build_system_prompt(message, persona, summary)))
-        recent = await _recent_context(message.channel, message.guild.me.id, message.id)
+        recent = await _recent_context(message.channel, message.guild.me.id, message.id, include_bot=not persona_changed)
         if recent:
             messages.append(user("（参考: 直近のこのチャンネルの流れ。返事はこの後の発言に対してする）\n" + recent))
     attach_parts, notes = await _attachment_parts(message)
