@@ -15,7 +15,7 @@ import { Button } from './ui/button';
 import { useSwipeable } from 'react-swipeable';
 import { User } from '@/utils/api';
 import Image from 'next/image';
-import { IntroPage } from './IntroPage';
+import { PreviewApp } from './PreviewApp';
 import { ErrorBoundary } from './ErrorBoundary';
 import { HomeScreen } from './HomeScreen';
 import { useGuildStore, usePlayerStore, setupWebSocket, cleanupWebSocket } from '@/store';
@@ -289,9 +289,9 @@ export const MainApp: React.FC = () => {
     );
   }
 
-  // 未認証の場合
+  // 未認証の場合: ログイン画面ではなく読み取り専用プレビュー（操作した瞬間に signIn）
   if (status === 'unauthenticated' || !session) {
-    return <IntroPage />;
+    return <PreviewApp />;
   }
 
   // フルスクリーンプレイヤー（sheet）はモバイル/タブレットのみ。デスクトップは右カラムに常時表示
