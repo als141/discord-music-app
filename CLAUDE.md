@@ -89,6 +89,7 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 | yt-dlp | 2026.8.19（2026-09-09更新） | 最新追従（403が出たら更新） |
 | yt-dlp-ejs | 0.8.0 | >= 0.5.0 |
 | ytmusicapi | 1.12.2（2026-08-17更新） | >= 1.12 |
+| xai-sdk | **1.19.0**（2026-09-21更新。1.7.0 → 1.19.0。`reasoning_effort` が none/low/medium/high/xhigh に、`image_generation` ツール追加） | >= 1.19.0 |
 
 ### Cloudflare Tunnel
 - **URL**: `https://api.atoriba.jp` → Pi:8080

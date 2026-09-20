@@ -35,6 +35,8 @@ JST = timezone(timedelta(hours=9))
 
 DEFAULT_CHANNEL_IDS = "1232618506303045702,1156255909446680676"  # テストサーバー #riona / ドデカサーバー bot 専用
 XAI_MODEL = (os.getenv("XAI_MODEL") or "grok-4.6").strip()
+# 思考の深さ。xai-sdk 1.19 で none/low/medium/high/xhigh。既定 low（未指定だと雑談に 60 秒かかった実測から）
+XAI_REASONING_EFFORT = (os.getenv("XAI_REASONING_EFFORT") or "low").strip().lower()
 LLM_TIMEOUT_SEC = 90             # 1 回の sample() の上限（検索ツールで十数秒かかることがある）
 TOTAL_TIMEOUT_SEC = 240          # ツールループ全体の上限
 TOOL_ROUNDS_MAX = 8              # 1 メッセージあたりのツール往復回数
@@ -435,7 +437,7 @@ async def _ask(message: discord.Message, *, force_new_chain: bool = False) -> Op
         tool_choice="auto",
         max_tokens=1500,
         temperature=0.8,
-        reasoning_effort="low",  # 雑談で 60 秒考え込まないように（low で雑談 7〜8 秒）
+        reasoning_effort=XAI_REASONING_EFFORT,  # 既定 low（雑談 7〜8 秒。未指定だと 60 秒）
     )
     try:
         response, tools_used = await asyncio.wait_for(_run_tool_loop(chat, message), timeout=TOTAL_TIMEOUT_SEC)
