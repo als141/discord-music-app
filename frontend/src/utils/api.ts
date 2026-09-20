@@ -123,6 +123,35 @@ export interface QueueItem {
   isCurrent: boolean;
 }
 
+/** 「棚」: Discord のチャンネルに貼られた曲（`GET /shared-tracks/{guild_id}`） */
+export interface SharedTrack {
+  id: number;
+  video_id: string;
+  url: string;
+  /** メタ解決前は null（その場合はサムネ/タイトルをフォールバックする） */
+  title: string | null;
+  artist: string | null;
+  thumbnail: string | null;
+  channel_id: string;
+  channel_name: string | null;
+  posted_by: User | null;
+  /** ISO8601 */
+  posted_at: string;
+  message_url: string | null;
+}
+
+/** 棚のチャンネル別件数（チップの絞り込みに使う） */
+export interface SharedTrackChannel {
+  id: string;
+  name: string;
+  count: number;
+}
+
+export interface SharedTracksResponse {
+  channels: SharedTrackChannel[];
+  tracks: SharedTrack[];
+}
+
 export interface Server {
   id: string;
   name: string;
@@ -312,6 +341,30 @@ export const api = {
       handleApiError(error);
     }
     return null;
+  },
+
+  /**
+   * 「棚」: 曲置き場などに貼られた曲の一覧（新しい順）。認証不要。
+   * channelId を渡すとサーバー側で絞り込む（未指定なら全チャンネル）。
+   */
+  getSharedTracks: async (
+    guildId: string,
+    channelId?: string,
+    limit = 200
+  ): Promise<SharedTracksResponse> => {
+    try {
+      const response = await apiClient.get(`/shared-tracks/${guildId}`, {
+        params: { limit, ...(channelId ? { channel_id: channelId } : {}) },
+      });
+      const data = response.data as Partial<SharedTracksResponse> | null;
+      return {
+        channels: data?.channels ?? [],
+        tracks: data?.tracks ?? [],
+      };
+    } catch (error) {
+      handleApiError(error);
+    }
+    return { channels: [], tracks: [] }; // エラーハンドリング後の空の戻り値
   },
 
   getCurrentTrack: async (guildId: string): Promise<Track | null> => {

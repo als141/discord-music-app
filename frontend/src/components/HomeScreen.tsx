@@ -20,6 +20,7 @@ import {
   Clipboard,
   Plus,
   Sparkles,
+  Bookmark,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,6 +32,7 @@ import { ScrollRow } from './home/ScrollRow';
 import { SectionAllDialog } from './home/SectionAllDialog';
 import { GuildStatsCard } from './home/GuildStatsCard';
 import { CollectionDialog } from './home/CollectionDialog';
+import { ShelfScreen } from './home/ShelfScreen';
 
 interface HomeScreenProps {
   onSelectTrack: (item: PlayableItem) => void;
@@ -542,6 +544,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
       ariaLabel: 'ホーム画面を表示'
     },
     {
+      id: 'shelf',
+      label: '棚',
+      icon: <Bookmark className="w-4 h-4" />,
+      ariaLabel: '棚（チャンネルに貼られた曲）を表示'
+    },
+    {
       id: 'uploaded-music',
       label: 'ライブラリ',
       icon: <Music2 className="w-4 h-4" />,
@@ -774,6 +782,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
               aria-labelledby={`tab-${activeTab}`}
             >
               {activeTab === 'home' && renderHomeContent()}
+
+              {activeTab === 'shelf' && (
+                <ShelfScreen guildId={guildId} onSelectTrack={onSelectTrack} />
+              )}
 
               {activeTab === 'uploaded-music' && (
                 <div className="h-full bg-background">
