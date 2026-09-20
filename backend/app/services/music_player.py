@@ -778,11 +778,14 @@ class MusicPlayer:
                 'artist': song.artist, 'video_id': song.video_id, 'added_by': added_by}
 
     def snapshot_state(self) -> dict:
+        # このプレイヤーでは queue[0] が再生中の曲そのもの（play_next_song で pop される）なので、
+        # current と重複しないよう queue 側からは current を除く
+        rest = [s for s in self.queue if not s.pending and s is not self.current]
         return {
             'current': self._song_to_dict(self.current) if self.current else None,
             'position': round(self.current_position(), 1),
             'is_paused': bool(self.voice_client and self.voice_client.is_paused()),
-            'queue': [self._song_to_dict(s) for s in self.queue if not s.pending],
+            'queue': [self._song_to_dict(s) for s in rest],
         }
 
     def freeze_state(self) -> None:
