@@ -10,16 +10,13 @@ import discord
 from discord import app_commands
 import asyncio
 from .services.music_player import MusicPlayer
-from openai import OpenAI  # Grok用（レガシー）
 import os
 from dotenv import load_dotenv
 # Nano Banana Pro (Gemini 3 Pro Image Preview) 用
 from google import genai
 from google.genai import types
 # xAI SDK (Grok 4.1 Agent Tools API)
-from xai_sdk import Client as XAIClient
-from xai_sdk.chat import user as xai_user, assistant as xai_assistant, system as xai_system
-from xai_sdk.tools import web_search, x_search
+from .services import irina_chat
 from PIL import Image
 from io import BytesIO
 import base64
@@ -114,13 +111,6 @@ async def notify_clients_local(guild_id: str):
         print(f"notify_clients failed (guild: {guild_id}): {type(e).__name__}: {e}")
 
 load_dotenv()
-# x.ai (Grok) 用のクライアント設定
-XAI_API_KEY = os.getenv("XAI_API_KEY")
-client_openai_chat = OpenAI( # 変数名を変更して区別
-    api_key=XAI_API_KEY,
-    base_url="https://api.x.ai/v1",
-)
-PROMPT = os.getenv("PROMPT")
 
 # Nano Banana Pro (Gemini 3 Pro Image Preview) 用のクライアント設定
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -136,19 +126,8 @@ NANO_BANANA_PRO_MODEL = "gemini-3-pro-image-preview"
 DEFAULT_IMAGE_SIZE = "2K"  # 1K, 2K, 4K から選択可能
 DEFAULT_ASPECT_RATIO = "auto"  # auto で自動判定
 
-ALLOWED_CHANNELS = [
-    1080511818658762755,
-    1156255909446680676,
-]
-
-SYSTEM_PROMPTS: Dict[str, str] = {
-    "default": PROMPT,
-}
-
 # スレッド会話履歴を保存する辞書
 thread_histories: Dict[int, List[Dict[str, Any]]] = {} # 型ヒントを明確化
-
-chat_histories: Dict[int, List[dict]] = {}
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -650,8 +629,12 @@ async def _rejoin_occupied_voice_channels():
 
 @client.event
 async def on_message(message: discord.Message):
-    # テキストチャットへの応答は無効化中
-    return
+    # bot 専用チャンネル（とその中のスレッド）だけ、メンション無しでイリーナが返答する。
+    # 対象外・bot・空メッセージなどの判定は irina_chat 側で行い、それ以外の場所では何もしない
+    try:
+        await irina_chat.handle_message(message)
+    except Exception as e:
+        print(f"[irina-chat] on_message error: {type(e).__name__}: {e}")
 
 @client.event
 async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
@@ -803,9 +786,7 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
 
 @tree.command(name="clear_chat", description="チャット履歴をクリアします")
 async def clear_chat(interaction: discord.Interaction):
-    channel_id = interaction.channel_id
-    if channel_id in chat_histories:
-        chat_histories[channel_id] = []
+    if irina_chat.clear_history(interaction.channel_id):
         await interaction.response.send_message("チャット履歴をクリアしました。")
     else:
         await interaction.response.send_message("クリアする履歴がありません。")

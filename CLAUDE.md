@@ -107,6 +107,17 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 
 ## Key Technical Notes
 
+### 2026-09-21: bot 専用チャンネルでのイリーナ応答（xAI Grok 4.6、`services/irina_chat.py`）
+- **経緯**: ドデカサーバーの bot 専用チャンネル（1156255909446680676）で Grok が応答しなくなっていた → 原因は `bot.py` の `on_message` が「テキストチャットへの応答は無効化中 / return」で**丸ごと無効化**されていたこと（旧実装は OpenAI 互換クライアント + `search_parameters` の Live Search で、`grok-4-1-fast-reasoning`）
+- **新実装**: `backend/app/services/irina_chat.py`。`on_message` → `irina_chat.handle_message(message)` に委譲。対象は `IRINA_CHAT_CHANNEL_IDS`（既定 `1080511818658762755`=テストサーバー, `1156255909446680676`=ドデカ bot 専用）とその中のスレッドのみ。**それ以外では一切喋らない**。メンション不要で人間の投稿全部に返答。bot・空・`/ ! ? ;` 始まりは無視。チャンネルごと 12 回/分の上限、障害時の謝罪は 5 分に 1 回
+- **モデル/ツール**: `XAI_MODEL`（既定 **grok-4.6**。`GET https://api.x.ai/v1/models` で実在確認済み、画像入力可）。`xai_sdk` 1.7.0 の `AsyncClient` + サーバーサイドツール `web_search(user_location_country="JP")` / `x_search()`、`tool_choice="auto"`。system prompt = **`IRINA_CHAT_PERSONA` 環境変数の内容をそのまま**（未設定なら `irina_chat.DEFAULT_PERSONA`＝大人の魔王・毒舌・ネットスラング版）+ 運用ルール（日本語・短く・雑談では検索しない・調べたら URL 1〜2 個・現在日時 JST・音楽操作は Web アプリへ案内）。`reasoning_effort="low"`（雑談 7〜8 秒、検索込み 15〜20 秒。既定だと雑談に 60 秒かかった）
+- **旧 `.env` の `PROMPT` は使わない**: 未成年（幼女）として性的な内容を書かせる指示が入っており、Grok が「I won't roleplay as a child or generate sexual content involving minors」と応答ごと拒否する（ローカルのテストbot で実測）。こちらも扱わない。キャラを変えたいときはユーザーが `IRINA_CHAT_PERSONA` に入れる（年齢の設定と性的指示を外せば、毒舌・煽り・ネットスラング・「ざぁこ」「こんにゃらら～」等はそのまま使える）
+- 会話履歴: チャンネルごとメモリ 20 件。再起動後は最初の応答時に直近 12 件を `channel.history` から種として読む。画像添付は Discord の署名付き URL を `image()` で渡す（最大 3 枚）。`/clear_chat` は `irina_chat.clear_history()`
+- 応答は 1900 文字で分割、`AllowedMentions.none()`、`message.reply(mention_author=False)`
+- **API キー**: `XAI_API_KEY` をローカルと Pi の `backend/.env` に保存済み（2026-09-21 にユーザーから提供）。値は出力・コミットしない
+- **ローカルでの動作確認法**: voice ロールをテストbot で起動（`IRINA_CHAT_ALLOW_BOTS=1` を付けると bot の投稿にも反応する）→ 本番 bot トークンで REST からテストサーバーの `1080511818658762755` に投稿 → テストbot（０才児）が返答するのを `GET /channels/{id}/messages` で確認。本番 bot は `on_message` が旧コードなので二重応答しない（デプロイ前のみ）
+- **Discord 側の前提**: MESSAGE CONTENT intent 有効（コードは `intents.message_content = True`。会話分析で REST でも本文が取れているのを確認済み）
+
 ### 2026-09-21: プロセス分割（無停止アップデート②、commit 04f47d7c）
 - **構成**: 同じ `app.main:app` を `IRINA_ROLE` で2つ起動。**voice**（`discord-music-bot.service`, 127.0.0.1:8081）= Discord bot + MusicPlayer + `backend/app/api/voice.py` の21ルート+`/ws`。**web**（`discord-music-web.service`, 0.0.0.0:8080 ← Cloudflare）= 検索/おすすめ/履歴/アップロード等 + `api/voice_proxy.py` が voice ルーターから自動生成した中継ルート（HTTP は aiohttp で素通し、WS は双方向ポンプ）。`all`（既定）= 従来の1プロセス（ローカル `uv run uvicorn app.main:app` はこれ）
 - **voice に新しいルートを足すとき**: `api/voice.py` の `router` に足すだけ。web 側の中継は `build_proxy_router()` が openapi ごと自動追加（smoke_test のルート欠落検知もそのまま効く）
