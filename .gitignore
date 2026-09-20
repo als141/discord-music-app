@@ -75,3 +75,5 @@ deploy.log
 
 # レイアウト検証のスクリーンショット（テスト実行のたびに再生成される）
 scripts/screenshots/
+
+.tmp
