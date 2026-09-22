@@ -47,7 +47,7 @@ Discord音楽ボットアプリケーション。フロントエンド（Next.js
   - それ以外の `backend/` 変更（main.py の検索/おすすめ/履歴、api/chat 等）→ **web だけ再起動**（音楽は止まらない）
   - 例外: コミットメッセージに `[restart-voice]` を含めると voice も再起動（lifespan や main.py の配線を変えた時に使う）
   - `backend/` 以外の変更 → pull のみ（auto-deploy.sh）
-- **デプロイ前チェック（voice 再起動を伴う変更のとき）**: `bash scripts/predeploy_check.sh` — 誰かが再生中（has_player=true のギルドあり）なら push を待つ（レジュームで復帰はするが数秒切れる）。web だけの変更なら不要
+- **デプロイ前チェック（voice 再起動を伴う変更のとき）**: `bash scripts/predeploy_check.sh` — **実際に再生中（is_playing / current / queue あり）のギルドがあれば BUSY**、人が VC にいるだけの空プレイヤーは IDLE（2026-09-22 変更。以前は has_player だけで BUSY にしていて、誰かが VC に居るだけで何時間も push できなかった）。BUSY なら push を待つ（レジュームで復帰はするが数秒切れる）。web だけの変更なら不要。**ガードの書き方**: `if bash scripts/predeploy_check.sh | grep -q '^BUSY'; then 保留; else git push; fi`（`( … exit 0 ) && git push` はサブシェルを抜けるだけで push されてしまう。2026-09-22 に再生中に再起動した事故あり）
 - **本番スモークテスト**: `bash scripts/smoke_test.sh`（デプロイ後に毎回実行。全主要API+ルート欠落+Piのエラーログを確認）
 - **同時追加テスト（テストサーバー限定）**: `node scripts/concurrent-add-test.mjs`
 - **実再生テスト（テストサーバー限定）**: `node scripts/live-playback-test.mjs` — bot を テストサーバー(1080511818658762752)/VC 一般 に入れて add-url/pause/resume/skip/disconnect を REST で叩き、WS 更新を検証。人がいるサーバーでは絶対に実行しない
