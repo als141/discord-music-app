@@ -3,7 +3,7 @@
 - 対象: `IRINA_CHAT_CHANNEL_IDS`（既定: テストサーバー #riona、ドデカサーバー bot 専用）とその中のスレッドだけ。
   それ以外の場所ではイリーナは自分から一切喋らない
 - メンション不要。人間の投稿すべてに返す（bot と空メッセージだけ無視）
-- モデル: `XAI_MODEL`（既定 grok-4.6）、`XAI_REASONING_EFFORT`（none/low/medium/high/xhigh、既定 medium）、
+- モデル: `XAI_MODEL`（既定 grok-4.7）、`XAI_REASONING_EFFORT`（none/low/medium/high/xhigh、既定 medium）、
   `XAI_SERVICE_TIER`（default / priority）
 - **ストリーミング**: `chat.stream()` で受け取りながら Discord の返信を 1.5 秒ごとに編集して育てる（`IRINA_CHAT_STREAM=0` で従来の一括送信）
 - **会話履歴は xAI 側に保存**（`store_messages=True` + `previous_response_id`）。チャンネルごとの
@@ -34,12 +34,12 @@ from xai_sdk.chat import file as xai_file, image, system, text, tool, tool_resul
 from xai_sdk.tools import code_execution, get_tool_call_type, image_generation, web_search, x_search
 
 from .. import db
-from . import irina_tools
+from . import irina_images, irina_tools
 
 JST = timezone(timedelta(hours=9))
 
 DEFAULT_CHANNEL_IDS = "1232618506303045702,1156255909446680676"  # テストサーバー #riona / ドデカサーバー bot 専用
-XAI_MODEL = (os.getenv("XAI_MODEL") or "grok-4.6").strip()
+XAI_MODEL = (os.getenv("XAI_MODEL") or "grok-4.7").strip()  # 2026-09-22 リリースの grok-4.7 に切替（ユーザー指定）
 # 思考の深さ。xai-sdk 1.19 で none/low/medium/high/xhigh。既定 low（未指定だと雑談に 60 秒かかった実測から）
 XAI_REASONING_EFFORT = (os.getenv("XAI_REASONING_EFFORT") or "medium").strip().lower()  # 既定 medium（ユーザー指定）
 # default / priority（priority は優先処理でレイテンシが下がるがコスト増）
@@ -315,6 +315,28 @@ FORGET_TOOL = tool(
     description="remember で保存したメモを id で消す",
     parameters={"type": "object", "properties": {"id": {"type": "integer"}}, "required": ["id"]},
 )
+GENERATE_IMAGE_TOOL = tool(
+    name="generate_image",
+    description=(
+        "xAI の画像モデルで画像を 1 枚生成して Discord に添付する（明示指定版）。image_generation との違い: "
+        "モデルを指定できる（既定 grok-imagine-image-2.0、高品質は grok-imagine-image-quality）、PNG で返せる、"
+        "transparent=true で背景を透過にできる、アスペクト比を指定できる、use_attached_images=true でこの発言に添付された画像を参照画像にできる。"
+        "「透過 PNG」「背景なし」「アイコン/スタンプ用」「縦長/横長」「高品質で」と頼まれたときはこちら。"
+        "会話の流れで前の生成画像を編集するときは image_generation の方が向く"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "prompt": {"type": "string", "description": "生成する内容（英語でも日本語でも可）"},
+            "transparent": {"type": "boolean", "description": "背景を透過にする（PNG）"},
+            "format": {"type": "string", "enum": ["png", "jpg"], "description": "出力形式。既定 png"},
+            "aspect_ratio": {"type": "string", "enum": ["1:1", "3:4", "4:3", "9:16", "16:9", "2:3", "3:2", "1:2", "2:1"]},
+            "model": {"type": "string", "enum": ["grok-imagine-image-2.0", "grok-imagine-image-quality", "grok-imagine-image"]},
+            "use_attached_images": {"type": "boolean", "description": "この発言に添付された画像を参照画像として使う（image-to-image）"},
+        },
+        "required": ["prompt"],
+    },
+)
 FETCH_URL_TOOL = tool(
     name="fetch_url",
     description="メッセージに貼られた URL など、任意の公開 Web ページの本文テキストを取得する（HTML はタグを落として最大 8000 文字）。検索ではなく『このリンクの中身』を読むときに使う",
@@ -332,10 +354,13 @@ def _tools(guild_id: str, *, allow_images: bool = True):
     if IMAGE_GEN_ENABLED and allow_images and _images_left_today(guild_id) > 0:
         tools.append(image_generation())
     tools += [HTTP_REQUEST_TOOL, FETCH_URL_TOOL, REMEMBER_TOOL, FORGET_TOOL]
+    if IMAGE_GEN_ENABLED and allow_images and _images_left_today(guild_id) > 0:
+        tools.append(GENERATE_IMAGE_TOOL)
     return tools
 
 
-async def _execute_tool(tc, message: discord.Message) -> str:
+async def _execute_tool(tc, message: discord.Message, ctx: Optional[Dict[str, Any]] = None) -> str:
+    ctx = ctx if ctx is not None else {}
     name = tc.function.name
     try:
         args = json.loads(tc.function.arguments or "{}")
@@ -350,6 +375,22 @@ async def _execute_tool(tc, message: discord.Message) -> str:
             )
         elif name == "fetch_url":
             result = await irina_tools.fetch_url(str(args.get("url", "")))
+        elif name == "generate_image":
+            guild_id = str(message.guild.id)
+            if _images_left_today(guild_id) <= 0:
+                result = {"error": f"今日の画像生成の上限（{IMAGE_GEN_DAILY_LIMIT} 枚）に達した"}
+            else:
+                refs = ctx.get("image_data_urls") or [] if args.get("use_attached_images") else []
+                gen = await asyncio.wait_for(irina_images.generate(
+                    _get_client(), prompt=str(args.get("prompt", "")), model=args.get("model"),
+                    transparent=bool(args.get("transparent")), output_format=str(args.get("format") or "png"),
+                    aspect_ratio=args.get("aspect_ratio"), reference_data_urls=refs, user=f"discord:{message.author.id}",
+                ), timeout=LLM_TIMEOUT_SEC)
+                ctx.setdefault("files", []).append(discord.File(io.BytesIO(gen["bytes"]), filename=gen["filename"]))
+                ctx["cost"] = float(ctx.get("cost", 0.0)) + gen["cost_usd"]
+                _count_images(guild_id, 1)
+                result = {"ok": True, "attached": True, "model": gen["model"], "mime": gen["mime"], "transparent": gen["transparent_method"],
+                          "note": "画像は返信に自動で添付される。本文では一言添えるだけでよい"}
         elif name == "remember":
             note = str(args.get("note", "")).strip()[:300]
             if not note:
@@ -416,7 +457,7 @@ async def _transcribe_audio(data: bytes, filename: str, mime: str) -> Optional[s
     return None
 
 
-async def _attachment_parts(message: discord.Message) -> Tuple[list, List[str]]:
+async def _attachment_parts(message: discord.Message) -> Tuple[list, List[str], List[str]]:
     """添付を xAI の Content に変換する。戻り値 (parts, 補足テキスト)。
     画像 → image（8MB 以下は base64 で直接、それ以上は Discord の URL）
     PDF / Word / Excel / PowerPoint / テキスト・コード → file(data=…)
@@ -424,6 +465,7 @@ async def _attachment_parts(message: discord.Message) -> Tuple[list, List[str]]:
     動画・その他 → 名前だけ伝える"""
     parts: list = []
     notes: List[str] = []
+    image_data_urls: List[str] = []
     for a in message.attachments[:MAX_ATTACHMENTS_PER_MESSAGE]:
         mime = (a.content_type or "").split(";")[0].strip().lower()
         ext = _ext(a.filename or "")
@@ -434,10 +476,12 @@ async def _attachment_parts(message: discord.Message) -> Tuple[list, List[str]]:
             if mime.startswith("image/") or ext in ("png", "jpg", "jpeg", "gif", "webp"):
                 if (a.size or 0) <= MAX_IMAGE_INLINE_BYTES:
                     data = await a.read()
-                    import base64
-                    parts.append(image(f"data:{mime or 'image/png'};base64,{base64.b64encode(data).decode()}", detail="auto"))
+                    url = irina_images.data_url(data, mime or "image/png")
+                    parts.append(image(url, detail="auto"))
+                    image_data_urls.append(url)
                 else:
                     parts.append(image(a.url, detail="auto"))
+                    image_data_urls.append(a.url)
             elif mime.startswith("audio/") or ext in ("ogg", "mp3", "m4a", "wav", "flac", "aac", "opus"):
                 data = await a.read()
                 textv = await _transcribe_audio(data, a.filename, mime)
@@ -460,7 +504,7 @@ async def _attachment_parts(message: discord.Message) -> Tuple[list, List[str]]:
             notes.append(f"添付 {a.filename} を読めなかった")
     if len(message.attachments) > MAX_ATTACHMENTS_PER_MESSAGE:
         notes.append(f"添付が {len(message.attachments)} 個あり、最初の {MAX_ATTACHMENTS_PER_MESSAGE} 個だけ読んだ")
-    return parts, notes
+    return parts, notes, image_data_urls
 
 
 async def _recent_context(channel, bot_user_id: int, exclude_id: int, *, include_bot: bool = True) -> str:
@@ -623,7 +667,7 @@ async def _one_turn(chat, renderer: _Renderer):
     return final
 
 
-CLIENT_TOOL_NAMES = {"http_request", "fetch_url", "remember", "forget"}
+CLIENT_TOOL_NAMES = {"http_request", "fetch_url", "remember", "forget", "generate_image"}
 
 
 def _client_tool_calls(response) -> list:
@@ -641,8 +685,9 @@ def _client_tool_calls(response) -> list:
     return calls
 
 
-async def _run_tool_loop(chat, message: discord.Message, renderer: _Renderer):
-    """tool_calls が無くなるまで回す。戻り値は (最終 Response, ツール回数, 生成画像, 合計コスト USD)"""
+async def _run_tool_loop(chat, message: discord.Message, renderer: _Renderer, ctx: Dict[str, Any]):
+    """tool_calls が無くなるまで回す。戻り値は (最終 Response, ツール回数, 生成画像, 合計コスト USD)。
+    generate_image の添付ファイルとコストは ctx["files"] / ctx["cost"] に集まる"""
     used = 0
     images: List[Any] = []
     cost = 0.0
@@ -657,7 +702,7 @@ async def _run_tool_loop(chat, message: discord.Message, renderer: _Renderer):
         chat.append(response)
         for tc in calls:
             used += 1
-            result = await _execute_tool(tc, message)
+            result = await _execute_tool(tc, message, ctx)
             chat.append(tool_result(result, tool_call_id=tc.id))
     # 往復が多すぎた: 最後にツール無しで締めさせる
     chat.append(user("（ツールの往復が上限に達した。ここまでで分かったことだけで返事をして）"))
@@ -711,7 +756,8 @@ async def _ask(message: discord.Message, renderer: _Renderer, *, force_new_chain
         recent = await _recent_context(message.channel, message.guild.me.id, message.id, include_bot=not persona_changed)
         if recent:
             messages.append(user("（参考: 直近のこのチャンネルの流れ。返事はこの後の発言に対してする）\n" + recent))
-    attach_parts, notes = await _attachment_parts(message)
+    attach_parts, notes, image_data_urls = await _attachment_parts(message)
+    ctx: Dict[str, Any] = {"image_data_urls": image_data_urls, "files": [], "cost": 0.0}
     line = _line(message)
     if notes:
         line += "\n" + "\n".join(f"（{n}）" for n in notes)
@@ -729,7 +775,8 @@ async def _ask(message: discord.Message, renderer: _Renderer, *, force_new_chain
         user=f"discord:{message.author.id}",  # xAI 側の利用者識別（乱用検知用）
     )
     try:
-        response, tools_used, image_outputs, cost = await asyncio.wait_for(_run_tool_loop(chat, message, renderer), timeout=TOTAL_TIMEOUT_SEC)
+        response, tools_used, image_outputs, cost = await asyncio.wait_for(_run_tool_loop(chat, message, renderer, ctx), timeout=TOTAL_TIMEOUT_SEC)
+        cost += float(ctx.get("cost", 0.0))
     except asyncio.TimeoutError:
         raise
     except Exception as e:
@@ -743,7 +790,7 @@ async def _ask(message: discord.Message, renderer: _Renderer, *, force_new_chain
 
     content = (response.content or renderer.buffer or "").strip()
     content = _append_citations(content, response)
-    files = _image_files(image_outputs, guild_id)
+    files = _image_files(image_outputs, guild_id) + list(ctx.get("files") or [])
 
     turn_count += 1
     await asyncio.to_thread(db.save_chat_session, channel_id, guild_id, response.id, turn_count, summary, persona_key)
