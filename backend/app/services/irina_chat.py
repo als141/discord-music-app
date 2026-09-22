@@ -562,18 +562,6 @@ def _split_for_discord(content: str) -> List[str]:
     return chunks
 
 
-def _append_citations(content: str, response) -> str:
-    """検索を使ったのに本文に URL が無い場合だけ、出典を 1〜2 個添える"""
-    try:
-        used_tools = bool(getattr(response, "server_side_tool_usage", None))
-        citations = [c for c in (getattr(response, "citations", None) or []) if isinstance(c, str) and c.startswith("http")]
-    except Exception:
-        return content
-    if not used_tools or not citations or re.search(r"https?://", content):
-        return content
-    return content + "\n" + " ".join(f"<{c}>" for c in citations[:2])
-
-
 def _image_files(outputs, guild_id: str) -> List[discord.File]:
     """image_generation の出力を Discord の添付に変換（1 日の上限もここで数える）"""
     files: List[discord.File] = []
@@ -805,8 +793,7 @@ async def _ask(message: discord.Message, renderer: _Renderer, *, force_new_chain
             return await _ask(message, renderer, force_new_chain=True)
         raise
 
-    content = (response.content or renderer.buffer or "").strip()
-    content = _append_citations(content, response)
+    content = (response.content or renderer.buffer or "").strip()  # 出典 URL は自動では添えない（ユーザー指定）
     files = _image_files(image_outputs, guild_id) + list(ctx.get("files") or [])
 
     turn_count += 1
