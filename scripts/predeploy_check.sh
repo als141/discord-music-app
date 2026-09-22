@@ -7,11 +7,15 @@ for gid in $(curl -s -m 15 "$API/bot-guilds" | python3 -c 'import json,sys; prin
   if ! curl -s -m 15 "$API/player-state/$gid" | python3 -c '
 import json,sys
 gid=sys.argv[1]; d=json.load(sys.stdin)
-if d.get("has_player"):
-    cur=(d.get("current_track") or {}).get("title")
-    q=len([x for x in d.get("queue",[]) if not x.get("isCurrent")])
+cur=(d.get("current_track") or {}).get("title")
+q=len([x for x in d.get("queue",[]) if not x.get("isCurrent")])
+if d.get("has_player") and (d.get("is_playing") or cur or q):
+    # 実際に再生中（または再生待ちの曲がある）ときだけ BUSY。人が VC にいるだけの空プレイヤーは
+    # 再起動しても何も切れない（レジュームも不要）ので IDLE 扱い
     print("BUSY  guild=%s playing=%s current=%r queue=%d" % (gid, d.get("is_playing"), cur, q))
     sys.exit(1)
+elif d.get("has_player"):
+    print("IDLE  guild=%s (player exists, nothing playing)" % gid)
 ' "$gid"; then busy=1; fi
 done
 if [ $busy -eq 1 ]; then echo "→ 再生中のギルドがあります。deploy（bot再起動）は待ってください"; exit 1; fi
