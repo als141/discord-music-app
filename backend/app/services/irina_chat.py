@@ -34,7 +34,7 @@ from xai_sdk.chat import file as xai_file, image, system, text, tool, tool_resul
 from xai_sdk.tools import code_execution, get_tool_call_type, image_generation, web_search, x_search
 
 from .. import db
-from . import irina_images, irina_tools
+from . import irina_images, irina_prompt, irina_tools, irina_trends
 
 JST = timezone(timedelta(hours=9))
 
@@ -179,7 +179,15 @@ Discord サーバーの仲間たちの部屋に居ついていて、呼ばれな
 
 
 def _load_persona() -> Tuple[str, str]:
-    """(キャラ設定テキスト, 変更検知用キー)。テキストは加工しない"""
+    """(system prompt の先頭部分, 変更検知用キー)。
+    まず ~/irina/（persona.md / instructions.md / style.md / knowledge/*）の束を読む（irina_prompt）。
+    束が空なら旧 ~/irina_persona.txt → 環境変数 → 既定文の順。テキストは加工しない"""
+    try:
+        text, key, _info = irina_prompt.load_bundle()
+        if text.strip():
+            return text, f"bundle:{key}"
+    except Exception as e:
+        print(f"[irina-chat] prompt bundle の読み込みに失敗（旧ファイルにフォールバック）: {type(e).__name__}: {e}")
     path = os.path.expanduser(os.getenv("IRINA_PERSONA_FILE") or PERSONA_FILE_DEFAULT)
     try:
         st = os.stat(path)
@@ -262,6 +270,7 @@ def _environment_block(message: discord.Message) -> str:
         " POST /channels/{id}/messages（body {\"content\": \"...\"}）, /guilds/{guild_id}/members/{user_id}, /guilds/{guild_id}/voice-states/{user_id}, /guilds/{guild_id}/members?limit=100 など",
         "  - fetch_url: 任意の公開 URL の本文テキストを取得（HTML はタグを落として最大 8000 文字）",
         "  - remember / forget: このサーバーについて長く覚えておくメモの保存と削除（保存したメモは下の【覚えていること】として毎回渡される）",
+        "  - refresh_x_trends: knowledge の『X トレンドメモ』を今すぐ更新（通常は 1 日 1 回自動）",
     ])
 
 
@@ -337,6 +346,11 @@ GENERATE_IMAGE_TOOL = tool(
         "required": ["prompt"],
     },
 )
+REFRESH_TRENDS_TOOL = tool(
+    name="refresh_x_trends",
+    description="knowledge の『X トレンドメモ』（今日の X でのミーム・語録の使われ方）を今すぐ作り直す。1 日 1 回は自動更新されるので、頼まれたときや古いと感じたときだけ",
+    parameters={"type": "object", "properties": {}},
+)
 FETCH_URL_TOOL = tool(
     name="fetch_url",
     description="メッセージに貼られた URL など、任意の公開 Web ページの本文テキストを取得する（HTML はタグを落として最大 8000 文字）。検索ではなく『このリンクの中身』を読むときに使う",
@@ -353,7 +367,7 @@ def _tools(guild_id: str, *, allow_images: bool = True):
         tools.append(code_execution())
     if IMAGE_GEN_ENABLED and allow_images and _images_left_today(guild_id) > 0:
         tools.append(image_generation())
-    tools += [HTTP_REQUEST_TOOL, FETCH_URL_TOOL, REMEMBER_TOOL, FORGET_TOOL]
+    tools += [HTTP_REQUEST_TOOL, FETCH_URL_TOOL, REMEMBER_TOOL, FORGET_TOOL, REFRESH_TRENDS_TOOL]
     if IMAGE_GEN_ENABLED and allow_images and _images_left_today(guild_id) > 0:
         tools.append(GENERATE_IMAGE_TOOL)
     return tools
@@ -375,6 +389,9 @@ async def _execute_tool(tc, message: discord.Message, ctx: Optional[Dict[str, An
             )
         elif name == "fetch_url":
             result = await irina_tools.fetch_url(str(args.get("url", "")))
+        elif name == "refresh_x_trends":
+            textv = await irina_trends.refresh(_get_client(), XAI_MODEL, reason=f"manual by {actor}")
+            result = {"ok": True, "chars": len(textv), "note": "次の発言から新しいメモが system prompt に入る（会話は新しいチェーンで続く）", "preview": textv[:600]}
         elif name == "generate_image":
             guild_id = str(message.guild.id)
             if _images_left_today(guild_id) <= 0:
@@ -667,7 +684,7 @@ async def _one_turn(chat, renderer: _Renderer):
     return final
 
 
-CLIENT_TOOL_NAMES = {"http_request", "fetch_url", "remember", "forget", "generate_image"}
+CLIENT_TOOL_NAMES = {"http_request", "fetch_url", "remember", "forget", "generate_image", "refresh_x_trends"}
 
 
 def _client_tool_calls(response) -> list:
