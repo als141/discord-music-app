@@ -31,6 +31,25 @@ def _rembg_available() -> bool:
         return False
 
 
+def warmup() -> str:
+    """rembg のモデルを先に読み込んでおく（Pi 4 では初回 import + モデル読込に数分かかるため、起動時に別スレッドで）。
+    voice プロセスの on_ready から asyncio.to_thread で呼ぶ。失敗しても透過はクロマキーにフォールバックするだけ"""
+    global _rembg_session
+    if os.getenv("IRINA_REMBG_WARMUP", "1") == "0":
+        return "disabled"
+    try:
+        import time
+        t = time.time()
+        from rembg import new_session
+        if _rembg_session is None:
+            _rembg_session = new_session(os.getenv("IRINA_REMBG_MODEL") or "u2netp")
+        msg = f"rembg ready in {time.time() - t:.1f}s"
+    except Exception as e:
+        msg = f"rembg unavailable ({type(e).__name__}: {str(e)[:80]}) → 透過はクロマキーで代替"
+    print(f"[irina-images] {msg}")
+    return msg
+
+
 def _remove_background(img: Image.Image) -> Tuple[Image.Image, str]:
     """背景を透過にする。戻り値 (RGBA 画像, 使った方法)"""
     global _rembg_session

@@ -150,6 +150,7 @@ _VOICE_AUTO_JOIN_MAX_FAILURES = 3   # 最大連続失敗回数（超えたら自
 # ボット切断イベントの重複防止
 _voice_disconnect_processing: set = set()
 _shelf_resolver_task = None
+_rembg_warmup_task = None
 
 # 画像をローカルに保存するヘルパー関数 (変更なし)
 async def save_image(image_data, prefix="img"):
@@ -581,6 +582,11 @@ async def on_ready():
     global _shelf_resolver_task
     if _shelf_resolver_task is None or _shelf_resolver_task.done():
         _shelf_resolver_task = client.loop.create_task(shared_links.resolver_loop())
+    # 画像の背景透過（rembg）のモデルを先読み。イベントループは塞がない（別スレッド）
+    global _rembg_warmup_task
+    if _rembg_warmup_task is None or _rembg_warmup_task.done():
+        from .services import irina_images
+        _rembg_warmup_task = client.loop.create_task(asyncio.to_thread(irina_images.warmup))
 
     # 各ギルドにグローバルコマンドをコピーして即座に同期
     for guild in client.guilds:
