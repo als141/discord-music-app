@@ -256,7 +256,7 @@ def _environment_block(message: discord.Message) -> str:
         f"- 場所: Discord サーバー「{guild.name}」(guild_id={guild.id}) の #{getattr(channel, 'name', 'bot')} (channel_id={channel.id})。あなた（bot）の user_id={me.id if me else '?'}",
         "- 発言は「[時刻(JST)] 名前 (user_id=…): 内容」の形で届く。添付があれば [添付: …] と書かれ、画像・PDF・Word/Excel/PowerPoint・テキスト/コードはそのまま読める形で一緒に渡される。音声・ボイスメッセージは文字起こしが本文に添えられる。動画は中身が渡らない",
         "- 使えるツール:",
-        "  - web_search / x_search: Web と X（Twitter）の検索（xAI 側で実行。結果の URL は citations として付く）",
+        "  - web_search / x_search: Web と X（Twitter）の検索（xAI 側で実行）",
         "  - code_execution: Python を実行して計算・集計・簡単なコードを試せる",
         "  - image_generation: 画像を生成する。生成画像は自動で Discord に添付される（本文の次のメッセージとして届く）。添付された画像を参考にした生成や、直前に生成した画像の追加編集（「さっきの猫を白に」など）もできる",
         "  - http_request: curl のように 1 回の HTTP を送る。service=\"irina\" はこのボット自身の API（web プロセス）で、主なエンドポイント →"
