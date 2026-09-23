@@ -1,8 +1,11 @@
 """bot 専用チャンネルでのイリーナのテキスト応答（xAI Grok）— 小さなエージェントハーネス（xai-sdk 1.19 対応版）。
 
-- 対象: `IRINA_CHAT_CHANNEL_IDS`（既定: テストサーバー #riona、ドデカサーバー bot 専用）とその中のスレッドだけ。
-  それ以外の場所ではイリーナは自分から一切喋らない
-- メンション不要。人間の投稿すべてに返す（bot と空メッセージだけ無視）
+- bot 専用チャンネル（`IRINA_CHAT_CHANNEL_IDS`。既定: テストサーバー #riona、ドデカサーバー bot 専用）とその中のスレッドでは
+  メンション不要で人間の投稿すべてに返す（bot と空メッセージだけ無視）
+- それ以外のテキストチャンネルでは、**@メンションされたとき／イリーナの発言に返信されたときだけ**返す（@everyone は対象外）。
+  自分からは喋らない
+- 新しいチェーンの開始時は直近 `IRINA_CHAT_CONTEXT_MESSAGES`（既定 60）件、それ以降は「前回返事した後にそのチャンネルであった発言」
+  （最大 `IRINA_CHAT_GAP_MESSAGES`=80 件）を毎回渡すので、呼ばれたときだけ返すチャンネルでも流れを把握している
 - モデル: `XAI_MODEL`（既定 grok-4.7）、`XAI_REASONING_EFFORT`（none/low/medium/high/xhigh、既定 medium）、
   `XAI_SERVICE_TIER`（default / priority）
 - **ストリーミング**: `chat.stream()` で受け取りながら Discord の返信を 1.5 秒ごとに編集して育てる（`IRINA_CHAT_STREAM=0` で従来の一括送信）
@@ -53,7 +56,8 @@ TOTAL_TIMEOUT_SEC = 300          # ツールループ全体の上限
 TOOL_ROUNDS_MAX = 8              # 1 メッセージあたりのツール往復回数
 COMPACT_TURNS = 40               # このターン数で要約→新チェーン
 COMPACT_PROMPT_TOKENS = 150_000  # または直近のプロンプトがこのトークン数を超えたら
-SEED_HISTORY_LIMIT = 10          # 新チェーン開始時に「直近の流れ」として渡す件数
+CONTEXT_MESSAGES = int(os.getenv("IRINA_CHAT_CONTEXT_MESSAGES") or "60")   # 新チェーン開始時に「直近の流れ」として渡す件数
+GAP_MESSAGES_MAX = int(os.getenv("IRINA_CHAT_GAP_MESSAGES") or "80")       # 前回の返事以降にあった発言を毎回渡す上限（メンション運用のチャンネル向け）
 MAX_ATTACHMENTS_PER_MESSAGE = 5  # 1 メッセージで読む添付の上限
 MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 MAX_IMAGE_INLINE_BYTES = 8 * 1024 * 1024   # これ以下は base64 で直接渡す（Discord の署名 URL に依存しない）
@@ -254,6 +258,8 @@ def _environment_block(message: discord.Message) -> str:
     return "\n".join([
         "",
         f"- 場所: Discord サーバー「{guild.name}」(guild_id={guild.id}) の #{getattr(channel, 'name', 'bot')} (channel_id={channel.id})。あなた（bot）の user_id={me.id if me else '?'}",
+        ("- このチャンネルでは、あなたは呼ばれなくても全部の発言に返事をしている" if is_chat_channel(channel)
+         else "- このチャンネルは普段は人同士の会話の場で、あなたは @メンションされたときや自分の発言に返信されたときだけ返事をしている。それ以外の発言は参考として渡される"),
         "- 発言は「[時刻(JST)] 名前 (user_id=…): 内容」の形で届く。添付があれば [添付: …] と書かれ、画像・PDF・Word/Excel/PowerPoint・テキスト/コードはそのまま読める形で一緒に渡される。音声・ボイスメッセージは文字起こしが本文に添えられる。動画は中身が渡らない",
         "- 使えるツール:",
         "  - web_search / x_search: Web と X（Twitter）の検索（xAI 側で実行）",
@@ -524,21 +530,30 @@ async def _attachment_parts(message: discord.Message) -> Tuple[list, List[str], 
     return parts, notes, image_data_urls
 
 
-async def _recent_context(channel, bot_user_id: int, exclude_id: int, *, include_bot: bool = True) -> str:
-    """新しいチェーンを始めるとき、直近のチャンネルの流れを参考情報として渡す。
+async def _recent_context(channel, bot_user_id: int, exclude_id: int, *, include_bot: bool = True,
+                          limit: Optional[int] = None, after_id: Optional[int] = None) -> str:
+    """チャンネルの流れを参考情報として渡す。
+    - after_id 指定時: そのメッセージより後の発言（＝前回返事した後の流れ）を最大 GAP_MESSAGES_MAX 件
+    - 未指定時: 直近 limit（既定 CONTEXT_MESSAGES）件（新しいチェーンの開始時）
     キャラ設定を変えた直後は include_bot=False にして、イリーナ自身の古い口調の発言を混ぜない
     （混ぜると新しい設定より過去の自分の文体を真似てしまい、「反映されていない」ように見える）"""
     try:
         lines: List[str] = []
-        async for m in channel.history(limit=SEED_HISTORY_LIMIT * 2 + 1):
+        if after_id:
+            it = channel.history(after=discord.Object(id=int(after_id)), limit=GAP_MESSAGES_MAX, oldest_first=True)
+        else:
+            it = channel.history(limit=(limit or CONTEXT_MESSAGES) * 2 + 1)
+        async for m in it:
             if m.id == exclude_id or not (m.content or "").strip():
                 continue
             if m.author.id == bot_user_id and not include_bot:
                 continue
             who = "イリーナ" if m.author.id == bot_user_id else _display_name(m.author)
-            lines.append(f"[{m.created_at.astimezone(JST):%m/%d %H:%M}] {who}: {m.content.strip()[:200]}")
-        lines.reverse()
-        return "\n".join(lines[-SEED_HISTORY_LIMIT:])
+            lines.append(f"[{m.created_at.astimezone(JST):%m/%d %H:%M}] {who}: {m.content.strip()[:300]}")
+        if not after_id:
+            lines.reverse()
+            lines = lines[-(limit or CONTEXT_MESSAGES):]
+        return "\n".join(lines)
     except Exception as e:
         print(f"[irina-chat] 直近履歴の取得に失敗（無視）: {type(e).__name__}: {e}")
         return ""
@@ -761,6 +776,11 @@ async def _ask(message: discord.Message, renderer: _Renderer, *, force_new_chain
         recent = await _recent_context(message.channel, message.guild.me.id, message.id, include_bot=not persona_changed)
         if recent:
             messages.append(user("（参考: 直近のこのチャンネルの流れ。返事はこの後の発言に対してする）\n" + recent))
+    elif session.get("last_message_id"):
+        # 前回返事した後にこのチャンネルであった発言（メンション運用のチャンネルでは間が空くので毎回埋める）
+        gap = await _recent_context(message.channel, message.guild.me.id, message.id, after_id=int(session["last_message_id"]))
+        if gap:
+            messages.append(user("（参考: 前回の返事のあとにこのチャンネルであった発言。返事はこの後の発言に対してする）\n" + gap))
     attach_parts, notes, image_data_urls = await _attachment_parts(message)
     ctx: Dict[str, Any] = {"image_data_urls": image_data_urls, "files": [], "cost": 0.0}
     line = _line(message)
@@ -797,7 +817,7 @@ async def _ask(message: discord.Message, renderer: _Renderer, *, force_new_chain
     files = _image_files(image_outputs, guild_id) + list(ctx.get("files") or [])
 
     turn_count += 1
-    await asyncio.to_thread(db.save_chat_session, channel_id, guild_id, response.id, turn_count, summary, persona_key)
+    await asyncio.to_thread(db.save_chat_session, channel_id, guild_id, response.id, turn_count, summary, persona_key, str(message.id))
 
     usage = getattr(response, "usage", None)
     prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
@@ -818,15 +838,33 @@ async def _ask(message: discord.Message, renderer: _Renderer, *, force_new_chain
             print(f"[irina-chat] 圧縮に失敗（次回また試す）: {type(e).__name__}: {e}")
 
 
+async def _is_addressed(message: discord.Message) -> bool:
+    """bot 専用チャンネル以外で返事をする条件: @イリーナ（@everyone/@here は除く）か、イリーナの発言への返信"""
+    me = message.guild.me
+    if me in message.mentions:
+        return True
+    ref = message.reference
+    if ref and ref.message_id:
+        resolved = ref.resolved if isinstance(ref.resolved, discord.Message) else None
+        if resolved is None:
+            try:
+                resolved = await message.channel.fetch_message(ref.message_id)
+            except Exception:
+                resolved = None
+        if resolved is not None and resolved.author.id == me.id:
+            return True
+    return False
+
+
 async def handle_message(message: discord.Message) -> None:
     """on_message から呼ぶ。対象外・無視条件はここで判定して静かに戻る"""
     if not is_enabled():
         return
     if message.author.bot and os.getenv("IRINA_CHAT_ALLOW_BOTS") != "1":
         return
-    if message.guild is None or not is_chat_channel(message.channel):
+    if message.guild is None or message.author.id == message.guild.me.id:
         return
-    if message.author.id == message.guild.me.id:
+    if not is_chat_channel(message.channel) and not await _is_addressed(message):
         return
     content = (message.content or "").strip()
     if not content and not message.attachments:

@@ -107,6 +107,11 @@ def init_db():
             updated_at       TEXT NOT NULL
         )
         """)
+        # 既存 DB への列追加（前回返事した時点のメッセージ ID。それ以降のチャンネルの流れを次の発言で渡す）
+        try:
+            conn.execute("ALTER TABLE chat_sessions ADD COLUMN last_message_id TEXT")
+        except sqlite3.OperationalError:
+            pass  # 既にある
         conn.execute("""
         CREATE TABLE IF NOT EXISTS chat_memory (
             id         INTEGER PRIMARY KEY,
@@ -451,24 +456,25 @@ def update_shared_link_meta(link_id: int, *, title: Optional[str], artist: Optio
 def get_chat_session(channel_id: str) -> Optional[Dict[str, Any]]:
     with _connect() as conn:
         r = conn.execute(
-            "SELECT channel_id, guild_id, last_response_id, turn_count, summary, persona_key, updated_at FROM chat_sessions WHERE channel_id = ?",
+            "SELECT channel_id, guild_id, last_response_id, turn_count, summary, persona_key, updated_at, last_message_id FROM chat_sessions WHERE channel_id = ?",
             (channel_id,),
         ).fetchone()
     if not r:
         return None
-    return {"channel_id": r[0], "guild_id": r[1], "last_response_id": r[2], "turn_count": r[3], "summary": r[4], "persona_key": r[5], "updated_at": r[6]}
+    return {"channel_id": r[0], "guild_id": r[1], "last_response_id": r[2], "turn_count": r[3], "summary": r[4], "persona_key": r[5], "updated_at": r[6], "last_message_id": r[7]}
 
 
 def save_chat_session(channel_id: str, guild_id: Optional[str], last_response_id: Optional[str], turn_count: int,
-                      summary: Optional[str], persona_key: Optional[str]) -> None:
+                      summary: Optional[str], persona_key: Optional[str], last_message_id: Optional[str] = None) -> None:
     now = datetime.now(timezone.utc).isoformat()
     with _connect() as conn:
         conn.execute(
-            """INSERT INTO chat_sessions (channel_id, guild_id, last_response_id, turn_count, summary, persona_key, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)
+            """INSERT INTO chat_sessions (channel_id, guild_id, last_response_id, turn_count, summary, persona_key, updated_at, last_message_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(channel_id) DO UPDATE SET guild_id=excluded.guild_id, last_response_id=excluded.last_response_id,
-                 turn_count=excluded.turn_count, summary=excluded.summary, persona_key=excluded.persona_key, updated_at=excluded.updated_at""",
-            (channel_id, guild_id, last_response_id, turn_count, summary, persona_key, now),
+                 turn_count=excluded.turn_count, summary=excluded.summary, persona_key=excluded.persona_key, updated_at=excluded.updated_at,
+                 last_message_id=COALESCE(excluded.last_message_id, chat_sessions.last_message_id)""",
+            (channel_id, guild_id, last_response_id, turn_count, summary, persona_key, now, last_message_id),
         )
 
 
