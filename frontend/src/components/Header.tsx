@@ -11,6 +11,9 @@ import { useSession, signIn, signOut } from 'next-auth/react'
 import { useGuildStore, usePlayerStore } from '@/store'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { NoticeBell } from '@/components/guide/NoticeCenter'
+import { useDeviceStore } from '@/store/useDeviceStore'
+import { BellRing, ShieldCheck } from 'lucide-react'
+import Link from 'next/link'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -41,6 +44,9 @@ export const Header: React.FC<HeaderProps> = React.memo(({
   const activeServer = mutualServers.find(s => s.id === activeServerId) || null
   const activeChannel = voiceChannels.find(c => c.id === activeChannelId) || null
   const connectionStatus = usePlayerStore(s => s.connectionStatus)
+  const isAdmin = useDeviceStore(s => s.isAdmin)
+  const notifyOn = useDeviceStore(s => s.permission === 'granted' && s.subscribed)
+  const deviceKnown = useDeviceStore(s => s.info !== null)
   const isSyncing = !!activeServer && (connectionStatus === 'connecting' || connectionStatus === 'reconnecting' || connectionStatus === 'error')
 
   useEffect(() => {
@@ -259,6 +265,25 @@ export const Header: React.FC<HeaderProps> = React.memo(({
                     <p className="text-sm font-medium text-foreground">{session.user.name}</p>
                     <p className="text-xs text-muted-foreground truncate">{session.user.email}</p>
                   </div>
+                  <DropdownMenuSeparator className="bg-black/5" />
+                  <DropdownMenuItem
+                    onClick={() => useDeviceStore.getState().openSettings()}
+                    className="cursor-pointer"
+                  >
+                    <BellRing className="mr-2 h-4 w-4" />
+                    通知とアプリ
+                    {deviceKnown && !notifyOn && (
+                      <span className="ml-auto h-2 w-2 rounded-full bg-primary" aria-label="未設定" />
+                    )}
+                  </DropdownMenuItem>
+                  {isAdmin && (
+                    <DropdownMenuItem asChild className="cursor-pointer">
+                      <Link href="/admin">
+                        <ShieldCheck className="mr-2 h-4 w-4" />
+                        管理画面
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator className="bg-black/5" />
                   <DropdownMenuItem
                     onClick={handleSignOut}

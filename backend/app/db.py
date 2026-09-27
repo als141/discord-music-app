@@ -121,6 +121,78 @@ def init_db():
             created_at TEXT NOT NULL
         )
         """)
+        # Web アプリを開いた端末（ホーム画面に追加したか・通知の許可・プッシュ購読）。device_id はブラウザが持つ乱数
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS app_devices (
+            device_id        TEXT PRIMARY KEY,
+            user_id          TEXT NOT NULL,
+            user_name        TEXT,
+            user_image       TEXT,
+            platform         TEXT,
+            browser          TEXT,
+            form_factor      TEXT,
+            standalone       INTEGER NOT NULL DEFAULT 0,
+            ever_standalone  INTEGER NOT NULL DEFAULT 0,
+            installed_at     TEXT,
+            notif_permission TEXT,
+            push_endpoint    TEXT,
+            push_p256dh      TEXT,
+            push_auth        TEXT,
+            push_updated_at  TEXT,
+            push_last_ok_at  TEXT,
+            push_last_error  TEXT,
+            app_version      TEXT,
+            app_build        TEXT,
+            user_agent       TEXT,
+            first_seen_at    TEXT NOT NULL,
+            last_seen_at     TEXT NOT NULL
+        )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_app_devices_user ON app_devices(user_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_app_devices_endpoint ON app_devices(push_endpoint)")
+        # 通知の種類ごとの受け取り設定（お知らせは常に届くので列なし）
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS notif_prefs (
+            user_id    TEXT PRIMARY KEY,
+            shelf      INTEGER NOT NULL DEFAULT 1,
+            vc_music   INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT NOT NULL
+        )
+        """)
+        # 送った通知の記録（管理画面の履歴・開封数）
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS push_log (
+            id             INTEGER PRIMARY KEY,
+            kind           TEXT NOT NULL,
+            title          TEXT NOT NULL,
+            body           TEXT,
+            url            TEXT,
+            target_users   INTEGER NOT NULL DEFAULT 0,
+            target_devices INTEGER NOT NULL DEFAULT 0,
+            sent           INTEGER NOT NULL DEFAULT 0,
+            failed         INTEGER NOT NULL DEFAULT 0,
+            removed        INTEGER NOT NULL DEFAULT 0,
+            clicked        INTEGER NOT NULL DEFAULT 0,
+            created_by     TEXT,
+            created_at     TEXT NOT NULL
+        )
+        """)
+        # 自動通知の間引き（ユーザー × 種類ごとの最終送信）と、ギルドの再生状態の切り替わり時刻
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS push_throttle (
+            user_id      TEXT NOT NULL,
+            kind         TEXT NOT NULL,
+            last_sent_at TEXT NOT NULL,
+            PRIMARY KEY (user_id, kind)
+        )
+        """)
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS guild_activity (
+            guild_id   TEXT PRIMARY KEY,
+            state      TEXT NOT NULL,
+            changed_at TEXT NOT NULL
+        )
+        """)
 
 
 # ---------------------------------------------------------------------------
@@ -502,3 +574,207 @@ def delete_chat_memory(guild_id: str, memory_id: int) -> bool:
     with _connect() as conn:
         cur = conn.execute("DELETE FROM chat_memory WHERE guild_id = ? AND id = ?", (guild_id, memory_id))
         return cur.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# Web アプリの端末・通知
+# ---------------------------------------------------------------------------
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+_DEVICE_COLUMNS = (
+    "device_id", "user_id", "user_name", "user_image", "platform", "browser", "form_factor", "standalone",
+    "ever_standalone", "installed_at", "notif_permission", "push_endpoint", "push_p256dh", "push_auth",
+    "push_updated_at", "push_last_ok_at", "push_last_error", "app_version", "app_build", "user_agent",
+    "first_seen_at", "last_seen_at",
+)
+
+
+def _device_row(r) -> Dict[str, Any]:
+    return dict(zip(_DEVICE_COLUMNS, r))
+
+
+def upsert_app_device(*, device_id: str, user_id: str, user_name: str, user_image: str, platform: str, browser: str,
+                      form_factor: str, standalone: bool, installed: bool, notif_permission: str,
+                      subscription: Optional[Dict[str, Any]], app_version: str, app_build: str, user_agent: str) -> Dict[str, Any]:
+    """端末の最新状態を記録する。subscription が None なら購読は変えない / {} なら購読を消す"""
+    now = _now_iso()
+    with _connect() as conn:
+        # 同じ端末から同時に 2 回届いても落ちないよう、先に行だけ確保してから更新する
+        conn.execute("INSERT OR IGNORE INTO app_devices (device_id, user_id, first_seen_at, last_seen_at) VALUES (?, ?, ?, ?)",
+                     (device_id, user_id, now, now))
+        prev = conn.execute("SELECT ever_standalone, installed_at FROM app_devices WHERE device_id = ?", (device_id,)).fetchone()
+        ever = 1 if (standalone or installed or prev[0]) else 0
+        installed_at = prev[1] or (now if (standalone or installed) else None)
+        conn.execute(
+            """UPDATE app_devices SET user_id = ?, user_name = ?, user_image = ?, platform = ?, browser = ?,
+               form_factor = ?, standalone = ?, ever_standalone = ?, installed_at = ?, notif_permission = ?,
+               app_version = ?, app_build = ?, user_agent = ?, last_seen_at = ? WHERE device_id = ?""",
+            (user_id, user_name, user_image, platform, browser, form_factor, 1 if standalone else 0, ever,
+             installed_at, notif_permission, app_version, app_build, user_agent, now, device_id),
+        )
+        if subscription is not None:
+            endpoint = (subscription or {}).get("endpoint")
+            keys = (subscription or {}).get("keys") or {}
+            if endpoint and keys.get("p256dh") and keys.get("auth"):
+                # 同じ購読が別の device_id に残っていたら（ブラウザのデータを消した等）付け替える
+                conn.execute("UPDATE app_devices SET push_endpoint = NULL, push_p256dh = NULL, push_auth = NULL "
+                             "WHERE push_endpoint = ? AND device_id != ?", (endpoint, device_id))
+                conn.execute(
+                    """UPDATE app_devices SET push_endpoint = ?, push_p256dh = ?, push_auth = ?, push_updated_at = ?,
+                       push_last_error = CASE WHEN push_endpoint = ? THEN push_last_error ELSE NULL END
+                       WHERE device_id = ?""",
+                    (endpoint, keys["p256dh"], keys["auth"], now, endpoint, device_id),
+                )
+            else:
+                conn.execute("UPDATE app_devices SET push_endpoint = NULL, push_p256dh = NULL, push_auth = NULL, "
+                             "push_updated_at = ? WHERE device_id = ?", (now, device_id))
+        row = conn.execute(f"SELECT {', '.join(_DEVICE_COLUMNS)} FROM app_devices WHERE device_id = ?", (device_id,)).fetchone()
+    return _device_row(row)
+
+
+def replace_push_subscription(old_endpoint: str, subscription: Dict[str, Any]) -> bool:
+    """Service Worker の pushsubscriptionchange 用。古い endpoint を知っている端末だけが付け替えられる"""
+    endpoint = subscription.get("endpoint")
+    keys = subscription.get("keys") or {}
+    if not (old_endpoint and endpoint and keys.get("p256dh") and keys.get("auth")):
+        return False
+    with _connect() as conn:
+        cur = conn.execute(
+            "UPDATE app_devices SET push_endpoint = ?, push_p256dh = ?, push_auth = ?, push_updated_at = ?, "
+            "push_last_error = NULL WHERE push_endpoint = ?",
+            (endpoint, keys["p256dh"], keys["auth"], _now_iso(), old_endpoint),
+        )
+        return cur.rowcount > 0
+
+
+def clear_push_subscription(*, device_id: Optional[str] = None, endpoint: Optional[str] = None,
+                            error: Optional[str] = None) -> None:
+    with _connect() as conn:
+        if device_id:
+            conn.execute("UPDATE app_devices SET push_endpoint = NULL, push_p256dh = NULL, push_auth = NULL, "
+                         "push_updated_at = ?, push_last_error = ? WHERE device_id = ?", (_now_iso(), error, device_id))
+        elif endpoint:
+            conn.execute("UPDATE app_devices SET push_endpoint = NULL, push_p256dh = NULL, push_auth = NULL, "
+                         "push_updated_at = ?, push_last_error = ? WHERE push_endpoint = ?", (_now_iso(), error, endpoint))
+
+
+def mark_push_result(device_id: str, ok: bool, error: Optional[str] = None) -> None:
+    with _connect() as conn:
+        if ok:
+            conn.execute("UPDATE app_devices SET push_last_ok_at = ?, push_last_error = NULL WHERE device_id = ?",
+                         (_now_iso(), device_id))
+        else:
+            conn.execute("UPDATE app_devices SET push_last_error = ? WHERE device_id = ?", ((error or "")[:200], device_id))
+
+
+def list_app_devices(user_ids: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    with _connect() as conn:
+        if user_ids:
+            marks = ",".join("?" for _ in user_ids)
+            rows = conn.execute(f"SELECT {', '.join(_DEVICE_COLUMNS)} FROM app_devices WHERE user_id IN ({marks}) "
+                                "ORDER BY last_seen_at DESC", tuple(user_ids)).fetchall()
+        else:
+            rows = conn.execute(f"SELECT {', '.join(_DEVICE_COLUMNS)} FROM app_devices ORDER BY last_seen_at DESC").fetchall()
+    return [_device_row(r) for r in rows]
+
+
+def list_push_devices(user_ids: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    """プッシュを送れる端末（購読あり）"""
+    return [d for d in list_app_devices(user_ids) if d.get("push_endpoint")]
+
+
+DEFAULT_NOTIF_PREFS = {"shelf": True, "vc_music": True}
+
+
+def get_notif_prefs(user_id: str) -> Dict[str, bool]:
+    with _connect() as conn:
+        r = conn.execute("SELECT shelf, vc_music FROM notif_prefs WHERE user_id = ?", (user_id,)).fetchone()
+    if not r:
+        return dict(DEFAULT_NOTIF_PREFS)
+    return {"shelf": bool(r[0]), "vc_music": bool(r[1])}
+
+
+def get_all_notif_prefs() -> Dict[str, Dict[str, bool]]:
+    with _connect() as conn:
+        rows = conn.execute("SELECT user_id, shelf, vc_music FROM notif_prefs").fetchall()
+    return {r[0]: {"shelf": bool(r[1]), "vc_music": bool(r[2])} for r in rows}
+
+
+def save_notif_prefs(user_id: str, prefs: Dict[str, bool]) -> Dict[str, bool]:
+    merged = {**get_notif_prefs(user_id), **{k: bool(v) for k, v in prefs.items() if k in DEFAULT_NOTIF_PREFS}}
+    with _connect() as conn:
+        conn.execute(
+            """INSERT INTO notif_prefs (user_id, shelf, vc_music, updated_at) VALUES (?, ?, ?, ?)
+               ON CONFLICT(user_id) DO UPDATE SET shelf = excluded.shelf, vc_music = excluded.vc_music,
+               updated_at = excluded.updated_at""",
+            (user_id, int(merged["shelf"]), int(merged["vc_music"]), _now_iso()),
+        )
+    return merged
+
+
+def add_push_log(*, kind: str, title: str, body: str, url: str, created_by: Optional[str]) -> int:
+    with _connect() as conn:
+        cur = conn.execute(
+            "INSERT INTO push_log (kind, title, body, url, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (kind, title, body, url, created_by, _now_iso()),
+        )
+        return int(cur.lastrowid)
+
+
+def finish_push_log(log_id: int, *, target_users: int, target_devices: int, sent: int, failed: int, removed: int) -> None:
+    with _connect() as conn:
+        conn.execute("UPDATE push_log SET target_users = ?, target_devices = ?, sent = ?, failed = ?, removed = ? "
+                     "WHERE id = ?", (target_users, target_devices, sent, failed, removed, log_id))
+
+
+def count_push_click(log_id: int) -> None:
+    with _connect() as conn:
+        conn.execute("UPDATE push_log SET clicked = clicked + 1 WHERE id = ?", (log_id,))
+
+
+def list_push_log(limit: int = 30) -> List[Dict[str, Any]]:
+    cols = ("id", "kind", "title", "body", "url", "target_users", "target_devices", "sent", "failed", "removed",
+            "clicked", "created_by", "created_at")
+    with _connect() as conn:
+        rows = conn.execute(f"SELECT {', '.join(cols)} FROM push_log ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+    return [dict(zip(cols, r)) for r in rows]
+
+
+def throttle_ok(user_id: str, kind: str, min_interval_sec: int) -> bool:
+    """最後に送ってから min_interval_sec 経っていれば True（呼んだだけでは記録しない）"""
+    with _connect() as conn:
+        r = conn.execute("SELECT last_sent_at FROM push_throttle WHERE user_id = ? AND kind = ?", (user_id, kind)).fetchone()
+    if not r:
+        return True
+    try:
+        last = datetime.fromisoformat(r[0])
+    except ValueError:
+        return True
+    return (datetime.now(timezone.utc) - last).total_seconds() >= min_interval_sec
+
+
+def throttle_mark(user_ids: List[str], kind: str) -> None:
+    now = _now_iso()
+    with _connect() as conn:
+        conn.executemany(
+            """INSERT INTO push_throttle (user_id, kind, last_sent_at) VALUES (?, ?, ?)
+               ON CONFLICT(user_id, kind) DO UPDATE SET last_sent_at = excluded.last_sent_at""",
+            [(u, kind, now) for u in user_ids],
+        )
+
+
+def swap_guild_activity(guild_id: str, state: str) -> Optional[Dict[str, Any]]:
+    """ギルドの再生状態（playing / idle）を記録し、直前の記録を返す（無ければ None）"""
+    with _connect() as conn:
+        prev = conn.execute("SELECT state, changed_at FROM guild_activity WHERE guild_id = ?", (guild_id,)).fetchone()
+        if prev and prev[0] == state:
+            return {"state": prev[0], "changed_at": prev[1]}
+        conn.execute(
+            """INSERT INTO guild_activity (guild_id, state, changed_at) VALUES (?, ?, ?)
+               ON CONFLICT(guild_id) DO UPDATE SET state = excluded.state, changed_at = excluded.changed_at""",
+            (guild_id, state, _now_iso()),
+        )
+    return {"state": prev[0], "changed_at": prev[1]} if prev else None

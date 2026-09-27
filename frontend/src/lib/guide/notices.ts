@@ -15,7 +15,7 @@
 import type { TourId } from './tours';
 
 /** 現在のアプリのバージョン（ホームのバージョン表示・お知らせ一覧の見出しに使う） */
-export const APP_VERSION = '1.1.0';
+export const APP_VERSION = '1.2.0';
 export const APP_RELEASE_DATE = '2026-09-28';
 
 export type HomeTab = 'home' | 'shelf' | 'uploaded-music';
@@ -30,7 +30,8 @@ export const NOTICE_KIND_LABEL: Record<NoticeKind, string> = {
 
 export type NoticeAction =
   | { type: 'tour'; tourId: TourId; label: string }
-  | { type: 'open-tab'; tab: HomeTab; label: string };
+  | { type: 'open-tab'; tab: HomeTab; label: string }
+  | { type: 'open-settings'; label: string };
 
 export interface Notice {
   /** 既読管理のキー。公開後は変更しない */
@@ -53,6 +54,16 @@ export interface Notice {
 }
 
 export const NOTICES: Notice[] = [
+  {
+    id: '2026-09-push',
+    publishedAt: '2026-09-28',
+    version: '1.2.0',
+    kind: 'feature',
+    title: 'スマホに通知が届くように',
+    body:
+      'イリーナからの通知を受け取れるようになりました。新機能のお知らせのほか、曲置き場に曲が置かれたときや、VC で音楽が流れ始めたときにも届きます（種類ごとにオフにできます）。iPhone はホーム画面に追加すると使えます。',
+    actions: [{ type: 'open-settings', label: '通知をオンにする' }],
+  },
   {
     id: '2026-09-shelf',
     publishedAt: '2026-09-28',

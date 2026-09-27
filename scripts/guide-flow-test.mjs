@@ -117,7 +117,7 @@ async function mainFlow(browser, vp) {
   await promo.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
   check(`${tag}: 新機能カードが出る`, await promo.isVisible());
   const bell = page.getByRole('button', { name: /^お知らせ/ });
-  check(`${tag}: ベルに未読 1 件`, (await bell.getAttribute('aria-label'))?.includes('未読 1 件'), await bell.getAttribute('aria-label'));
+  check(`${tag}: ベルに未読 2 件`, (await bell.getAttribute('aria-label'))?.includes('未読 2 件'), await bell.getAttribute('aria-label'));
   check(`${tag}: 曲置き場タブに NEW`, (await page.locator('[data-tour="tab-shelf"]').getAttribute('aria-label'))?.includes('新機能'));
   check(`${tag}: 横スクロールなし（カード表示中）`, await noOverflow(page));
   await page.waitForTimeout(400);
@@ -178,7 +178,7 @@ async function mainFlow(browser, vp) {
   check(`${tag}: 完了で案内が閉じる`, (await page.locator('[data-guide-tour]').count()) === 0);
   const st = await guideState(page);
   check(`${tag}: 完了が記録される`, st.tours?.shelf?.outcome === 'completed', JSON.stringify(st.tours));
-  check(`${tag}: 未読なし`, !(await bell.getAttribute('aria-label')).includes('未読'));
+  check(`${tag}: 曲置き場の分は既読（残りは今回の通知の告知 1 件）`, (await bell.getAttribute('aria-label')).includes('未読 1 件'), await bell.getAttribute('aria-label'));
   check(`${tag}: NEW が消える`, !(await page.locator('[data-tour="tab-shelf"]').getAttribute('aria-label')).includes('新機能'));
 
   // 6) 再読み込みしても新機能カードは出ない
@@ -188,10 +188,10 @@ async function mainFlow(browser, vp) {
 
   // 7) お知らせ一覧
   await page.getByRole('button', { name: /^お知らせ/ }).click();
-  await page.getByText('Irina Ver. 1.1.0').waitFor({ timeout: 5000 });
+  await page.getByText('Irina Ver. 1.2.0').waitFor({ timeout: 5000 });
   await page.waitForTimeout(500);
   const items = await page.locator('li h3').allTextContents();
-  check(`${tag}: お知らせ一覧に 5 件（新しい順）`, items.length === 5 && items[0] === '曲置き場', items.join(' / '));
+  check(`${tag}: お知らせ一覧に 6 件（新しい順）`, items.length === 6 && items.includes('曲置き場'), items.join(' / '));
   await page.screenshot({ path: join(OUT, `guide-${tag}-6-center.png`) });
   // 一覧から案内を始められる
   await page.getByRole('button', { name: '使い方を見る' }).click();
@@ -228,7 +228,7 @@ async function dismissFlow(browser, vp) {
   await promo.getByRole('button', { name: '閉じる' }).click();
   await page.waitForTimeout(400);
   check(`${tag}: × でカードが消える`, !(await promo.isVisible()));
-  check(`${tag}: × で既読になる`, !(await page.getByRole('button', { name: /^お知らせ/ }).getAttribute('aria-label')).includes('未読'));
+  check(`${tag}: × で既読になる（残りは今回の通知の告知 1 件）`, (await page.getByRole('button', { name: /^お知らせ/ }).getAttribute('aria-label')).includes('未読 1 件'));
   check(`${tag}: NEW は残る（まだ開いていない）`, (await page.locator('[data-tour="tab-shelf"]').getAttribute('aria-label')).includes('新機能'));
 
   // 曲置き場の「使い方」から案内（途中のステップの対象が無い場合の飛ばしは別途）
@@ -252,7 +252,7 @@ async function emptyShelfFlow(browser, vp) {
   await page.goto(`${BASE}/dev-preview`, { waitUntil: 'domcontentloaded' });
   await page.locator('[data-tour="tab-shelf"]').waitFor({ timeout: 15000 });
   await page.evaluate(() => {});
-  await page.getByRole('button', { name: /Ver\. 1\.1\.0/ }).click();
+  await page.getByRole('button', { name: /Ver\. 1\.2\.0/ }).click();
   await page.getByRole('button', { name: '使い方を見る' }).click();
   await waitHeading(page, 'ここが曲置き場', 8000);
   await page.getByRole('button', { name: '次へ' }).click();

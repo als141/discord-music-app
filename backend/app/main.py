@@ -6,7 +6,7 @@ from typing import List, Optional, Dict
 import asyncio
 import json
 from .bot import client, music_players
-from .api import voice_proxy
+from .api import voice_proxy, app_routes
 from .api.voice import router as voice_router, active_connections
 from .services.history import load_history_queue_items
 from .schemas import (
@@ -248,6 +248,8 @@ origins = [
     "https://api.atoriba.jp",
     "http://localhost:8000",
 ]
+# ローカル検証用の追加オリジン（例: IRINA_EXTRA_CORS_ORIGINS=http://localhost:3100）
+origins += [o.strip() for o in (os.getenv("IRINA_EXTRA_CORS_ORIGINS") or "").split(",") if o.strip()]
 
 # キャッシュ用の変数を定義
 recommendations_cache = None
@@ -273,6 +275,8 @@ async def health_check():
 
 # ルーターを追加
 app.include_router(chat.router)
+# Web アプリの端末登録・プッシュ通知・管理画面（bot 不要。web / all で動く）
+app.include_router(app_routes.router)
 app.include_router(valorant_router)
 app.include_router(realtime_router)
 

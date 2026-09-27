@@ -69,6 +69,11 @@ async def collect(message: discord.Message) -> int:
         if saved:
             print(f"[shelf] {saved} link(s) from #{channel_name} ({message.guild.name})")
             asyncio.create_task(resolve_pending())
+            from . import push_events
+            push_events.on_shelf_links(
+                str(message.guild.id), str(message.channel.id), channel_name, str(message.author.id),
+                getattr(message.author, "display_name", None) or message.author.name, ids,
+            )
         return saved
     except Exception as e:
         print(f"[shelf] collect failed: {type(e).__name__}: {e}")

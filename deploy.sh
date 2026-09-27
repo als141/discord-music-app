@@ -44,7 +44,7 @@ uv sync --frozen
 # それ以外の backend 変更は web だけ再起動する（音楽は止まらない）。
 # 例外: コミットメッセージに [restart-voice] があれば voice も再起動する。
 WEB_SERVICE="discord-music-web"
-VOICE_PATTERN='^backend/(app/(bot\.py|services/|db\.py|config\.py|logging\.py|api/voice\.py|__init__\.py)|pyproject\.toml|uv\.lock)'
+VOICE_PATTERN='^backend/(app/(bot\.py|services/|db\.py|config\.py|logging\.py|version\.py|api/voice\.py|__init__\.py)|pyproject\.toml|uv\.lock)'
 CHANGED_FILES="$(git diff --name-only "$LOCAL_HASH" "$NEW_HASH")"
 restart_voice=0
 if echo "$CHANGED_FILES" | grep -Eq "$VOICE_PATTERN"; then restart_voice=1; fi

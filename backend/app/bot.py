@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 # xAI SDK (Grok 4.1 Agent Tools API)
-from .services import irina_chat, shared_links, now_playing_status
+from .services import irina_chat, shared_links, now_playing_status, push_events
 from .services import music_player as _music_player_module
 from PIL import Image
 from io import BytesIO
@@ -573,12 +573,17 @@ async def handle_thread_message(message):
             pass
 
 
+async def _on_now_playing(guild, song) -> None:
+    await now_playing_status.update(guild, song)
+    await push_events.on_now_playing(guild, song)
+
+
 @client.event
 async def on_ready():
-    await client.change_presence(status=discord.Status.online, activity=discord.CustomActivity(name='バージョン1.0.0'))
-    # 「いま鳴っている曲」を Presence / VC ステータスに映す（投稿ゼロ）
+    await client.change_presence(status=discord.Status.online, activity=discord.CustomActivity(name=now_playing_status.IDLE_ACTIVITY_NAME))
+    # 「いま鳴っている曲」を Presence / VC ステータスに映す（投稿ゼロ）+ 「VC で音楽が流れ始めました」通知
     now_playing_status.configure(client)
-    _music_player_module.register_now_playing_hook(now_playing_status.update)
+    _music_player_module.register_now_playing_hook(_on_now_playing)
     # 「棚」のメタ情報解決（起動後と10分ごと）。on_ready は再接続でも呼ばれるので1回だけ起動
     global _shelf_resolver_task
     if _shelf_resolver_task is None or _shelf_resolver_task.done():

@@ -24,6 +24,10 @@ import { useArtworkAccent } from '@/hooks/use-artwork-accent';
 import { useSessionGuard } from '@/hooks/use-session-guard';
 import { GuideHost } from './guide/GuideHost';
 import type { GuideNavigation } from '@/lib/guide/tours';
+import { AppSettingsSheet } from './pwa/AppSettingsSheet';
+import { ShareReceiver } from './pwa/ShareReceiver';
+import { useDeviceSync } from '@/hooks/use-device-sync';
+import { useDeviceStore } from '@/store/useDeviceStore';
 
 // API URL の取得
 
@@ -37,6 +41,18 @@ declare global {
 BigInt.prototype.toJSON = function() {
   return this.toString();
 };
+
+/** 通知から開かれた（URL の ?n=<送信ログ ID>）ことを数える。管理画面の「開いた」 */
+function reportNotificationOpen(n: string | null) {
+  const logId = n ? Number(n) : NaN;
+  if (!Number.isInteger(logId) || logId <= 0) return;
+  fetch(`${process.env.NEXT_PUBLIC_API_URL}/push/click`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ log_id: logId }),
+    keepalive: true,
+  }).catch(() => {});
+}
 
 // 主要なアプリケーションコンポーネント
 export const MainApp: React.FC = () => {
@@ -255,6 +271,48 @@ export const MainApp: React.FC = () => {
       if (seq === searchSeqRef.current) setIsSearching(false);
     }
   }, [toast]);
+
+  // この端末のインストール・通知の状態を報告（管理画面の集計とお願いカードの出し分けに使う）
+  useDeviceSync(status === 'authenticated');
+
+  // 通知・ホーム画面のショートカットから来たときの行き先（?tab=shelf / ?open=settings / ?shared=…）
+  const deepLinkHandledRef = useRef(false);
+  useEffect(() => {
+    if (status !== 'authenticated' || deepLinkHandledRef.current) return;
+    deepLinkHandledRef.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    if (tab === 'home' || tab === 'shelf' || tab === 'uploaded-music') setHomeActiveTab(tab);
+    if (params.get('open') === 'settings') useDeviceStore.getState().openSettings();
+    reportNotificationOpen(params.get('n'));
+    if (params.get('shared') === 'unsupported') {
+      toast({ title: '追加できませんでした', description: 'YouTube のリンクを共有してください' });
+    }
+    if ([...params.keys()].length > 0) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, [status, toast]);
+
+  // 通知をタップしたとき、開いているアプリは再読み込みせずにその場で行き先へ（Service Worker から届く）
+  useEffect(() => {
+    if (status !== 'authenticated' || !('serviceWorker' in navigator)) return;
+    const onMessage = (e: MessageEvent) => {
+      const data = e.data as { type?: string; url?: string } | null;
+      if (data?.type !== 'irina-navigate' || !data.url) return;
+      const params = new URL(data.url, window.location.origin).searchParams;
+      const tab = params.get('tab');
+      setIsSearchActive(false);
+      setIsMenuOpen(false);
+      if (tab === 'home' || tab === 'shelf' || tab === 'uploaded-music') {
+        setIsMainPlayerVisible(false);
+        setHomeActiveTab(tab);
+      }
+      if (params.get('open') === 'settings') useDeviceStore.getState().openSettings();
+      reportNotificationOpen(params.get('n'));
+    };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+  }, [status, setIsMainPlayerVisible]);
 
   // お知らせ・案内からの画面切り替え。上に開いているもの（検索・メニュー・フルスクリーンプレイヤー）は閉じる
   const handleGuideNavigate = useCallback((nav: GuideNavigation) => {
@@ -489,6 +547,10 @@ export const MainApp: React.FC = () => {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* 通知とアプリ（インストール・通知の設定）/ 他のアプリから共有された曲 */}
+        <AppSettingsSheet />
+        <ShareReceiver ready={!!activeServerId} onAdd={handleAddUrl} />
 
         {/* お知らせ（新機能・更新）と画面案内 */}
         <GuideHost

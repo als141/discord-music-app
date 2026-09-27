@@ -15,7 +15,9 @@ from typing import Dict, Optional, Set, Tuple
 
 import discord
 
-IDLE_ACTIVITY_NAME = "バージョン1.0.0"   # 何も鳴っていないときの表示（ユーザー指定の文言）
+from ..version import APP_VERSION
+
+IDLE_ACTIVITY_NAME = f"バージョン{APP_VERSION}"   # 何も鳴っていないときの表示（ユーザー指定の文言。版数は app/version.py）
 VC_STATUS_MIN_INTERVAL_SEC = 30.0
 VC_STATUS_MAX_LEN = 500
 

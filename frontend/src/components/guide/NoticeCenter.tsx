@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useIsDesktop } from '@/hooks/use-media-query';
 import { useGuideStore } from '@/store/useGuideStore';
+import { useDeviceStore } from '@/store/useDeviceStore';
 import {
   APP_VERSION,
   NOTICE_KIND_LABEL,
@@ -18,7 +19,7 @@ import {
   unreadNotices,
 } from '@/lib/guide/notices';
 
-/** お知らせのボタンを実行する（案内を始める / タブを開く） */
+/** お知らせのボタンを実行する（案内を始める / タブを開く / 通知とアプリの設定を開く） */
 export function runNoticeAction(action: NoticeAction) {
   const s = useGuideStore.getState();
   if (action.type === 'tour') {
@@ -26,6 +27,10 @@ export function runNoticeAction(action: NoticeAction) {
     return;
   }
   s.closeCenter();
+  if (action.type === 'open-settings') {
+    useDeviceStore.getState().openSettings();
+    return;
+  }
   s.navigator?.({ homeTab: action.tab });
 }
 
@@ -86,6 +91,46 @@ function NoticeList({ newIds }: { newIds: readonly string[] }) {
         <NoticeItem key={n.id} notice={n} isNew={newIds.includes(n.id)} />
       ))}
     </ul>
+  );
+}
+
+/** 一覧の下: この端末の通知の状態と「設定」への入口 */
+function NotifyStatusRow() {
+  const capability = useDeviceStore((s) => s.capability);
+  const permission = useDeviceStore((s) => s.permission);
+  const subscribed = useDeviceStore((s) => s.subscribed);
+  const info = useDeviceStore((s) => s.info);
+  if (!info) return null;
+  const on = permission === 'granted' && subscribed;
+  const label = on
+    ? 'この端末に通知が届きます'
+    : capability === 'needs-install'
+      ? 'ホーム画面に追加すると通知が届きます'
+      : capability === 'in-app'
+        ? 'ブラウザで開くと通知をオンにできます'
+        : capability === 'unsupported'
+          ? 'この端末では通知を使えません'
+          : permission === 'denied'
+            ? '通知がブロックされています'
+            : '通知はオフです';
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-border/70 bg-secondary/40 px-5 py-3">
+      <span className="flex min-w-0 items-center gap-2 text-[12.5px] text-muted-foreground">
+        <span className={`h-2 w-2 flex-shrink-0 rounded-full ${on ? 'bg-green-500' : 'bg-muted-foreground/40'}`} aria-hidden="true" />
+        <span className="truncate">{label}</span>
+      </span>
+      <Button
+        size="sm"
+        variant={on ? 'ghost' : 'default'}
+        className={`h-7 flex-shrink-0 rounded-full px-3 text-[12px] font-semibold ${on ? '' : 'bg-primary text-white hover:bg-primary/90'}`}
+        onClick={() => {
+          useGuideStore.getState().closeCenter();
+          useDeviceStore.getState().openSettings();
+        }}
+      >
+        {on ? '設定' : 'オンにする'}
+      </Button>
+    </div>
   );
 }
 
@@ -168,6 +213,7 @@ export const NoticeBell: React.FC = () => {
           >
             <PanelHeader titleAs="h2" />
             <NoticeList newIds={newIds} />
+            <NotifyStatusRow />
           </Popover.Content>
         </Popover.Portal>
       </Popover.Root>
@@ -187,6 +233,7 @@ export const NoticeBell: React.FC = () => {
             <PanelHeader titleAs={Drawer.Title} />
             <div className="overflow-y-auto pb-[calc(12px+env(safe-area-inset-bottom,0px))]">
               <NoticeList newIds={newIds} />
+              <NotifyStatusRow />
             </div>
           </Drawer.Content>
         </Drawer.Portal>

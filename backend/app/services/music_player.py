@@ -209,6 +209,7 @@ class Song:
     video_id: Optional[str] = None  # YouTubeのビデオID（キャッシュ検索用）
     pending: bool = False  # 追加直後で yt-dlp の情報取得がまだ終わっていないプレースホルダ
     start_offset: float = 0.0  # 再生開始位置（秒）。デプロイ跨ぎのレジューム用
+    resumed: bool = False  # 保存済み状態から復元した曲（「音楽が流れ始めました」通知を出さない）
 
     def __post_init__(self):
         # デフォルト値の設定
@@ -859,7 +860,7 @@ class MusicPlayer:
             return Song(source=None, title=d.get('title') or 'Unknown', url=d.get('url') or '',
                         thumbnail=d.get('thumbnail') or '', artist=d.get('artist') or '',
                         added_by=d.get('added_by'), video_id=d.get('video_id'),
-                        start_offset=offset)
+                        start_offset=offset, resumed=True)
 
         restored = 0
         cur = state.get('current')

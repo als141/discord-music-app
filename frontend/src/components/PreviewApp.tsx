@@ -9,6 +9,7 @@ import { useGuildStore } from '@/store';
 import { ShelfScreen } from './home/ShelfScreen';
 import { Button } from './ui/button';
 import { Loading } from './ui/loading';
+import { detectPlatform } from '@/lib/pwa/platform';
 
 /**
  * ログイン前プレビュー（読み取り専用）。
@@ -33,6 +34,12 @@ export const PreviewApp: React.FC = () => {
   const [guildId, setGuildId] = useState<string | null>(null);
   const [state, setState] = useState<PlayerStateSnapshot | null>(null);
   const [loaded, setLoaded] = useState(false);
+  // iPhone のホーム画面アプリはログインの戻り先が Safari 側に落ちることがある（WebKit の仕様）ので、確実な手順を添える
+  const [iosHomeScreenApp, setIosHomeScreenApp] = useState(false);
+  useEffect(() => {
+    const info = detectPlatform();
+    setIosHomeScreenApp(info.platform === 'ios' && info.standalone);
+  }, []);
 
   // 対象ギルド: 以前使っていたサーバー（localStorage に永続化済み）→ 既定ギルド
   // SSR と食い違わないようにマウント後に決める
@@ -104,6 +111,11 @@ export const PreviewApp: React.FC = () => {
 
       <div className="flex-1 min-h-0 overflow-y-auto pt-14">
         <div className="mx-auto w-full max-w-4xl px-4 sm:px-6 py-6 space-y-10">
+          {iosHomeScreenApp && (
+            <p className="rounded-2xl border border-border bg-secondary/60 px-4 py-3 text-[13px] leading-relaxed text-foreground/80">
+              ここでログインがうまくいかないときは、Safari でこのサイトを開いてログインしてから、もう一度ホーム画面に追加してください。ログインしたまま追加すると、ホーム画面のアプリでもログインした状態になります。
+            </p>
+          )}
           {/* いま流れている曲 */}
           <section aria-labelledby="preview-now-heading">
             <h2 id="preview-now-heading" className="text-lg sm:text-xl font-bold tracking-tight text-foreground mb-4">
