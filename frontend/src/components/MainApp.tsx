@@ -22,6 +22,8 @@ import { useGuildStore, usePlayerStore, setupWebSocket, cleanupWebSocket } from 
 import { useIsDesktop } from '@/hooks/use-media-query';
 import { useArtworkAccent } from '@/hooks/use-artwork-accent';
 import { useSessionGuard } from '@/hooks/use-session-guard';
+import { GuideHost } from './guide/GuideHost';
+import type { GuideNavigation } from '@/lib/guide/tours';
 
 // API URL の取得
 
@@ -254,6 +256,14 @@ export const MainApp: React.FC = () => {
     }
   }, [toast]);
 
+  // お知らせ・案内からの画面切り替え。上に開いているもの（検索・メニュー・フルスクリーンプレイヤー）は閉じる
+  const handleGuideNavigate = useCallback((nav: GuideNavigation) => {
+    setIsSearchActive(false);
+    setIsMenuOpen(false);
+    setIsMainPlayerVisible(false);
+    if (nav.homeTab) setHomeActiveTab(nav.homeTab);
+  }, [setIsMainPlayerVisible]);
+
   // ミニプレイヤーを表示すべきかどうか
   const shouldShowMiniPlayer = useMemo(() => {
     return (
@@ -479,6 +489,14 @@ export const MainApp: React.FC = () => {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* お知らせ（新機能・更新）と画面案内 */}
+        <GuideHost
+          isDesktop={isDesktop}
+          busy={isMenuOpen || isSearchActive || showSheetPlayer}
+          miniPlayerVisible={!!shouldShowMiniPlayer}
+          onNavigate={handleGuideNavigate}
+        />
       </div>
     </ErrorBoundary>
   );

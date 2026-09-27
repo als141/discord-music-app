@@ -10,6 +10,7 @@ import { useToast } from '@/hooks/use-toast'
 import { useSession, signIn, signOut } from 'next-auth/react'
 import { useGuildStore, usePlayerStore } from '@/store'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
+import { NoticeBell } from '@/components/guide/NoticeCenter'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -179,6 +180,9 @@ export const Header: React.FC<HeaderProps> = React.memo(({
 
           {/* Right Section - Actions */}
           <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
+            {/* お知らせ（ログイン中のみ） */}
+            {session && <NoticeBell />}
+
             {/* Search Button */}
             <Tooltip>
               <TooltipTrigger asChild>

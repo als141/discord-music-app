@@ -3,7 +3,7 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
-import { Play } from 'lucide-react';
+import { Info, Play } from 'lucide-react';
 import { useInView } from 'react-intersection-observer';
 import { api, PlayableItem, SharedTrack, SharedTrackChannel, SharedTracksResponse } from '@/utils/api';
 import { Loading } from '@/components/ui/loading';
@@ -53,9 +53,12 @@ function formatPostedAt(iso: string): string {
 const ShelfCard = memo(({
   item,
   onSelect,
+  tourAnchor,
 }: {
   item: SharedTrack;
   onSelect: (item: SharedTrack) => void;
+  /** 画面案内で指す目印（data-tour） */
+  tourAnchor?: string;
 }) => {
   const [ref, inView] = useInView({ triggerOnce: true, threshold: 0.1 });
   const title = shelfTitle(item);
@@ -67,6 +70,7 @@ const ShelfCard = memo(({
       ref={ref}
       type="button"
       onClick={() => onSelect(item)}
+      data-tour={tourAnchor}
       // self-start: グリッドで縦に引き伸ばされると button の中身が上下中央に寄って
       // カードの高さ（アーティスト行の有無）でサムネの位置がずれるため
       className="group cursor-pointer text-left w-full self-start"
@@ -148,6 +152,8 @@ interface ShelfScreenProps {
   onRequireSignIn?: () => void;
   /** 'page' = タブの中身として高さいっぱい / 'embedded' = 親のスクロールに乗せる */
   variant?: 'page' | 'embedded';
+  /** 「使い方」から画面案内を始める（ログイン後のアプリのみ） */
+  onShowGuide?: () => void;
 }
 
 export const ShelfScreen: React.FC<ShelfScreenProps> = ({
@@ -156,6 +162,7 @@ export const ShelfScreen: React.FC<ShelfScreenProps> = ({
   readOnly = false,
   onRequireSignIn,
   variant = 'page',
+  onShowGuide,
 }) => {
   const [data, setData] = useState<SharedTracksResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -233,7 +240,7 @@ export const ShelfScreen: React.FC<ShelfScreenProps> = ({
   const body = (() => {
     if (!guildId) {
       return (
-        <p className="text-sm text-muted-foreground py-10 text-center">
+        <p className="text-sm text-muted-foreground py-10 text-center" data-tour="shelf-empty">
           サーバーを選択すると、貼られた曲が並びます
         </p>
       );
@@ -247,7 +254,7 @@ export const ShelfScreen: React.FC<ShelfScreenProps> = ({
     }
     if (error && !data) {
       return (
-        <div className="py-12 flex flex-col items-center gap-3">
+        <div className="py-12 flex flex-col items-center gap-3" data-tour="shelf-empty">
           <p className="text-sm text-muted-foreground">曲置き場を読み込めませんでした</p>
           <Button variant="outline" size="sm" onClick={() => setReloadToken((v) => v + 1)}>
             再読み込み
@@ -257,22 +264,41 @@ export const ShelfScreen: React.FC<ShelfScreenProps> = ({
     }
     if (tracks.length === 0) {
       return (
-        <p className="text-sm text-muted-foreground py-10 text-center">
+        <p className="text-sm text-muted-foreground py-10 text-center" data-tour={totalCount === 0 ? 'shelf-empty' : undefined}>
           まだ何も貼られていません
         </p>
       );
     }
     return (
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-5">
-        {tracks.map((item) => (
-          <ShelfCard key={item.id} item={item} onSelect={handleSelect} />
+        {tracks.map((item, i) => (
+          <ShelfCard key={item.id} item={item} onSelect={handleSelect} tourAnchor={i === 0 ? 'shelf-first-card' : undefined} />
         ))}
       </div>
     );
   })();
 
+  // どこから来た曲なのかを一行で。ここに曲が並ぶ仕組みを知らない人向け
+  const intro = variant === 'page' && (
+    <div className="mb-3 flex items-start gap-1.5 text-[12.5px] leading-relaxed text-muted-foreground">
+      <Info className="mt-[3px] h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+      <p className="min-w-0">
+        Discord のチャンネルに貼られた YouTube のリンクが、ここに自動で並びます。押すとキューに追加されます。
+        {onShowGuide && (
+          <button
+            type="button"
+            onClick={onShowGuide}
+            className="ml-1.5 font-medium text-primary hover:text-primary/80 underline-offset-2 hover:underline"
+          >
+            使い方
+          </button>
+        )}
+      </p>
+    </div>
+  );
+
   const chips = channels.length > 0 && (
-    <div className="flex gap-2 overflow-x-auto scrollbar-thin pb-1 mb-4" role="group" aria-label="チャンネルで絞り込む">
+    <div className="flex w-fit max-w-full gap-2 overflow-x-auto scrollbar-thin pb-1 mb-4" role="group" aria-label="チャンネルで絞り込む" data-tour="shelf-channels">
       <button
         type="button"
         onClick={() => setChannelId(null)}
@@ -305,6 +331,7 @@ export const ShelfScreen: React.FC<ShelfScreenProps> = ({
 
   const content = (
     <>
+      {intro}
       {chips}
       {body}
     </>

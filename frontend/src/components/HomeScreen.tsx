@@ -33,6 +33,8 @@ import { SectionAllDialog } from './home/SectionAllDialog';
 import { GuildStatsCard } from './home/GuildStatsCard';
 import { CollectionDialog } from './home/CollectionDialog';
 import { ShelfScreen } from './home/ShelfScreen';
+import { useGuideStore } from '@/store/useGuideStore';
+import { APP_RELEASE_DATE, APP_VERSION, newBadgeTabs } from '@/lib/guide/notices';
 
 interface HomeScreenProps {
   onSelectTrack: (item: PlayableItem) => void;
@@ -45,10 +47,7 @@ interface HomeScreenProps {
   onAddUrl?: (url: string) => void;
 }
 
-interface VersionInfo {
-  version: string;
-  buildDate: string;
-}
+const BUILD_ID = (process.env.NEXT_PUBLIC_BUILD_ID || '').slice(0, 7);
 
 // Apple Music style animations
 const animations = {
@@ -268,18 +267,24 @@ const HistoryCard = memo(({
 HistoryCard.displayName = 'HistoryCard';
 
 // Version display component
-const VersionDisplay = memo(({ versionInfo }: { versionInfo: VersionInfo }) => (
+// バージョン表示。押すとお知らせ（更新内容）を開く
+const VersionDisplay = memo(({ onOpen }: { onOpen: () => void }) => (
   <TooltipProvider>
     <Tooltip>
       <TooltipTrigger asChild>
-        <div className="flex items-center justify-center text-[11px] text-muted-foreground/60 hover:text-muted-foreground transition-colors duration-200 py-1">
+        <button
+          type="button"
+          onClick={onOpen}
+          className="flex items-center justify-center text-[11px] text-muted-foreground/60 hover:text-muted-foreground transition-colors duration-200 py-1 rounded-full"
+          aria-label={`Ver. ${APP_VERSION}。更新内容を見る`}
+        >
           <Info className="w-3 h-3 mr-1" />
-          <span>{versionInfo.version}</span>
-        </div>
+          <span>Ver. {APP_VERSION}</span>
+        </button>
       </TooltipTrigger>
       <TooltipContent className="bg-white/95 backdrop-blur-xl border-black/10 shadow-lg">
-        <p>Version: {versionInfo.version}</p>
-        <p>Build Date: {versionInfo.buildDate}</p>
+        <p>更新内容を見る</p>
+        <p className="text-muted-foreground">{APP_RELEASE_DATE.split('-').join('.')}{BUILD_ID ? ` · ${BUILD_ID}` : ''}</p>
       </TooltipContent>
     </Tooltip>
   </TooltipProvider>
@@ -467,10 +472,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
   // 「すべて見る」ダイアログ: 'history' | セクション index
   const [allView, setAllView] = useState<'history' | number | null>(null);
 
-  const [versionInfo] = useState<VersionInfo>({
-    version: 'Ver. 1.0.0',
-    buildDate: '2026.8.18',
-  });
+  // 新機能の「NEW」（そのタブを一度開くまで）
+  const visitedTabs = useGuideStore((s) => s.visitedTabs);
+  const markTabVisited = useGuideStore((s) => s.markTabVisited);
+  const openNoticeCenter = useGuideStore((s) => s.openCenter);
+  const startTour = useGuideStore((s) => s.startTour);
+  const badgeTabs = useMemo(() => newBadgeTabs(visitedTabs), [visitedTabs]);
+  useEffect(() => {
+    markTabVisited(activeTab);
+  }, [activeTab, markTabVisited]);
+  const showShelfGuide = useCallback(() => startTour('shelf'), [startTour]);
 
   // プレイリスト / アルバム / ミックスは曲一覧ダイアログ、アーティストはアーティストダイアログ、それ以外は再生キューへ
   const [collectionItem, setCollectionItem] = useState<SearchItem | null>(null);
@@ -728,9 +739,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
             aria-label="メインナビゲーション"
             role="tablist"
           >
-            {tabs.map((tab) => (
+            {tabs.map((tab) => {
+              const isNew = badgeTabs.includes(tab.id as (typeof badgeTabs)[number]);
+              return (
               <motion.button
                 key={tab.id}
+                data-tour={`tab-${tab.id}`}
                 className={`flex items-center gap-1.5 px-4 sm:px-5 py-2 text-sm font-medium rounded-full transition-all duration-200 whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'bg-white text-foreground shadow-sm'
@@ -743,17 +757,23 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
                 aria-selected={activeTab === tab.id}
                 aria-controls={`panel-${tab.id}`}
                 id={`tab-${tab.id}`}
-                aria-label={tab.ariaLabel}
+                aria-label={isNew ? `${tab.ariaLabel}（新機能）` : tab.ariaLabel}
               >
                 {tab.icon}
                 <span>{tab.label}</span>
+                {isNew && (
+                  <span className="ml-0.5 rounded-full bg-primary px-1.5 py-[3px] text-[9px] font-bold leading-none tracking-wide text-white" aria-hidden="true">
+                    NEW
+                  </span>
+                )}
               </motion.button>
-            ))}
+              );
+            })}
           </nav>
         </div>
 
         {/* Version display */}
-        <VersionDisplay versionInfo={versionInfo} />
+        <VersionDisplay onOpen={openNoticeCenter} />
       </div>
 
       {/* Main content area */}
@@ -784,7 +804,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
               {activeTab === 'home' && renderHomeContent()}
 
               {activeTab === 'shelf' && (
-                <ShelfScreen guildId={guildId} onSelectTrack={onSelectTrack} />
+                <ShelfScreen guildId={guildId} onSelectTrack={onSelectTrack} onShowGuide={showShelfGuide} />
               )}
 
               {activeTab === 'uploaded-music' && (

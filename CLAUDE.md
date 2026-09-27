@@ -108,6 +108,19 @@ ssh -i ~/.ssh/id_rsa_pi als0028@192.168.11.13 "~/.local/bin/uv pip show yt-dlp-e
 
 ## Key Technical Notes
 
+### 2026-09-28: お知らせ・新機能カード・画面案内（ツアー）・更新通知（frontend のみ、Ver. 1.1.0）
+- **方針（ユーザー指定）**: 新しいバージョンの告知は「じゃまにならない」＋ドデカ専用なので「強制（全員に出る・オフ設定なし）」。プッシュ通知ではなくアプリ内。Web Push はブラウザ許可が要るので強制できない（PWA 導線のあとで検討）
+- **3 層**: ①ヘッダーのベル（未読は点だけ。PC=ベル下のポップオーバー、スマホ=下からのシート。開いた瞬間に全件既読、そのとき未読だったものに一覧で点）②**新機能カード**（`promo` 付きのお知らせを 1 回だけ下部に小さく。起動 2.5 秒後・メニュー/検索/フルスクリーンプレイヤー/ダイアログ/案内/一覧が開いていない時だけ。暗幕なし・フォーカスを奪わない。スマホはミニプレイヤーの上、PC はメイン列の左下）③**画面案内**（スポットライト式ツアー。周りを暗くして対象だけ切り抜き、説明カードを上下に自動配置）
+- **更新通知**: `/api/version`（`NEXT_PUBLIC_BUILD_ID`＝`next.config.mjs` の `env` でビルド時に `VERCEL_GIT_COMMIT_SHA` を埋め込み）とバンドル内の ID を比べ、違えば「新しいバージョンがあります [更新]」を同じ下部カード枠に出す（新機能カードより優先）。確認は起動 30 秒後・画面復帰時・表示中 10 分ごと。**10 分以上裏にいて戻ってきた時点で新ビルドがあれば黙って再読み込み**（同じビルドへは sessionStorage で 1 回まで＝ループ防止）。開発時（ID 空）は無効
+- **台帳**: `frontend/src/lib/guide/notices.ts`（`APP_VERSION`、`NOTICES`。id は既読キーなので公開後に変えない。`promo.until` を過ぎたら一覧だけ、`quiet` は未読に数えない過去の記録、`newBadge.tab` はそのタブを開くまで「NEW」）/ `frontend/src/lib/guide/tours.ts`（`TOURS`。step は `target`=data-tour 値、`navigate.homeTab`、`interactive`=対象を押したら次へ、`skipIf`=その要素があれば即スキップ、対象が無ければ 4 秒で飛ばす）
+- **新機能を出すときの手順**: ①指したい要素に `data-tour="…"` ②`tours.ts` に Tour ③`notices.ts` に Notice（`promo` と `actions: [{type:'tour'}, {type:'open-tab'}]`、必要なら `newBadge`）④`APP_VERSION` を上げる ⑤`node scripts/guide-flow-test.mjs` を必要に応じて拡張して回す
+- **状態**: `store/useGuideStore.ts`（zustand persist `irina-guide`: seenNoticeIds / promoHandledIds / tours{outcome,at,step} / visitedTabs。端末ごと、サーバーには送らない＝スマホと PC は画面が違うので案内は端末ごとに 1 回が自然）。画面切り替えは MainApp が `GuideHost` の `onNavigate` → store の `navigator` として登録（検索・メニュー・フルスクリーンプレイヤーを閉じてタブ移動）
+- **部品**: `components/guide/GuideHost.tsx`（下部カードの出し分け + `useModalOpen`＝body の pointer-events:none で Radix/vaul のモーダルを検知）、`NoticeCenter.tsx`（`NoticeBell` と `runNoticeAction`）、`TourOverlay.tsx`（portal z-300、4 枚の透明ブロッカーで切り抜きの外を押せなくする、interactive 以外は切り抜きの中も押せない、Esc/←/→、フォーカス閉じ込めと復帰、`prefers-reduced-motion` 対応、rAF で位置追従）。依存追加: `@radix-ui/react-popover`
+- **曲置き場まわり**: タブに「NEW」、画面上部に一行の説明（「Discord のチャンネルに貼られた YouTube のリンクが、ここに自動で並びます」＋「使い方」で案内）、ホームのバージョン表示（Ver. 1.1.0）を押すとお知らせ一覧。空・未選択・エラー表示に `data-tour="shelf-empty"`（案内の skipIf 用）
+- **落とし穴（実装中に踏んだ）**: ①オーバーレイの外枠 div が全面で pointer-events を持つと切り抜きの中も押せない → 外枠は none、ブロッカーとカードだけ auto ②ステップ切替の 1 フレームだけ古い位置に新しい文面が出た → 準備完了を真偽値ではなく「どのステップの準備か」（`readyKey`）で持ち、切替時は即非表示・新しい位置で fade-in
+- **テスト**: `cd frontend && NEXT_PUBLIC_BUILD_ID=test-a NEXT_PUBLIC_API_URL=https://api.atoriba.jp bunx next dev -p 3100` → `PREVIEW_BASE=http://localhost:3100 node scripts/guide-flow-test.mjs`（スマホ 390 / PC 1376、カード→案内 4 ステップ→完了の記録→再読み込みで再表示されない→一覧 5 件→一覧から案内→Esc→更新通知→更新で再読み込み、×で閉じる、曲置き場が空でも最後まで進む。74/74）。スクショは `scripts/screenshots/guide-*.png`。**ポート 3000 は別プロジェクト（etsuzan）の dev が使っていることがある**
+- 既存の `realtime-sync-test.mjs` はヘッダーの VC 名 2 件が変更前のコードでも落ちる（今回とは無関係、テスト側のモック不足と思われる）
+
 ### 2026-09-21: 浸透戦略の調査資料（`.tmp/research/`、PUBLIC リポなので未コミット・ローカルにのみ存在）
 - `irina_final_plan_ja.md` — **最終案**。順序: ①bot Presence を「Listening to 曲名」に ②VC チャンネルステータスに Now Playing（30 秒デバウンス必須・Forbidden で自己無効化・切断で None・招待権限に `1<<48`）③「棚」= 曲置き場/一般に貼られた YouTube リンクをアプリ内一覧→ワンタップ追加（収集は `services/shared_links.py`、本文は保存しない、絶対に send しない、API は main.py に）④ログイン前プレビュー ⑤前回の続き ⑥片手操作 ⑦PWA 導線。**やらない**: 定期投稿/ランキング/投票/スレッド/新チャンネル/プッシュ/Activities（今は）/Components V2（open バグ 3 件）
 - `adoption_strategy_ja.md`（浸透 7 原則・5 シナリオ・機能ランク・6 週ロードマップ）、`discord_platform_2026.md`（Discord API 2026-09 の事実。docs は `docs.discord.com/developers/*` に移転済み。VC ステータスは 2026-04-20 に bot 利用解禁、discord.py 2.7.1 で `vc.edit(status=)`）、`xai_api_2026.md`、`../dodeka_conversation_analysis_2026-09.md`（会話分析。実名なし）

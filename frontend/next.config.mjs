@@ -11,6 +11,12 @@ const withSerwist = withSerwistInit({
 const nextConfig = {
   reactStrictMode: true,
 
+  // ビルドの識別子。/api/version と同じ値がクライアントにも埋め込まれ、
+  // 開いたままのタブが古いビルドかどうかの判定に使う（hooks/use-app-update.ts）
+  env: {
+    NEXT_PUBLIC_BUILD_ID: process.env.VERCEL_GIT_COMMIT_SHA || process.env.NEXT_PUBLIC_BUILD_ID || "",
+  },
+
   // Turbopack configuration (empty to silence warnings)
   // Build uses webpack for Serwist compatibility
   turbopack: {},
