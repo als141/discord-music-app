@@ -136,7 +136,7 @@ function PromoContent({ notice }: { notice: Notice }) {
 const SETUP_COPY: Record<SetupNeed['kind'], { title: string; body: string }> = {
   notify: {
     title: '通知をオンにしてください',
-    body: '新機能のお知らせや、曲置き場に曲が置かれたとき・VC で音楽が流れ始めたときに届きます',
+    body: '新機能のお知らせが届きます。曲置き場や VC の通知も、あとで選んでオンにできます',
   },
   'notify-blocked': {
     title: '通知がブロックされています',

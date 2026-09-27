@@ -188,7 +188,7 @@ function MemberRow({
           </ul>
           {m.push && (
             <p className="text-[11.5px] text-muted-foreground">
-              受け取り: お知らせ・{m.prefs.shelf ? '曲置き場' : <s>曲置き場</s>}・{m.prefs.vc_music ? 'VC' : <s>VC</s>}
+              受け取り: {['お知らせ', m.prefs.shelf && '曲置き場', m.prefs.vc_music && 'VC'].filter(Boolean).join('・')}
             </p>
           )}
         </div>

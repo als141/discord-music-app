@@ -176,6 +176,29 @@ try {
     check('PC: お知らせの先頭が今回の告知', (await page.locator('li h3').first().textContent()) === 'スマホに通知が届くように');
     check('PC: 一覧の下に通知の状態と「オンにする」', await page.getByRole('button', { name: 'オンにする' }).first().isVisible());
     await page.screenshot({ path: join(OUT, 'pwa-desktop-center.png') });
+    await page.keyboard.press('Escape');
+    // 受け取る通知: 曲置き場・VC は既定オフ。オンにすると保存される
+    await page.getByRole('button', { name: 'ユーザーメニュー' }).click();
+    await page.getByRole('menuitem', { name: /通知とアプリ/ }).click();
+    const shelfSwitch = page.getByRole('switch', { name: '曲置き場に曲が置かれたとき' });
+    const vcSwitch = page.getByRole('switch', { name: 'VC で音楽が流れ始めたとき' });
+    await page.waitForFunction(() => {
+      const el = document.querySelector('[role="switch"][aria-label="曲置き場に曲が置かれたとき"]');
+      return el && !el.hasAttribute('disabled');
+    }, null, { timeout: 15000 }).catch(() => {});
+    check('PC: 曲置き場の通知は既定オフ', (await shelfSwitch.getAttribute('aria-checked')) === 'false');
+    check('PC: VC の通知は既定オフ', (await vcSwitch.getAttribute('aria-checked')) === 'false');
+    check('PC: お知らせは常にオン（変更不可）', (await page.getByRole('switch', { name: 'お知らせ' }).getAttribute('aria-checked')) === 'true' && (await page.getByRole('switch', { name: 'お知らせ' }).isDisabled()));
+    await shelfSwitch.click();
+    await page.waitForTimeout(1200);
+    const saved = await page.evaluate(async (api) => {
+      const t = await (await fetch('/api/irina-token')).json();
+      return (await fetch(`${api}/me/notification-prefs`, { headers: { Authorization: `Bearer ${t.token}` } })).json();
+    }, API);
+    check('PC: 曲置き場をオンにすると保存される', saved.shelf === true && saved.vc_music === false, JSON.stringify(saved));
+    await page.screenshot({ path: join(OUT, 'pwa-desktop-prefs.png') });
+    await shelfSwitch.click();
+    await page.waitForTimeout(800);
     check('PC: エラーなし', errors.length === 0, errors.slice(0, 2).join(' | '));
     await context.close();
   }

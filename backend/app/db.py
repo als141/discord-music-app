@@ -150,12 +150,12 @@ def init_db():
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_app_devices_user ON app_devices(user_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_app_devices_endpoint ON app_devices(push_endpoint)")
-        # 通知の種類ごとの受け取り設定（お知らせは常に届くので列なし）
+        # 通知の種類ごとの受け取り設定（お知らせは常に届くので列なし。曲置き場・VC は既定オフで、各自がオンにする）
         conn.execute("""
         CREATE TABLE IF NOT EXISTS notif_prefs (
             user_id    TEXT PRIMARY KEY,
-            shelf      INTEGER NOT NULL DEFAULT 1,
-            vc_music   INTEGER NOT NULL DEFAULT 1,
+            shelf      INTEGER NOT NULL DEFAULT 0,
+            vc_music   INTEGER NOT NULL DEFAULT 0,
             updated_at TEXT NOT NULL
         )
         """)
@@ -686,7 +686,8 @@ def list_push_devices(user_ids: Optional[List[str]] = None) -> List[Dict[str, An
     return [d for d in list_app_devices(user_ids) if d.get("push_endpoint")]
 
 
-DEFAULT_NOTIF_PREFS = {"shelf": True, "vc_music": True}
+# 曲置き場・VC の自動通知は既定オフ（ユーザー指定 2026-09-28）。行が無い人はこの値
+DEFAULT_NOTIF_PREFS = {"shelf": False, "vc_music": False}
 
 
 def get_notif_prefs(user_id: str) -> Dict[str, bool]:

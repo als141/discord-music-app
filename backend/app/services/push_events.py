@@ -6,7 +6,7 @@
 2. VC で音楽が流れ始めた（`vc_music`）
    - しばらく（20 分以上）何も流れていなかったギルドで再生が始まったときだけ。デプロイ後のレジュームでは送らない
    - 曲を入れた本人と、そのボイスチャンネルに既にいる人には送らない。1 人あたり 3 時間に 1 通まで
-どちらも各自の通知設定（notif_prefs）でオフにできる。対象ギルドは `IRINA_PUSH_GUILD_IDS`（既定: ドデカ）。
+どちらも既定オフで、各自が「通知とアプリ」でオンにした人にだけ送る（notif_prefs）。対象ギルドは `IRINA_PUSH_GUILD_IDS`（既定: ドデカ）。
 """
 import asyncio
 import os
@@ -56,14 +56,14 @@ def _user_name_of(added_by: Any) -> str:
 
 
 def _targets(kind: str, exclude: Set[str], min_interval: int) -> List[Dict[str, Any]]:
-    """設定がオンで、間引き期間を過ぎた人の購読端末"""
+    """設定をオンにしていて、間引き期間を過ぎた人の購読端末（設定の行が無い人は既定＝オフ）"""
     prefs = db.get_all_notif_prefs()
     devices = db.list_push_devices()
     ok_users: Set[str] = set()
     for uid in {d["user_id"] for d in devices}:
         if uid in exclude:
             continue
-        if not prefs.get(uid, db.DEFAULT_NOTIF_PREFS).get(kind, True):
+        if not prefs.get(uid, db.DEFAULT_NOTIF_PREFS).get(kind, False):
             continue
         if not db.throttle_ok(uid, kind, min_interval):
             continue

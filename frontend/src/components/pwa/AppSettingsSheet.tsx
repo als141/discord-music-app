@@ -181,7 +181,7 @@ export const AppSettingsSheet: React.FC = () => {
             通知はオフです
           </StatusLine>
           <p className="text-[13px] leading-relaxed text-muted-foreground">
-            新機能のお知らせや、曲置き場に曲が置かれたとき、VC で音楽が流れ始めたときに届きます。
+            新機能のお知らせが届きます。曲置き場に曲が置かれたとき・VC で音楽が流れ始めたときの通知も、下の「受け取る通知」でオンにできます。
           </p>
           <Button
             size="sm"
@@ -232,7 +232,8 @@ export const AppSettingsSheet: React.FC = () => {
           <ul className="space-y-3">
             {prefRows.map((row) => {
               const fixed = row.key === 'announce';
-              const checked = fixed ? true : prefs ? prefs[row.key as 'shelf' | 'vc_music'] : true;
+              // 曲置き場・VC は既定オフ（オンにした人にだけ届く）
+              const checked = fixed ? true : prefs ? prefs[row.key as 'shelf' | 'vc_music'] : false;
               return (
                 <li key={row.key} className="flex items-start justify-between gap-4">
                   <div className="min-w-0">

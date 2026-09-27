@@ -167,7 +167,7 @@ export const useDeviceStore = create<DeviceState>()(
 
       setPref: async (key, value) => {
         const prev = get().prefs;
-        set({ prefs: { ...(prev ?? { shelf: true, vc_music: true }), [key]: value } });
+        set({ prefs: { ...(prev ?? { shelf: false, vc_music: false }), [key]: value } });
         try {
           const saved = await appApi.putPrefs({ [key]: value });
           set({ prefs: saved });
