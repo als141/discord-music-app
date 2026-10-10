@@ -18,6 +18,7 @@ from ..services import push, push_events
 from ..services.app_auth import AppUser, current_user, require_admin, user_or_internal
 from ..services import game_shelf, game_db
 from ..scene import service as scene
+from ..lobby import service as lobby
 
 router = APIRouter()
 
@@ -245,11 +246,74 @@ async def game_board(guild_id: str, request: Request, players: Optional[int] = N
         raise HTTPException(status_code=400, detail="players は 1〜16")
     board = await asyncio.to_thread(game_shelf.build_board, guild_id, players)
     try:
+        board["lobbies"] = await asyncio.to_thread(lobby.list_open, guild_id)
+    except Exception as e:
+        print(f"[lobby] list failed: {type(e).__name__}: {str(e)[:120]}")
+        board["lobbies"] = []
+    try:
         board["scene"] = await asyncio.to_thread(scene.build_games, guild_id, board)
     except Exception as e:  # 界隈フィードが壊れても置き場は出す
         print(f"[scene] build_games failed: {type(e).__name__}: {str(e)[:160]}")
         board["scene"] = None
     return board
+
+
+class LobbyIn(BaseModel):
+    appid: Optional[str] = Field(default=None, max_length=20)
+    title: Optional[str] = Field(default=None, max_length=40)
+    need: int = Field(ge=2, le=16)
+    start: str = Field(default="now", max_length=5)
+    invite: List[str] = Field(default_factory=list, max_length=12)
+
+
+class LobbyJoinIn(BaseModel):
+    status: str = Field(pattern="^(going|later|none)$")
+
+
+@router.post("/games/{guild_id}/lobbies")
+async def lobby_create(guild_id: str, body: LobbyIn, user: AppUser = Depends(current_user)):
+    """募集を立てる（立てた人は「行く」）。ゲームは任意（「何かやる人」）"""
+    _check_game_guild(guild_id)
+    await _require_member(guild_id, user)
+    if body.appid and not body.appid.isdigit():
+        raise HTTPException(status_code=400, detail="bad appid")
+    if not re.fullmatch(r"now|\d{1,2}:\d{2}", body.start):
+        raise HTTPException(status_code=400, detail="start は now か HH:MM")
+    invite = [u for u in body.invite if u.isdigit()]
+    try:
+        lb = await asyncio.to_thread(lobby.create, guild_id, user.id, appid=body.appid, title=(body.title or "").strip() or None,
+                                     need=body.need, start=body.start, invite=invite)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    await asyncio.to_thread(game_db.upsert_member, guild_id, user.id, user.name or None, user.image or None)
+    print(f"[lobby] created #{lb['id']} by {user.id} appid={body.appid} need={body.need} start={body.start}")
+    return lb
+
+
+async def _lobby_for(guild_id: str, lobby_id: int) -> Dict[str, Any]:
+    lb = await asyncio.to_thread(lobby.get, lobby_id)
+    if not lb or lb["guild_id"] != guild_id or lb["closed_at"]:
+        raise HTTPException(status_code=404, detail="この募集はもう締め切られています")
+    return lb
+
+
+@router.post("/games/{guild_id}/lobbies/{lobby_id}/join")
+async def lobby_join(guild_id: str, lobby_id: int, body: LobbyJoinIn, user: AppUser = Depends(current_user)):
+    _check_game_guild(guild_id)
+    await _require_member(guild_id, user)
+    await _lobby_for(guild_id, lobby_id)
+    await asyncio.to_thread(game_db.upsert_member, guild_id, user.id, user.name or None, user.image or None)
+    return await asyncio.to_thread(lobby.set_status, lobby_id, user.id, body.status)
+
+
+@router.post("/games/{guild_id}/lobbies/{lobby_id}/close")
+async def lobby_close(guild_id: str, lobby_id: int, user: AppUser = Depends(current_user)):
+    _check_game_guild(guild_id)
+    lb = await _lobby_for(guild_id, lobby_id)
+    if lb["host_id"] != user.id and not user.is_admin:
+        raise HTTPException(status_code=403, detail="立てた人だけが締められます")
+    await asyncio.to_thread(lobby.close, lobby_id, "host")
+    return {"closed": True}
 
 
 @router.get("/scene/{guild_id}/songs")

@@ -59,6 +59,14 @@ export const TOURS: Record<TourId, Tour> = {
         body: 'VC にいる人と、Discord で何をプレイ中かが出ます。見られるのはドデカのメンバーだけ。出したくない人は「通知とアプリ」でオフにすると、これまでの記録も消えます。',
       },
       {
+        id: 'lobby',
+        target: 'games-lobby-button',
+        skipIf: 'games-empty',
+        navigate: { homeTab: 'games' },
+        title: '募集',
+        body: '「21時〜 R.E.P.O. あと1人」のように立てると、そろったときに「行く」を押した人へ通知が届きます。VC に入った人も数に入ります。呼びたい人へのメンション付きの文面もコピーできるので、Discord に貼ってください。',
+      },
+      {
         id: 'scene',
         target: 'games-scene',
         skipIf: 'games-empty',

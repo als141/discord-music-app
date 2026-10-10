@@ -8,7 +8,8 @@ import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
 import { ScrollRow } from '@/components/home/ScrollRow';
 import { useIsDesktop } from '@/hooks/use-media-query';
 import { useToast } from '@/hooks/use-toast';
-import { appApi, GameBoard, GameCard, GameOffer, SceneFresh } from '@/lib/app-api';
+import { appApi, GameBoard, GameCard, GameOffer, Lobby, SceneFresh } from '@/lib/app-api';
+import { LobbyCard, LobbySheet } from './Lobby';
 import { SteamLinkCard } from './SteamLinkCard';
 import { AvatarStack, Hero, Meta, RankList, RankRow, SectionHeader, SubHeader } from './ui';
 
@@ -220,7 +221,7 @@ function SceneDetail({ x }: { x: SceneExtra }) {
   );
 }
 
-function GameDetail({ g, board, myId, onMark, busy, extra }: { g: GameCard; board: GameBoard; myId: string | null; onMark: (kind: 'want' | 'own', on: boolean) => void; busy: boolean; extra?: SceneExtra }) {
+function GameDetail({ g, board, myId, onMark, busy, extra, onLobby }: { g: GameCard; board: GameBoard; myId: string | null; onMark: (kind: 'want' | 'own', on: boolean) => void; busy: boolean; extra?: SceneExtra; onLobby: (g: GameCard) => void }) {
   const isDesktop = useIsDesktop();
   const m = board.members;
   const posted = g.posted.by ? m[g.posted.by]?.name : null;
@@ -291,6 +292,15 @@ function GameDetail({ g, board, myId, onMark, busy, extra }: { g: GameCard; boar
       <div className="sticky bottom-0 -mx-5 flex flex-wrap gap-2 border-t border-border/70 bg-background/95 px-5 py-3 backdrop-blur">
         <Button
           size="sm"
+          onClick={() => onLobby(g)}
+          disabled={!myId}
+          className="h-10 rounded-full bg-primary px-5 text-[13px] font-semibold text-white hover:bg-primary/90"
+          data-tour="game-detail-lobby"
+        >
+          これで募集
+        </Button>
+        <Button
+          size="sm"
           variant={iWant ? 'default' : 'outline'}
           className={`h-10 rounded-full px-5 text-[13px] font-semibold ${iWant ? 'bg-primary text-white hover:bg-primary/90' : ''}`}
           disabled={busy || !myId}
@@ -337,7 +347,10 @@ export const GameShelfScreen: React.FC<Props> = ({ guildId }) => {
   const [filter, setFilter] = useState<Filter>('all');
   const [openId, setOpenId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [lobbyOpen, setLobbyOpen] = useState(false);
+  const [lobbyGame, setLobbyGame] = useState<GameCard | null>(null);
   const reqRef = useRef(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(
     async (force = false) => {
@@ -368,6 +381,12 @@ export const GameShelfScreen: React.FC<Props> = ({ guildId }) => {
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  // 募集の「行く」や VC の人数は他の人の操作で変わるので、見ている間は 45 秒ごとに取り直す
+  useEffect(() => {
+    const t = window.setInterval(() => document.visibilityState === 'visible' && void load(true), 45_000);
+    return () => window.clearInterval(t);
   }, [load]);
 
   useEffect(() => {
@@ -467,6 +486,30 @@ export const GameShelfScreen: React.FC<Props> = ({ guildId }) => {
     </button>
   );
 
+  // ---- 募集
+  const lobbies = board.lobbies ?? [];
+  const startLobby = (g: GameCard | null) => {
+    setOpenId(null);
+    setLobbyGame(g);
+    setLobbyOpen(true);
+  };
+  const lobbyNeed = (() => {
+    if (voiceIds.length >= 2) return Math.min(8, voiceIds.length + 1);
+    if (lobbyGame?.players.min && lobbyGame.players.min >= 2) return Math.min(8, lobbyGame.players.min);
+    return 4;
+  })();
+  const onLobbyChanged = (id: number) => (lb: Lobby | null) => {
+    cache.clear();
+    setBoard((b) => (b ? { ...b, lobbies: lb ? (b.lobbies ?? []).map((x) => (x.id === id ? lb : x)) : (b.lobbies ?? []).filter((x) => x.id !== id) } : b));
+  };
+  const lobbySection = lobbies.length > 0 && (
+    <section className="space-y-3 px-4 sm:px-6" key="lobbies" aria-label="募集中">
+      {lobbies.map((lb) => (
+        <LobbyCard key={lb.id} lb={lb} guildId={guildId} members={m} games={byId} myId={myId} onChanged={onLobbyChanged(lb.id)} />
+      ))}
+    </section>
+  );
+
   // ---- いま
   const nowSection = (
     <section className="px-4 sm:px-6" data-tour="games-now" key="now">
@@ -505,6 +548,14 @@ export const GameShelfScreen: React.FC<Props> = ({ guildId }) => {
             )
           )}
         </div>
+        <button
+          type="button"
+          onClick={() => startLobby(null)}
+          className="h-9 flex-shrink-0 rounded-full bg-background px-3.5 text-[13px] font-semibold text-primary shadow-sm hover:bg-background/80"
+          data-tour="games-lobby-button"
+        >
+          募集
+        </button>
         {refresh}
       </div>
     </section>
@@ -753,16 +804,32 @@ export const GameShelfScreen: React.FC<Props> = ({ guildId }) => {
   );
 
   const order = gathered
-    ? [nowSection, tonightSection, deadlinesSection, sceneSection, recentSection, allSection]
-    : [nowSection, sceneSection, tonightSection, deadlinesSection, recentSection, allSection];
+    ? [lobbySection, nowSection, tonightSection, deadlinesSection, sceneSection, recentSection, allSection]
+    : [lobbySection, nowSection, sceneSection, tonightSection, deadlinesSection, recentSection, allSection];
 
   return (
-    <div className="h-full overflow-y-auto overflow-x-hidden bg-background">
+    <div ref={scrollRef} className="h-full overflow-y-auto overflow-x-hidden bg-background">
       <div className="mx-auto max-w-[1280px] space-y-10 pb-10 pt-4 sm:pt-6">{order}</div>
 
       <ResponsiveSheet open={!!open} onOpenChange={(o) => !o && setOpenId(null)} title={open?.name ?? ''} dataTour="game-detail">
-        {open && <GameDetail g={open} board={board} myId={myId} onMark={onMark} busy={busy} extra={openExtra} />}
+        {open && <GameDetail g={open} board={board} myId={myId} onMark={onMark} busy={busy} extra={openExtra} onLobby={startLobby} />}
       </ResponsiveSheet>
+      <LobbySheet
+        open={lobbyOpen}
+        onOpenChange={setLobbyOpen}
+        guildId={guildId}
+        board={board}
+        games={byId}
+        myId={myId}
+        game={lobbyGame}
+        defaultNeed={lobbyNeed}
+        onCreated={(lb) => {
+          cache.clear();
+          setBoard((b) => (b ? { ...b, lobbies: [...(b.lobbies ?? []), lb] } : b));
+          // 立てた募集のカード（いちばん上）を見せる
+          scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+      />
     </div>
   );
 };

@@ -158,6 +158,12 @@ async def lifespan(app: FastAPI):
             scene_task = asyncio.create_task(scene_service.scheduler())
             background_tasks.add(scene_task)
             scene_task.add_done_callback(background_tasks.discard)
+            # 募集（ロビー）: 60 秒ごとに VC の人を数え、揃ったら行く人に知らせ、時間切れを締める
+            from .lobby import service as lobby_service
+            lobby_service.init()
+            lobby_task = asyncio.create_task(lobby_service.scheduler())
+            background_tasks.add(lobby_task)
+            lobby_task.add_done_callback(background_tasks.discard)
         except Exception as e:
             print(f"[scene] 起動に失敗: {type(e).__name__}: {e}")
 
