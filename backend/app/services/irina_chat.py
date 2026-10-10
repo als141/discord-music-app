@@ -273,7 +273,10 @@ def _environment_block(message: discord.Message) -> str:
         " / GET /related/{video_id} / GET /recommendations / GET /history/{guild_id} / GET /history-stats/{guild_id}"
         " / GET /shared-tracks/{guild_id}（曲置き場: チャンネルに貼られた曲）"
         " / GET /games/{guild_id}/board?players=N（ゲーム置き場: #ゲーム置き場に貼られたゲームと、何人で遊べるか・協力/対戦・価格・セール・無料配布・"
-        "いま VC にいる人・誰が何をプレイ中か・最近遊ばれたゲーム・N 人向けの候補 tonight.picks。「今夜何する？」「4人でできる安い協力ゲーム」「セール中のやつ」などはここを見て答える）"
+        "いま VC にいる人・誰が何をプレイ中か・最近遊ばれたゲーム・N 人向けの候補 tonight.picks・界隈で話題 scene・募集中 lobbies。「今夜何する？」「4人でできる安い協力ゲーム」「セール中のやつ」「いま流行ってるの」などはここを見て答える）"
+        " / POST /games/{guild_id}/lobbies（募集を立てる。body {\"appid\": \"Steam の appid か null（なにかやる）\", \"need\": 人数, \"start\": \"now\" か \"21:00\", \"invite\": [呼ぶ人の user_id]}。"
+        "話しかけた人が立てた扱いになり、イリーナがボタンつきの募集をチャンネルに出して、そろったら行く人にメンションする。頼まれたときだけ使う。appid は board の games から探す）"
+        " / GET /scene/{guild_id}/songs（界隈の新曲）"
         " / GET /openapi.json（全エンドポイント一覧）。"
         " service=\"discord\" は Discord REST API v10（bot トークンで実行）で、path は /guilds/{guild_id}/channels, /channels/{id}/messages?limit=20,"
         " POST /channels/{id}/messages（body {\"content\": \"...\"}）, /guilds/{guild_id}/members/{user_id}, /guilds/{guild_id}/voice-states/{user_id}, /guilds/{guild_id}/members?limit=100 など",
@@ -395,7 +398,7 @@ async def _execute_tool(tc, message: discord.Message, ctx: Optional[Dict[str, An
             result = await irina_tools.http_request(
                 args.get("service", ""), args.get("method", "GET"), args.get("path", ""),
                 args.get("query"), args.get("body"), actor=actor,
-                guild_id=str(message.guild.id) if message.guild else "",
+                guild_id=str(message.guild.id) if message.guild else "", actor_id=str(message.author.id),
             )
         elif name == "fetch_url":
             result = await irina_tools.fetch_url(str(args.get("url", "")))

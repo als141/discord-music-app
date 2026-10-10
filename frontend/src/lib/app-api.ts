@@ -109,6 +109,8 @@ export interface NotifPrefs {
   gather_min: number;
   /** 自分のプレイ中をゲーム置き場に出すか */
   show_playing: boolean;
+  /** 募集が立ったら通知（既定オン） */
+  game_lobby: boolean;
 }
 
 // ---- ゲーム置き場 ----
@@ -221,6 +223,10 @@ export interface Lobby {
   members: { user_id: string; status: 'going' | 'later'; source: 'host' | 'tap' | 'vc'; at: string }[];
   invited: string[];
   going: string[];
+  origin?: string | null;
+  discord_channel_id?: string | null;
+  discord_message_id?: string | null;
+  event_id?: string | null;
 }
 
 export interface GameScene {

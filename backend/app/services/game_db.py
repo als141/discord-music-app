@@ -347,11 +347,45 @@ def set_name_map(name: str, appid: Optional[str]) -> None:
 def replace_voice_presence(guild_id: str, rows: List[Dict[str, Any]]) -> None:
     with db._connect() as c:
         prev = {r[0]: r[1] for r in c.execute("SELECT user_id, joined_at FROM voice_presence WHERE guild_id = ?", (guild_id,))}
+        prev_ch = {r[0]: r[1] for r in c.execute("SELECT user_id, channel_id FROM voice_presence WHERE guild_id = ?", (guild_id,))}
+        now_ch = {r["user_id"]: r["channel_id"] for r in rows}
+        t = now_iso()
+        # 入退室・移動を vc_sessions に（移動は 1 回閉じて開き直す）
+        for uid, ch in prev_ch.items():
+            if now_ch.get(uid) != ch:
+                c.execute("UPDATE vc_sessions SET left_at = ? WHERE guild_id = ? AND user_id = ? AND left_at IS NULL", (t, guild_id, uid))
+        for uid, ch in now_ch.items():
+            if prev_ch.get(uid) != ch:
+                c.execute("INSERT INTO vc_sessions (guild_id, user_id, channel_id, joined_at) VALUES (?, ?, ?, ?)", (guild_id, uid, ch, t))
         c.execute("DELETE FROM voice_presence WHERE guild_id = ?", (guild_id,))
         for r in rows:
             c.execute("INSERT INTO voice_presence (guild_id, user_id, user_name, user_image, channel_id, channel_name, joined_at) "
                       "VALUES (?, ?, ?, ?, ?, ?, ?)", (guild_id, r["user_id"], r.get("user_name"), r.get("user_image"),
                                                        r["channel_id"], r.get("channel_name"), prev.get(r["user_id"]) or now_iso()))
+
+
+def reset_vc(guild_id: str) -> None:
+    """起動時: 開いたままの VC 滞在をいま閉じ、voice_presence を空にする（このあと seed が今の VC を入れ直す）"""
+    with db._connect() as c:
+        c.execute("UPDATE vc_sessions SET left_at = ? WHERE guild_id = ? AND left_at IS NULL", (now_iso(), guild_id))
+        c.execute("DELETE FROM voice_presence WHERE guild_id = ?", (guild_id,))
+
+
+def posts_to_react(guild_ids: Iterable[str], since_iso: str) -> List[Dict[str, Any]]:
+    """イリーナがまだリアクションしていない、解決済みの新しい投稿"""
+    ids = list(guild_ids)
+    if not ids:
+        return []
+    cols = ("id", "guild_id", "channel_id", "message_id", "appid", "posted_at")
+    with db._connect() as c:
+        rows = c.execute(f"SELECT {', '.join(cols)} FROM game_posts WHERE appid IS NOT NULL AND reacted_at IS NULL AND posted_at >= ? "
+                         f"AND guild_id IN ({', '.join('?' * len(ids))}) ORDER BY posted_at", [since_iso] + ids).fetchall()
+    return [_row(cols, r) for r in rows]
+
+
+def mark_reacted(post_ids: Iterable[int]) -> None:
+    with db._connect() as c:
+        c.executemany("UPDATE game_posts SET reacted_at = ? WHERE id = ?", [(now_iso(), i) for i in post_ids])
 
 
 def voice_presence(guild_id: str) -> List[Dict[str, Any]]:

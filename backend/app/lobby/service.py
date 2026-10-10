@@ -36,6 +36,13 @@ def init() -> None:
                   "source TEXT NOT NULL, at TEXT NOT NULL, PRIMARY KEY (lobby_id, user_id))")
         c.execute("CREATE TABLE IF NOT EXISTS lobby_invites (lobby_id INTEGER NOT NULL, user_id TEXT NOT NULL, "
                   "PRIMARY KEY (lobby_id, user_id))")
+        # Discord 側（voice プロセスの irina_discord が投稿・編集・イベント作成）
+        for col in ("origin TEXT", "discord_channel_id TEXT", "discord_message_id TEXT", "render_hash TEXT",
+                    "full_announced_at TEXT", "event_id TEXT", "created_notified_at TEXT"):
+            try:
+                c.execute(f"ALTER TABLE lobbies ADD COLUMN {col}")
+            except Exception:
+                pass  # 既にある
 
 
 def _iso(d: datetime) -> str:
@@ -62,8 +69,14 @@ def _members(c, lobby_id: int) -> List[Dict[str, Any]]:
             for r in c.execute("SELECT user_id, status, source, at FROM lobby_members WHERE lobby_id = ? ORDER BY at", (lobby_id,))]
 
 
+LOBBY_COLS = ("id", "guild_id", "host_id", "appid", "title", "need", "start_at", "created_at", "closed_at", "close_reason",
+              "full_notified_at", "origin", "discord_channel_id", "discord_message_id", "render_hash", "full_announced_at",
+              "event_id", "created_notified_at")
+_SEL = "SELECT " + ", ".join(LOBBY_COLS) + " FROM lobbies"
+
+
 def _row(c, r) -> Dict[str, Any]:
-    keys = ("id", "guild_id", "host_id", "appid", "title", "need", "start_at", "created_at", "closed_at", "close_reason", "full_notified_at")
+    keys = LOBBY_COLS
     d = dict(zip(keys, r))
     d["members"] = _members(c, d["id"])
     d["invited"] = [x[0] for x in c.execute("SELECT user_id FROM lobby_invites WHERE lobby_id = ?", (d["id"],))]
@@ -73,20 +86,19 @@ def _row(c, r) -> Dict[str, Any]:
 
 def list_open(guild_id: str) -> List[Dict[str, Any]]:
     with db._connect() as c:
-        rows = c.execute("SELECT id, guild_id, host_id, appid, title, need, start_at, created_at, closed_at, close_reason, full_notified_at "
-                         "FROM lobbies WHERE guild_id = ? AND closed_at IS NULL ORDER BY start_at", (guild_id,)).fetchall()
+        rows = c.execute(_SEL + " WHERE guild_id = ? AND closed_at IS NULL ORDER BY start_at", (guild_id,)).fetchall()
         return [_row(c, r) for r in rows]
 
 
 def get(lobby_id: int) -> Optional[Dict[str, Any]]:
     with db._connect() as c:
-        r = c.execute("SELECT id, guild_id, host_id, appid, title, need, start_at, created_at, closed_at, close_reason, full_notified_at "
-                      "FROM lobbies WHERE id = ?", (lobby_id,)).fetchone()
+        r = c.execute(_SEL + " WHERE id = ?", (lobby_id,)).fetchone()
         return _row(c, r) if r else None
 
 
 def create(guild_id: str, host_id: str, *, appid: Optional[str], title: Optional[str], need: int, start: str,
-           invite: List[str]) -> Dict[str, Any]:
+           invite: List[str], origin: str = "app", discord_channel_id: Optional[str] = None,
+           discord_message_id: Optional[str] = None) -> Dict[str, Any]:
     start_at = parse_start(start)
     with db._connect() as c:
         open_by_host = c.execute("SELECT COUNT(*) FROM lobbies WHERE guild_id = ? AND host_id = ? AND closed_at IS NULL",
@@ -97,8 +109,9 @@ def create(guild_id: str, host_id: str, *, appid: Optional[str], title: Optional
                            (host_id, _iso(now() - timedelta(hours=1)))).fetchone()[0]
         if recent >= 6:
             raise ValueError("少し待ってからもう一度立ててください")
-        cur = c.execute("INSERT INTO lobbies (guild_id, host_id, appid, title, need, start_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                        (guild_id, host_id, appid, title, need, _iso(start_at), _iso(now())))
+        cur = c.execute("INSERT INTO lobbies (guild_id, host_id, appid, title, need, start_at, created_at, origin, discord_channel_id, "
+                        "discord_message_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (guild_id, host_id, appid, title, need, _iso(start_at), _iso(now()), origin, discord_channel_id, discord_message_id))
         lid = cur.lastrowid
         c.execute("INSERT INTO lobby_members (lobby_id, user_id, status, source, at) VALUES (?, ?, 'going', 'host', ?)",
                   (lid, host_id, _iso(now())))
@@ -116,6 +129,70 @@ def set_status(lobby_id: int, user_id: str, status: str) -> Dict[str, Any]:
                       "ON CONFLICT(lobby_id, user_id) DO UPDATE SET status = excluded.status, at = excluded.at",
                       (lobby_id, user_id, status, _iso(now())))
     return get(lobby_id)
+
+
+def update_fields(lobby_id: int, **fields) -> None:
+    keys = [k for k in fields if k in LOBBY_COLS and k != "id"]
+    if not keys:
+        return
+    with db._connect() as c:
+        c.execute(f"UPDATE lobbies SET {', '.join(k + ' = ?' for k in keys)} WHERE id = ?", [fields[k] for k in keys] + [lobby_id])
+
+
+def recently_closed(guild_id: Optional[str] = None, hours: float = 6) -> List[Dict[str, Any]]:
+    """締めたばかりの募集（Discord のメッセージとイベントの後始末用）"""
+    since = _iso(now() - timedelta(hours=hours))
+    with db._connect() as c:
+        q = _SEL + " WHERE closed_at IS NOT NULL AND closed_at >= ?"
+        args: List[Any] = [since]
+        if guild_id:
+            q += " AND guild_id = ?"
+            args.append(guild_id)
+        return [_row(c, r) for r in c.execute(q, args).fetchall()]
+
+
+def what(lb: Dict[str, Any]) -> str:
+    g = gdb.get_game(lb["appid"]) if lb.get("appid") else None
+    return (g or {}).get("name") or lb.get("title") or "なにかやる"
+
+
+def when(lb: Dict[str, Any]) -> str:
+    start = datetime.fromisoformat(lb["start_at"]).astimezone(JST)
+    return "今から" if start <= datetime.now(JST) + timedelta(minutes=5) else f"{start:%-H:%M}〜"
+
+
+async def notify_created(lb: Dict[str, Any]) -> None:
+    """募集が立ったら、まだ行くを押していない人へ（オーナー指定 2026-10-11）。
+    「募集が立ったら」（game_lobby、既定オン）を切った人と、もう VC にいる人には送らない。1 人 20 分に 1 回まで"""
+    from ..services import push
+    if not push.configured() or lb.get("created_notified_at"):
+        return
+    update_fields(lb["id"], created_notified_at=_iso(now()))
+    prefs = await asyncio.to_thread(db.get_all_notif_prefs)
+    in_vc = {v["user_id"] for v in await asyncio.to_thread(gdb.voice_presence, lb["guild_id"])}
+    members = set(await asyncio.to_thread(lambda: list(gdb.members(lb["guild_id"]).keys())))
+    devices = await asyncio.to_thread(db.list_push_devices, None)
+    targets = []
+    for uid in sorted({d["user_id"] for d in devices}):
+        if uid == lb["host_id"] or uid in lb["going"] or uid in in_vc:
+            continue
+        if members and uid not in members and uid not in lb["invited"]:
+            continue
+        if not (prefs.get(uid) or db.DEFAULT_NOTIF_PREFS).get("game_lobby", True) and uid not in lb["invited"]:
+            continue
+        if not await asyncio.to_thread(db.throttle_ok, uid, "game_lobby", 20 * 60):
+            continue
+        targets.append(uid)
+    send_to = [d for d in devices if d["user_id"] in targets]
+    if not send_to:
+        return
+    host = (gdb.members(lb["guild_id"]).get(lb["host_id"]) or {}).get("name") or "だれか"
+    left = max(0, lb["need"] - len(lb["going"]))
+    res = await push.send_logged(kind="game_lobby", title=f"{host}の募集: {what(lb)}", body=f"{when(lb)}・あと{left}人",
+                                 url=f"/?tab=games&lobby={lb['id']}", devices=send_to, ttl=3 * 3600,
+                                 topic=f"irina-lobby-new-{lb['id']}", tag=f"irina-lobby-{lb['id']}")
+    if res["sent"]:
+        await asyncio.to_thread(db.throttle_mark, targets, "game_lobby")
 
 
 def close(lobby_id: int, reason: str) -> None:

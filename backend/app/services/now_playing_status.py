@@ -29,6 +29,19 @@ _vc_tasks: Dict[int, asyncio.Task] = {}
 _vc_disabled_guilds: Set[int] = set()
 _guild_channel: Dict[int, int] = {}                             # guild_id -> 最後にステータスを出した VC
 _presence_lock: Optional[asyncio.Lock] = None
+_idle_override: Optional[str] = None                            # 音楽が鳴っていないときの表示（irina_discord が「募集中…」などを入れる）
+
+
+def is_playing(guild_id: int) -> bool:
+    return guild_id in _playing
+
+
+async def set_idle(text: Optional[str]) -> None:
+    """音楽が鳴っていないときのステータス（None で既定に戻す）。鳴っている間は曲名が優先"""
+    global _idle_override
+    _idle_override = (text or None) and text[:128]
+    if not _playing:
+        await _apply_presence()
 
 
 def configure(client: discord.Client) -> None:
@@ -93,7 +106,7 @@ async def _apply_presence() -> None:
         name = (f"{title} — {a}" if a else title)[:128]
         activity: discord.BaseActivity = discord.Activity(type=discord.ActivityType.listening, name=name)
     else:
-        activity = discord.CustomActivity(name=IDLE_ACTIVITY_NAME)
+        activity = discord.CustomActivity(name=_idle_override or IDLE_ACTIVITY_NAME)
     async with _presence_lock:
         try:
             await _client.change_presence(status=discord.Status.online, activity=activity)

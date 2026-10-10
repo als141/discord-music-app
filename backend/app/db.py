@@ -195,7 +195,8 @@ def init_db():
         """)
         # 受け取り設定の追加列（ゲーム置き場: セール・無料 / 揃ったら教えて / プレイ中の表示）
         for col, ddl in (("game_deals", "INTEGER NOT NULL DEFAULT 0"), ("game_gather", "INTEGER NOT NULL DEFAULT 0"),
-                         ("gather_min", "INTEGER NOT NULL DEFAULT 3"), ("show_playing", "INTEGER NOT NULL DEFAULT 1")):
+                         ("gather_min", "INTEGER NOT NULL DEFAULT 3"), ("show_playing", "INTEGER NOT NULL DEFAULT 1"),
+                         ("game_lobby", "INTEGER NOT NULL DEFAULT 1")):
             try:
                 conn.execute(f"ALTER TABLE notif_prefs ADD COLUMN {col} {ddl}")
             except sqlite3.OperationalError:
@@ -253,6 +254,10 @@ def init_db():
         )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_game_posts_guild ON game_posts(guild_id, posted_at DESC)")
+        try:
+            conn.execute("ALTER TABLE game_posts ADD COLUMN reacted_at TEXT")  # イリーナがリアクションを付けた時刻
+        except sqlite3.OperationalError:
+            pass
         conn.execute("CREATE INDEX IF NOT EXISTS idx_game_posts_appid ON game_posts(appid)")
         # やりたい / 持ってる（アプリのボタン）
         conn.execute("""
@@ -293,6 +298,18 @@ def init_db():
             PRIMARY KEY (guild_id, user_id)
         )
         """)
+        # VC の入退室の記録（「今週のドデカ」の材料。プレイ中を出さない人も VC にいた時間だけは数える）
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS vc_sessions (
+            id          INTEGER PRIMARY KEY,
+            guild_id    TEXT NOT NULL,
+            user_id     TEXT NOT NULL,
+            channel_id  TEXT NOT NULL,
+            joined_at   TEXT NOT NULL,
+            left_at     TEXT
+        )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_vc_sessions_open ON vc_sessions(guild_id, left_at)")
         # メンバーの表示名・アバター（プレゼンス・VC で見えた人。表示用）
         conn.execute("""
         CREATE TABLE IF NOT EXISTS guild_members (
@@ -882,8 +899,9 @@ def list_push_devices(user_ids: Optional[List[str]] = None) -> List[Dict[str, An
 # 曲置き場・VC の自動通知は既定オフ（ユーザー指定 2026-09-28）。行が無い人はこの値
 # 曲置き場・VC・ゲームの自動通知は既定オフ（ユーザー指定 2026-09-28）。行が無い人はこの値
 # gather_min = 「VC に何人そろったら教えるか」、show_playing = 自分のプレイ中をゲーム置き場に出すか（既定は出す）
+# game_lobby = 「募集が立ったら」。オーナー指定（2026-10-11）で既定オン（ほかの自動通知は既定オフのまま）
 DEFAULT_NOTIF_PREFS: Dict[str, Any] = {"shelf": False, "vc_music": False, "game_deals": False, "game_gather": False,
-                                       "gather_min": 3, "show_playing": True}
+                                       "gather_min": 3, "show_playing": True, "game_lobby": True}
 _PREF_COLS = list(DEFAULT_NOTIF_PREFS.keys())
 
 

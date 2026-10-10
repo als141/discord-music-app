@@ -89,7 +89,7 @@ def _truncate(value: Any) -> Any:
 
 
 async def http_request(service: str, method: str, path: str, query: Optional[Dict[str, Any]] = None,
-                       body: Optional[Any] = None, actor: str = "", guild_id: str = "") -> Dict[str, Any]:
+                       body: Optional[Any] = None, actor: str = "", guild_id: str = "", actor_id: str = "") -> Dict[str, Any]:
     """1 回の HTTP リクエスト。戻り値は {"status", "ok", "body"} か {"error"}"""
     service = (service or "").strip().lower()
     method = (method or "GET").strip().upper()
@@ -122,6 +122,7 @@ async def http_request(service: str, method: str, path: str, query: Optional[Dic
         if internal_token():
             headers["X-Irina-Internal"] = internal_token()
             headers["X-Irina-Guild"] = guild_id or ""
+            headers["X-Irina-Actor"] = actor_id or ""   # 話しかけた人（募集を立てるとき、その人が立てた扱いになる）
 
     if method != "GET" and _write_rate_limited():
         return {"error": "書き込み系リクエストが多すぎる（1 分 20 回まで）。少し待ってから"}

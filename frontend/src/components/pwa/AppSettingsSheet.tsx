@@ -208,9 +208,10 @@ export const AppSettingsSheet: React.FC = () => {
     );
   })();
 
-  type BoolPref = 'shelf' | 'vc_music' | 'game_deals' | 'game_gather';
+  type BoolPref = 'shelf' | 'vc_music' | 'game_deals' | 'game_gather' | 'game_lobby';
   const prefRows: { key: 'announce' | BoolPref; label: string; note: string }[] = [
     { key: 'announce', label: 'お知らせ', note: '新機能や大事なお知らせ。必ず届きます' },
+    { key: 'game_lobby', label: '募集が立ったら', note: 'だれかが「21時〜 あと1人」を立てたとき（20 分に 1 回まで。呼ばれたときは必ず）' },
     { key: 'game_gather', label: 'VC に人がそろったら', note: '下で決めた人数に届いたら（自分が VC にいないとき、3 時間に 1 回まで）' },
     { key: 'game_deals', label: 'ゲーム置き場のセール・無料配布', note: '1 日 1 回、19 時ごろにまとめて（やりたいゲームを先頭に）' },
     { key: 'shelf', label: '曲置き場に曲が置かれたとき', note: '#曲置き場 にリンクが貼られたら（30 分に 1 回まで）' },

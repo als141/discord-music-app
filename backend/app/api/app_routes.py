@@ -74,6 +74,7 @@ class PrefsIn(BaseModel):
     game_gather: Optional[bool] = None
     gather_min: Optional[int] = Field(default=None, ge=2, le=8)
     show_playing: Optional[bool] = None
+    game_lobby: Optional[bool] = None
 
 
 class MarkIn(BaseModel):
@@ -306,9 +307,17 @@ class LobbyJoinIn(BaseModel):
 
 
 @router.post("/games/{guild_id}/lobbies")
-async def lobby_create(guild_id: str, body: LobbyIn, user: AppUser = Depends(current_user)):
-    """募集を立てる（立てた人は「行く」）。ゲームは任意（「何かやる人」）"""
+async def lobby_create(guild_id: str, body: LobbyIn, request: Request, user: Optional[AppUser] = Depends(user_or_internal)):
+    """募集を立てる（立てた人は「行く」）。ゲームは任意（「何かやる人」）。
+    イリーナのチャットから（内部の合言葉つき）は、そのサーバーでの会話で、話しかけた人（X-Irina-Actor）が立てた扱い"""
     _check_game_guild(guild_id)
+    origin = "app"
+    if user is None:
+        actor = request.headers.get("x-irina-actor") or ""
+        if (request.headers.get("x-irina-guild") or "") != guild_id or not actor.isdigit():
+            raise HTTPException(status_code=403, detail="このサーバーでの会話からだけ立てられます")
+        user = AppUser(id=actor, name="", image="")
+        origin = "chat"
     await _require_member(guild_id, user)
     if body.appid and not body.appid.isdigit():
         raise HTTPException(status_code=400, detail="bad appid")
@@ -317,11 +326,12 @@ async def lobby_create(guild_id: str, body: LobbyIn, user: AppUser = Depends(cur
     invite = [u for u in body.invite if u.isdigit()]
     try:
         lb = await asyncio.to_thread(lobby.create, guild_id, user.id, appid=body.appid, title=(body.title or "").strip() or None,
-                                     need=body.need, start=body.start, invite=invite)
+                                     need=body.need, start=body.start, invite=invite, origin=origin)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
-    await asyncio.to_thread(game_db.upsert_member, guild_id, user.id, user.name or None, user.image or None)
-    print(f"[lobby] created #{lb['id']} by {user.id} appid={body.appid} need={body.need} start={body.start}")
+    if user.name:
+        await asyncio.to_thread(game_db.upsert_member, guild_id, user.id, user.name or None, user.image or None)
+    print(f"[lobby] created #{lb['id']} by {user.id} ({origin}) appid={body.appid} need={body.need} start={body.start}")
     return lb
 
 

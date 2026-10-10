@@ -130,10 +130,19 @@ export function LobbyCard({
             )}
           </Button>
         )}
-        <Button size="sm" variant="outline" onClick={copy} className="h-9 rounded-full px-4 text-[13px] font-semibold">
-          <Copy className="mr-1.5 h-3.5 w-3.5" />
-          Discord に貼る
-        </Button>
+        {lb.discord_message_id && lb.discord_channel_id ? (
+          // イリーナが Discord にボタンつきで出している（そこでも「行く」を押せる）
+          <Button asChild size="sm" variant="outline" className="h-9 rounded-full px-4 text-[13px] font-semibold">
+            <a href={`https://discord.com/channels/${guildId}/${lb.discord_channel_id}/${lb.discord_message_id}`} target="_blank" rel="noopener noreferrer">
+              Discord で開く
+            </a>
+          </Button>
+        ) : (
+          <Button size="sm" variant="outline" onClick={copy} className="h-9 rounded-full px-4 text-[13px] font-semibold">
+            <Copy className="mr-1.5 h-3.5 w-3.5" />
+            Discord に貼る
+          </Button>
+        )}
         {isHost && (
           <Button size="sm" variant="ghost" onClick={close} disabled={busy} className="ml-auto h-9 rounded-full px-3 text-[13px] text-muted-foreground">
             締める
@@ -203,10 +212,9 @@ export function LobbySheet({
       onCreated(lb);
       onOpenChange(false);
       try {
-        await navigator.clipboard.writeText(lobbyText(lb, games));
-        toast({ title: '募集しました', description: '誘う文面をコピーしました。Discord に貼って送ってください' });
+        toast({ title: '募集しました', description: 'イリーナが Discord に募集を出します（少しかかります）' });
       } catch {
-        toast({ title: '募集しました' });
+        /* 通知の表示だけ */
       }
     } catch (e) {
       toast({ title: '募集できませんでした', description: e instanceof Error ? e.message : '', variant: 'destructive' });
@@ -283,7 +291,7 @@ export function LobbySheet({
           </div>
         )}
         <p className="text-[12px] leading-relaxed text-muted-foreground">
-          そろったら「行く」を押した人に通知が届きます。VC に入った人も行くに数えます。開始から 2 時間で自動で締まります。
+          イリーナが Discord にボタンつきで募集を出し、みんなにも通知が届きます。そろったら行く人にメンションで知らせます。VC に入った人も行くに数え、開始から 2 時間で自動で締まります。
         </p>
         <div className="sticky bottom-0 -mx-5 border-t border-border/70 bg-background/95 px-5 py-3 backdrop-blur">
           <Button onClick={submit} disabled={busy || !myId} className="h-11 w-full rounded-full bg-primary text-[15px] font-semibold text-white hover:bg-primary/90">

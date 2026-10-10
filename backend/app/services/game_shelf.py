@@ -406,6 +406,7 @@ async def seed(client) -> None:
             if not guild:
                 continue
             rows = _vc_rows(guild)
+            await asyncio.to_thread(gdb.reset_vc, gid)
             await asyncio.to_thread(gdb.replace_voice_presence, gid, rows)
             _vc_count[gid] = len(rows)
             for m in guild.members:
