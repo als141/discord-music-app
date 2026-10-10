@@ -2,24 +2,23 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { Clock, ExternalLink, Flame, Gift, Loader2, PlayCircle, RefreshCw, Swords, Tag, Users } from 'lucide-react';
+import { ExternalLink, Loader2, PlayCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
 import { ScrollRow } from '@/components/home/ScrollRow';
 import { useIsDesktop } from '@/hooks/use-media-query';
 import { useToast } from '@/hooks/use-toast';
-import { Input } from '@/components/ui/input';
-import { appApi, GameBoard, GameCard, GameOffer, SceneFresh, SceneStreamerGame, SteamLink } from '@/lib/app-api';
+import { appApi, GameBoard, GameCard, GameOffer, SceneFresh } from '@/lib/app-api';
+import { SteamLinkCard } from './SteamLinkCard';
+import { AvatarStack, Hero, Meta, RankList, RankRow, SectionHeader, SubHeader } from './ui';
 
 /**
- * 「ゲーム置き場」タブ。#ゲーム置き場 に貼られたゲームを、ドデカの「いま」に結びつけて見せる。
+ * 「ゲーム置き場」タブ。曲置き場（ShelfScreen）と同じ部品（./ui）・同じ骨組み（いま → 界隈 → みんなが貼った）で対になる。
  *
  * 並びは場面で変える:
- *   VC に 2 人以上 → いま → 今夜どれ？（その人数で）→ 期限つき → 界隈で話題 → 最近遊ばれた → みんなが貼った
- *   それ以外       → いま（1 行）→ 界隈で話題 → 今夜どれ？ → 期限つき → 最近遊ばれた → みんなが貼った
- * 説明文は置かない（見出しの横に出どころを一言だけ。詳しくは案内ツアー）。カードを押すと詳しい情報、操作は下に固定
- * 曲置き場（ShelfScreen）と同じ骨組み（いま → 界隈 → みんなが貼った）で対になる
- * データは `GET /games/{guild}/board`（本人のトークン）。60 秒だけメモリにキャッシュ
+ *   VC に 2 人以上 → いま → 今夜どれ？（その人数。1 位を大きく＋2〜6 位）→ 期限つき → 界隈で話題（順位）→ 最近遊ばれた → みんなが貼った
+ *   それ以外       → いま（1 行）→ 界隈で話題（1 位を大きく＋順位）→ 今夜どれ？ → 期限つき → 最近遊ばれた → みんなが貼った
+ * 大きなカード（Hero）は 1 画面に 1 つだけ。データは `GET /games/{guild}/board`（本人のトークン）を 60 秒キャッシュ
  */
 
 const CACHE_MS = 60_000;
@@ -36,6 +35,8 @@ const FILTERS: { id: Filter; label: string; test: (g: GameCard) => boolean }[] =
   { id: 'free', label: '無料', test: (g) => g.price.free || g.price.final === 0 },
   { id: 'soon', label: '発売前', test: (g) => g.release.soon },
 ];
+
+// ---------------------------------------------------------------- 文字の整形
 
 function timeAgo(iso: string | null): string {
   if (!iso) return '';
@@ -66,14 +67,6 @@ export function playersLabel(g: GameCard): string {
   return best || '人数不明';
 }
 
-function priceLabel(g: GameCard): { text: string; old?: string; tone: 'free' | 'sale' | 'normal' | 'muted' } {
-  const p = g.price;
-  if (p.free || p.final === 0) return { text: '無料', tone: 'free' };
-  if (p.final == null) return { text: g.release.soon ? '発売前' : '価格不明', tone: 'muted' };
-  if (p.discount > 0) return { text: `-${p.discount}% ¥${p.final.toLocaleString()}`, old: p.initial ? `¥${p.initial.toLocaleString()}` : undefined, tone: 'sale' };
-  return { text: `¥${p.final.toLocaleString()}`, tone: 'normal' };
-}
-
 function modeLabel(modes: string[]): string {
   if (modes.includes('online_coop') && modes.includes('online_pvp')) return '協力・対戦';
   if (modes.includes('online_coop')) return '協力';
@@ -83,45 +76,32 @@ function modeLabel(modes: string[]): string {
   return 'ソロ';
 }
 
-type Members = GameBoard['members'];
-
-function Avatars({ ids, members, size = 20, max = 5 }: { ids: string[]; members: Members; size?: number; max?: number }) {
-  if (!ids.length) return null;
-  const shown = ids.slice(0, max);
-  return (
-    <span className="inline-flex items-center">
-      {shown.map((id, i) => {
-        const m = members[id];
-        return (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            key={id}
-            src={m?.image || `https://cdn.discordapp.com/embed/avatars/${Number(BigInt(id) >> BigInt(22)) % 6}.png`}
-            alt={m?.name || ''}
-            title={m?.name || ''}
-            width={size}
-            height={size}
-            className="rounded-full border-2 border-background bg-secondary object-cover"
-            style={{ width: size, height: size, marginLeft: i ? -size / 3 : 0 }}
-          />
-        );
-      })}
-      {ids.length > max && <span className="ml-1 text-[11px] text-muted-foreground">+{ids.length - max}</span>}
-    </span>
-  );
+function priceText(g: GameCard): string {
+  const p = g.price;
+  if (p.free || p.final === 0) return '無料';
+  if (p.final == null) return g.release.soon ? '発売前' : '';
+  return p.discount > 0 ? `-${p.discount}% ¥${p.final.toLocaleString()}` : `¥${p.final.toLocaleString()}`;
 }
 
-function SectionTitle({ icon, title, caption, aside }: { icon: React.ReactNode; title: string; caption?: string; aside?: React.ReactNode }) {
-  return (
-    <div className="mb-3 flex items-center justify-between gap-3 px-4 sm:px-6">
-      <h2 className="flex min-w-0 items-baseline gap-2 text-[17px] font-bold tracking-tight text-foreground">
-        <span className="self-center text-primary">{icon}</span>
-        <span className="flex-shrink-0">{title}</span>
-        {caption && <span className="truncate text-[11.5px] font-medium text-muted-foreground">{caption}</span>}
-      </h2>
-      {aside}
-    </div>
-  );
+/** 価格。セールはローズ、無料は緑、ふつうは補足色のまま */
+function Price({ g }: { g: GameCard }) {
+  const p = g.price;
+  if (p.free || p.final === 0) return <span className="font-semibold text-green-600">無料</span>;
+  if (p.final == null) return g.release.soon ? <span>発売前</span> : null;
+  if (p.discount > 0)
+    return (
+      <span>
+        <span className="font-semibold text-primary">
+          -{p.discount}% ¥{p.final.toLocaleString()}
+        </span>
+        {p.initial ? <span className="ml-1 text-muted-foreground/70 line-through">¥{p.initial.toLocaleString()}</span> : null}
+      </span>
+    );
+  return <span>¥{p.final.toLocaleString()}</span>;
+}
+
+function gameMeta(g: GameCard): React.ReactNode[] {
+  return [playersLabel(g), modeLabel(g.modes), <Price key="p" g={g} />];
 }
 
 /** チャンネル名の「葛葉 / Kuzuha」「ローレン・イロアス【にじさんじ】」から日本語の呼び名だけ */
@@ -129,206 +109,111 @@ function cleanName(n: string): string {
   return n.split(/\s*[/／|｜【(（]\s*/)[0].trim() || n;
 }
 
-function GameImage({ g, className = '' }: { g: GameCard | { image: string | null; name: string }; className?: string }) {
-  return (
-    <div className={`relative overflow-hidden rounded-xl bg-secondary ${className}`} style={{ aspectRatio: '460 / 215' }}>
-      {g.image && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={g.image} alt={g.name} loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
-      )}
-    </div>
-  );
-}
-
-function PriceTag({ g }: { g: GameCard }) {
-  const p = priceLabel(g);
-  const cls = { free: 'bg-green-600 text-white', sale: 'bg-primary text-white', normal: 'bg-secondary text-foreground', muted: 'bg-secondary text-muted-foreground' }[p.tone];
-  return (
-    <span className="inline-flex items-center gap-1">
-      <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-bold ${cls}`}>{p.text}</span>
-      {p.old && <span className="text-[11px] text-muted-foreground line-through">{p.old}</span>}
-    </span>
-  );
-}
-
-function Chip({ children, tone = 'muted' }: { children: React.ReactNode; tone?: 'muted' | 'accent' | 'ok' }) {
-  const cls = { muted: 'bg-secondary text-foreground/75', accent: 'bg-primary/10 text-primary', ok: 'bg-green-500/12 text-green-700' }[tone];
-  return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls}`}>{children}</span>;
-}
-
-function GridCard({ g, members, onOpen, anchor }: { g: GameCard; members: Members; onOpen: (g: GameCard) => void; anchor?: string }) {
-  const people = Array.from(new Set([...g.playing_now, ...g.played]));
-  return (
-    <button type="button" onClick={() => onOpen(g)} data-tour={anchor} className="group w-full self-start text-left" aria-label={`${g.name} の詳細`}>
-      <GameImage g={g} className="mb-2 transition-transform duration-300 group-hover:scale-[1.02]" />
-      <div className="px-0.5">
-        <h3 className="line-clamp-1 text-[13.5px] font-semibold text-foreground">{g.name}</h3>
-        <p className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-muted-foreground">{g.hook}</p>
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          <Chip tone="accent">
-            <Users className="h-3 w-3" />
-            {playersLabel(g)}
-          </Chip>
-          <Chip>{modeLabel(g.modes)}</Chip>
-          <PriceTag g={g} />
-        </div>
-        {(people.length > 0 || g.want.length > 0) && (
-          <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <Avatars ids={people.length ? people : g.want} members={members} size={18} />
-            <span>{g.playing_now.length ? 'プレイ中' : people.length ? '遊んだ' : 'やりたい'}</span>
-          </div>
-        )}
-      </div>
-    </button>
-  );
-}
-
-/** why（backend の理由）のうち、カードの下の行（人数・モード・価格）と重なるものは出さない */
-const META_WHY = /^(最大\d+人|\d+人まで|協力|対戦|¥[\d,]+|\d+%オフ.*|無料)$/;
-
-function PickCard({ g, why, members, onOpen, anchor }: { g: GameCard; why: string[]; members: Members; onOpen: (g: GameCard) => void; anchor?: string }) {
-  const people = Array.from(new Set([...g.playing_now, ...g.played, ...g.own]));
-  const reasons = why.filter((w) => !META_WHY.test(w)).slice(0, 2);
-  return (
-    <button type="button" onClick={() => onOpen(g)} data-tour={anchor} className="group w-[230px] min-w-[230px] self-start text-left sm:w-[260px] sm:min-w-[260px]">
-      <GameImage g={g} className="mb-2" />
-      <h3 className="line-clamp-1 text-[14px] font-semibold text-foreground">{g.name}</h3>
-      <p className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-muted-foreground">{g.hook}</p>
-      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11.5px] text-foreground/75">
-        <span className="font-semibold text-primary">{playersLabel(g)}</span>
-        <span>{modeLabel(g.modes)}</span>
-        <PriceTag g={g} />
-      </div>
-      {(reasons.length > 0 || people.length > 0) && (
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          {people.length > 0 && <Avatars ids={people} members={members} size={18} />}
-          {reasons.map((w) => (
-            <Chip key={w} tone={/持って|遊んだ/.test(w) ? 'ok' : 'muted'}>{w}</Chip>
-          ))}
-        </div>
-      )}
-    </button>
-  );
-}
-
-function OfferCard({ o, game, onOpen }: { o: GameOffer; game?: GameCard; onOpen: (g: GameCard) => void }) {
-  const until = o.active ? `${md(o.ends_at)} まで無料` : `${md(o.starts_at)} から無料`;
-  const body = (
-    <>
-      <div className="relative overflow-hidden rounded-xl bg-secondary" style={{ aspectRatio: '460 / 215' }}>
-        {o.image && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={o.image} alt={o.title} loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
-        )}
-        <span className={`absolute left-2 top-2 rounded-md px-1.5 py-0.5 text-[11px] font-bold ${o.active ? 'bg-green-600 text-white' : 'bg-background/90 text-foreground'}`}>
-          {o.source === 'epic' ? 'Epic' : o.source} · {until}
-        </span>
-      </div>
-      <h3 className="mt-2 line-clamp-1 text-[13.5px] font-semibold text-foreground">{o.title}</h3>
-      {game && (
-        <p className="mt-0.5 text-[11.5px] text-muted-foreground">
-          {playersLabel(game)}・{modeLabel(game.modes)}
-        </p>
-      )}
-    </>
-  );
-  return game ? (
-    <button type="button" onClick={() => onOpen(game)} className="w-[230px] min-w-[230px] self-start text-left">
-      {body}
-    </button>
-  ) : (
-    <a href={o.url || '#'} target="_blank" rel="noopener noreferrer" className="block w-[230px] min-w-[230px] self-start">
-      {body}
-    </a>
-  );
+function names(list: string[], max = 2): string {
+  return list.length > max ? `${list.slice(0, max).join('、')} ほか${list.length - max}人` : list.join('、');
 }
 
 function fmtViews(n: number): string {
   return n >= 10000 ? `${Math.round(n / 10000).toLocaleString()}万回` : `${n.toLocaleString()}回`;
 }
 
-function names(list: string[], max = 3): string {
-  return list.length > max ? `${list.slice(0, max).join('・')} ほか${list.length - max}人` : list.join('・');
+/** why（backend の理由）のうち、人数・モード・価格と重なるものは出さない */
+const META_WHY = /^(最大\d+人|\d+人まで|協力|対戦|¥[\d,]+|\d+%オフ.*|無料)$/;
+
+type Members = GameBoard['members'];
+
+function memberImages(ids: string[], members: Members): string[] {
+  return ids.map((id) => members[id]?.image || `https://cdn.discordapp.com/embed/avatars/${Number(BigInt(id) >> BigInt(22)) % 6}.png`);
 }
 
-/** 配信者がいまやってる: 全員知っているゲームが多いので、大きなカードではなく 1 行のピル */
-function StreamerPill({ e, onOpen, anchor }: { e: SceneStreamerGame; onOpen: (g: GameCard) => void; anchor?: string }) {
-  const who = e.channels.map((c) => cleanName(c.name));
-  const inner = (
-    <>
-      {e.image ? (
+// ---------------------------------------------------------------- カード
+
+function Thumb({ src, alt, className = '' }: { src: string | null; alt: string; className?: string }) {
+  return (
+    <div className={`relative overflow-hidden rounded-xl bg-secondary ${className}`} style={{ aspectRatio: '460 / 215' }}>
+      {src && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={e.image} alt="" loading="lazy" className="h-8 w-[60px] flex-shrink-0 rounded-full object-cover" />
-      ) : (
-        <span className="h-8 w-[60px] flex-shrink-0 rounded-full bg-secondary" />
+        <img src={src} alt={alt} loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
       )}
-      <span className="min-w-0">
-        <span className="block max-w-[150px] truncate text-[13px] font-semibold leading-tight text-foreground">{e.name}</span>
-        <span className="block max-w-[150px] truncate text-[11px] leading-tight text-muted-foreground">{who.length}人・{who.slice(0, 2).join('・')}</span>
-      </span>
-    </>
-  );
-  const cls = 'flex h-11 flex-shrink-0 items-center gap-2 rounded-full border border-border bg-card py-1 pl-1 pr-3.5 text-left hover:bg-secondary/60';
-  if (e.card) {
-    const card = e.card;
-    return (
-      <button type="button" onClick={() => onOpen(card)} data-tour={anchor} className={cls} aria-label={`${e.name}（配信者 ${who.length} 人）`}>
-        {inner}
-      </button>
-    );
-  }
-  return (
-    <a href={e.top ? `https://www.youtube.com/watch?v=${e.top.video_id}` : '#'} target="_blank" rel="noopener noreferrer" data-tour={anchor} className={cls} aria-label={`${e.name}（配信者 ${who.length} 人、YouTube で開く）`}>
-      {inner}
-    </a>
+    </div>
   );
 }
 
-function FreshCard({ e, onOpen, anchor }: { e: SceneFresh; onOpen: (g: GameCard) => void; anchor?: string }) {
-  const g = e.card;
-  // いちばん強い理由を 2 つだけ（並びは backend が強い順に作っている）
-  const reasons = e.badges.slice(0, 2);
+/** 横に流れるカード。3 行（名前・一言・人数と価格）で揃える */
+function GameTile({ g, below, onOpen, anchor, wide = false }: { g: GameCard; below?: React.ReactNode; onOpen: (g: GameCard) => void; anchor?: string; wide?: boolean }) {
   return (
-    <button type="button" onClick={() => onOpen(g)} data-tour={anchor} className="group w-[230px] min-w-[230px] self-start text-left sm:w-[260px] sm:min-w-[260px]">
-      <GameImage g={g} className="mb-2" />
-      <h3 className="line-clamp-1 text-[14px] font-semibold text-foreground">{g.name}</h3>
-      <p className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-muted-foreground">{g.hook}</p>
-      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11.5px] text-foreground/75">
-        <span className="font-semibold text-primary">{playersLabel(g)}</span>
-        <span>{modeLabel(g.modes)}</span>
-        <PriceTag g={g} />
-      </div>
-      <div className="mt-1.5 flex flex-wrap items-center gap-1">
-        {reasons.map((b, i) => (
-          <Chip key={b} tone={i === 0 ? 'accent' : 'muted'}>{b}</Chip>
-        ))}
-        {e.on_shelf && <Chip tone="ok">置き場にある</Chip>}
-      </div>
+    <button
+      type="button"
+      onClick={() => onOpen(g)}
+      data-tour={anchor}
+      className={`group self-start text-left ${wide ? 'w-full' : 'w-[240px] min-w-[240px]'}`}
+      aria-label={`${g.name} の詳細`}
+    >
+      <Thumb src={g.image} alt={g.name} className="mb-2" />
+      <h3 className="truncate text-[15px] font-semibold leading-snug text-foreground">{g.name}</h3>
+      <p className="truncate text-[13px] leading-snug text-muted-foreground">{g.hook}</p>
+      <Meta parts={gameMeta(g)} className="mt-0.5 block truncate" />
+      {below}
     </button>
   );
 }
 
-type SceneExtra = { articles: SceneFresh['articles']; streamers: string[]; jikkyou: SceneFresh['jikkyou'] };
+function OfferTile({ o, game, onOpen }: { o: GameOffer; game?: GameCard; onOpen: (g: GameCard) => void }) {
+  const until = o.active ? `${md(o.ends_at)} まで無料` : `${md(o.starts_at)} から無料`;
+  const body = (
+    <>
+      <div className="relative mb-2 overflow-hidden rounded-xl bg-secondary" style={{ aspectRatio: '460 / 215' }}>
+        {o.image && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={o.image} alt={o.title} loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
+        )}
+      </div>
+      <h3 className="truncate text-[15px] font-semibold leading-snug text-foreground">{o.title}</h3>
+      <Meta
+        parts={[<span key="u" className={o.active ? 'font-semibold text-green-600' : ''}>{o.source === 'epic' ? 'Epic' : o.source} {until}</span>, game ? playersLabel(game) : null]}
+        className="block truncate"
+      />
+    </>
+  );
+  return game ? (
+    <button type="button" onClick={() => onOpen(game)} className="group w-[240px] min-w-[240px] self-start text-left">
+      {body}
+    </button>
+  ) : (
+    <a href={o.url || '#'} target="_blank" rel="noopener noreferrer" className="group block w-[240px] min-w-[240px] self-start">
+      {body}
+    </a>
+  );
+}
+
+// ---------------------------------------------------------------- 詳細
+
+type SceneExtra = { articles: SceneFresh['articles']; streamers: string[]; streamerImages: (string | null)[]; jikkyou: SceneFresh['jikkyou'] };
 
 function SceneDetail({ x }: { x: SceneExtra }) {
   if (!x.articles.length && !x.streamers.length && !x.jikkyou?.top_video) return null;
   return (
-    <div className="space-y-2 rounded-xl border border-border p-3 text-[12.5px]">
-      <p className="text-[11px] font-semibold text-muted-foreground">界隈では</p>
-      {x.streamers.length > 0 && <p className="text-foreground/85">{names(x.streamers.map(cleanName), 5)} が直近 1 週間に配信・投稿</p>}
+    <div className="space-y-2.5">
+      <p className="text-[13px] font-semibold text-muted-foreground">界隈では</p>
+      {x.streamers.length > 0 && (
+        <div className="flex items-center gap-2.5">
+          <AvatarStack images={x.streamerImages} size={26} max={5} />
+          <p className="min-w-0 text-[13px] text-foreground/85">{names(x.streamers.map(cleanName), 3)} が今週配信</p>
+        </div>
+      )}
       {x.jikkyou?.top_video && (
-        <a href={`https://www.youtube.com/watch?v=${x.jikkyou.top_video}`} target="_blank" rel="noopener noreferrer" className="flex items-start gap-1.5 text-foreground/85 hover:text-foreground">
-          <PlayCircle className="mt-[2px] h-3.5 w-3.5 flex-shrink-0 text-primary" />
+        <a href={`https://www.youtube.com/watch?v=${x.jikkyou.top_video}`} target="_blank" rel="noopener noreferrer" className="flex items-start gap-2.5 text-foreground/85 hover:text-foreground">
+          <PlayCircle className="mt-0.5 h-[18px] w-[18px] flex-shrink-0 text-primary" />
           <span className="min-w-0">
-            日本語の実況 {x.jikkyou.videos} 本・{fmtViews(x.jikkyou.views)}（2 週間）
-            <span className="block truncate text-[11.5px] text-muted-foreground">{x.jikkyou.top_title}</span>
+            <span className="block text-[13px]">日本語の実況 {x.jikkyou.videos} 本・{fmtViews(x.jikkyou.views)}（2 週間）</span>
+            <span className="block truncate text-[13px] text-muted-foreground">{x.jikkyou.top_title}</span>
           </span>
         </a>
       )}
       {x.articles.map((a) => (
-        <a key={a.url} href={a.url} target="_blank" rel="noopener noreferrer" className="block text-foreground/85 hover:text-foreground">
-          <span className="mr-1.5 text-[11px] font-semibold text-muted-foreground">{a.src}</span>
-          <span className="line-clamp-2">{a.title}</span>
+        <a key={a.url} href={a.url} target="_blank" rel="noopener noreferrer" className="block text-[13px] leading-snug text-foreground/85 hover:text-foreground">
+          <span className="mr-1.5 font-semibold text-muted-foreground">{a.src}</span>
+          {a.title}
         </a>
       ))}
     </div>
@@ -341,74 +226,73 @@ function GameDetail({ g, board, myId, onMark, busy, extra }: { g: GameCard; boar
   const posted = g.posted.by ? m[g.posted.by]?.name : null;
   const iWant = !!myId && g.want.includes(myId);
   const iOwn = !!myId && g.own.includes(myId);
+  const vibe = g.vibe.filter((v) => v !== modeLabel(g.modes) && !['協力', '対戦'].includes(v)).slice(0, 2);
+  const people: [string[], string][] = [
+    [g.playing_now, 'いまプレイ中'],
+    [g.played, `最近遊んだ${g.last_played_at ? `（${timeAgo(g.last_played_at)}）` : ''}`],
+    [g.own, '持ってる'],
+    [g.want, 'やりたい'],
+  ];
   return (
-    <div className="space-y-4 px-5 py-4">
-      <GameImage g={g} />
+    <div className="space-y-5 px-5 pt-4">
       <div>
-        <p className="text-[14px] leading-relaxed text-foreground/85">{g.hook}</p>
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <Chip tone="accent">
-            <Users className="h-3 w-3" />
-            {playersLabel(g)}
-          </Chip>
-          <Chip>{modeLabel(g.modes)}</Chip>
-          {g.vibe.filter((v) => v !== modeLabel(g.modes) && !['協力', '対戦'].includes(v)).slice(0, 3).map((v) => (
-            <Chip key={v}>{v}</Chip>
-          ))}
-        </div>
+        <Thumb src={g.image} alt={g.name} />
+        <p className="mt-3 text-[15px] leading-relaxed text-foreground">{g.hook}</p>
+        <Meta parts={[playersLabel(g), modeLabel(g.modes), ...vibe]} className="mt-1 block" />
       </div>
-      <div className="grid grid-cols-2 gap-3 text-[12.5px]">
-        <div className="rounded-xl bg-secondary/70 p-3">
-          <p className="text-[11px] text-muted-foreground">価格</p>
-          <div className="mt-1">
-            <PriceTag g={g} />
-          </div>
+      <dl className="grid grid-cols-2 gap-3">
+        <div className="rounded-xl bg-secondary/60 p-3">
+          <dt className="text-[12px] text-muted-foreground">価格</dt>
+          <dd className="mt-0.5 text-[15px]">
+            <Price g={g} />
+          </dd>
           {g.price.lowest != null && g.price.final != null && g.price.lowest < g.price.final && (
-            <p className="mt-1 text-[11px] text-muted-foreground">記録上の最安 ¥{g.price.lowest.toLocaleString()}</p>
+            <dd className="mt-0.5 text-[12px] text-muted-foreground">記録上の最安 ¥{g.price.lowest.toLocaleString()}</dd>
           )}
         </div>
-        <div className="rounded-xl bg-secondary/70 p-3">
-          <p className="text-[11px] text-muted-foreground">{g.release.soon ? '発売' : '評価'}</p>
-          <p className="mt-1 font-semibold text-foreground">
+        <div className="rounded-xl bg-secondary/60 p-3">
+          <dt className="text-[12px] text-muted-foreground">{g.release.soon ? '発売' : '評価'}</dt>
+          <dd className="mt-0.5 text-[15px] font-semibold text-foreground">
             {g.release.soon ? g.release.text || '未定' : g.review.desc || '—'}
-            {!g.release.soon && g.review.pct != null && <span className="ml-1 font-normal text-muted-foreground">{g.review.pct}%</span>}
-          </p>
+            {!g.release.soon && g.review.pct != null && <span className="ml-1 text-[13px] font-normal text-muted-foreground">{g.review.pct}%</span>}
+          </dd>
           {g.live_players != null && !g.release.soon && (
-            <p className="mt-1 text-[11px] text-muted-foreground">Steam で今 {g.live_players.toLocaleString()} 人がプレイ中</p>
+            <dd className="mt-0.5 text-[12px] text-muted-foreground">Steam で今 {g.live_players.toLocaleString()} 人</dd>
           )}
         </div>
-      </div>
-      {(g.playing_now.length > 0 || g.played.length > 0 || g.want.length > 0 || g.own.length > 0) && (
-        <div className="space-y-1.5 text-[12.5px]">
-          {g.playing_now.length > 0 && (
-            <p className="flex items-center gap-2"><Avatars ids={g.playing_now} members={m} />いまプレイ中</p>
+      </dl>
+      {extra && <SceneDetail x={extra} />}
+      {people.some(([ids]) => ids.length) && (
+        <div className="space-y-2">
+          {people.map(([ids, label]) =>
+            ids.length ? (
+              <p key={label} className="flex items-center gap-2.5 text-[13px] text-foreground/85">
+                <AvatarStack images={memberImages(ids, m)} size={24} max={6} />
+                {label}
+              </p>
+            ) : null
           )}
-          {g.played.length > 0 && (
-            <p className="flex items-center gap-2"><Avatars ids={g.played} members={m} />最近遊んだ{g.last_played_at ? `（${timeAgo(g.last_played_at)}）` : ''}</p>
-          )}
-          {g.own.length > 0 && <p className="flex items-center gap-2"><Avatars ids={g.own} members={m} />持ってる</p>}
-          {g.want.length > 0 && <p className="flex items-center gap-2"><Avatars ids={g.want} members={m} />やりたい</p>}
         </div>
       )}
       {g.news.length > 0 && (
         <div className="space-y-2">
           {g.news.map((n, i) => (
-            <p key={i} className="rounded-xl border border-border px-3 py-2 text-[12px] leading-relaxed text-muted-foreground">{n}</p>
+            <p key={i} className="text-[13px] leading-relaxed text-muted-foreground">{n}</p>
           ))}
         </div>
       )}
-      {extra && <SceneDetail x={extra} />}
       {posted && (
-        <p className="text-[11.5px] text-muted-foreground">
-          {posted} が置いた{g.posted.at ? `（${md(g.posted.at)}）` : ''}{g.posted.count > 1 ? `・${g.posted.count} 回貼られた` : ''}
+        <p className="text-[12px] text-muted-foreground">
+          {posted} が置いた{g.posted.at ? `（${md(g.posted.at)}）` : ''}
+          {g.posted.count > 1 ? `・${g.posted.count} 回貼られた` : ''}
         </p>
       )}
       {/* 操作は下に固定（長い詳細をスクロールしなくても押せる） */}
-      <div className="sticky bottom-0 -mx-5 -mb-4 flex flex-wrap gap-2 border-t border-border/70 bg-background/95 px-5 py-3 backdrop-blur">
+      <div className="sticky bottom-0 -mx-5 flex flex-wrap gap-2 border-t border-border/70 bg-background/95 px-5 py-3 backdrop-blur">
         <Button
           size="sm"
           variant={iWant ? 'default' : 'outline'}
-          className={`h-9 rounded-full px-4 text-xs font-semibold ${iWant ? 'bg-primary text-white hover:bg-primary/90' : ''}`}
+          className={`h-10 rounded-full px-5 text-[13px] font-semibold ${iWant ? 'bg-primary text-white hover:bg-primary/90' : ''}`}
           disabled={busy || !myId}
           onClick={() => onMark('want', !iWant)}
           aria-pressed={iWant}
@@ -418,125 +302,25 @@ function GameDetail({ g, board, myId, onMark, busy, extra }: { g: GameCard; boar
         <Button
           size="sm"
           variant={iOwn ? 'default' : 'outline'}
-          className={`h-9 rounded-full px-4 text-xs font-semibold ${iOwn ? 'bg-green-600 text-white hover:bg-green-600/90' : ''}`}
+          className={`h-10 rounded-full px-5 text-[13px] font-semibold ${iOwn ? 'bg-foreground text-background hover:bg-foreground/90' : ''}`}
           disabled={busy || !myId}
           onClick={() => onMark('own', !iOwn)}
           aria-pressed={iOwn}
         >
           持ってる
         </Button>
-        <Button asChild size="sm" variant="ghost" className="h-9 rounded-full px-3 text-xs">
-          <a href={g.store_url} target="_blank" rel="noopener noreferrer">
-            <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+        <Button asChild size="sm" variant="ghost" className="h-10 rounded-full px-3 text-[13px]">
+          <a href={isDesktop ? `steam://store/${g.appid}` : g.store_url} target={isDesktop ? undefined : '_blank'} rel="noopener noreferrer">
+            <ExternalLink className="mr-1.5 h-4 w-4" />
             Steam で見る
           </a>
         </Button>
-        {isDesktop && (
-          <Button asChild size="sm" variant="ghost" className="h-9 rounded-full px-3 text-xs">
-            <a href={`steam://store/${g.appid}`}>Steam アプリで開く</a>
-          </Button>
-        )}
       </div>
     </div>
   );
 }
 
-/** Steam 連携（本人が自分のプロフィールを入れたときだけ。所持ゲームとウィッシュリストで「持ってる」「やりたい」が自動で付く） */
-function SteamLinkCard({ onChanged }: { onChanged: () => void }) {
-  const { toast } = useToast();
-  const [status, setStatus] = useState<SteamLink | null>(null);
-  const [open, setOpen] = useState(false);
-  const [profile, setProfile] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    appApi.steamStatus().then(setStatus).catch(() => setStatus(null));
-  }, []);
-
-  const link = async () => {
-    setBusy(true);
-    try {
-      const r = await appApi.linkSteam(profile.trim());
-      setStatus({ linked: true, name: r.name, avatar: r.avatar, games: r.games, private: r.private });
-      toast({
-        title: 'Steam を連携しました',
-        description: r.private ? 'ゲームの詳細が非公開のため、所持ゲームは取れませんでした' : `${r.games} 本のゲームを読み込みました`,
-      });
-      setOpen(false);
-      onChanged();
-    } catch (e) {
-      toast({ title: '連携できませんでした', description: e instanceof Error ? e.message : '', variant: 'destructive' });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const unlink = async () => {
-    setBusy(true);
-    try {
-      await appApi.unlinkSteam();
-      setStatus({ linked: false, name: null, avatar: null, games: null, private: false });
-      onChanged();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (!status) return null;
-  return (
-    <>
-      {status.linked ? (
-        <button type="button" onClick={() => setOpen(true)} className="inline-flex items-center gap-1.5 text-[12px] text-muted-foreground hover:text-foreground">
-          {status.avatar && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={status.avatar} alt="" className="h-4 w-4 rounded-full" />
-          )}
-          Steam 連携中{status.private ? '（非公開）' : status.games != null ? `・${status.games}本` : ''}
-        </button>
-      ) : (
-        <button type="button" onClick={() => setOpen(true)} className="text-[12px] font-semibold text-primary hover:text-primary/80" data-tour="games-steam">
-          Steam を連携
-        </button>
-      )}
-      <ResponsiveSheet open={open} onOpenChange={setOpen} title="Steam を連携">
-        <div className="space-y-4 px-5 py-4">
-          <p className="text-[13px] leading-relaxed text-foreground/85">
-            自分の Steam のプロフィールを入れると、持っているゲームとウィッシュリストから「持ってる」「やりたい」が自動で付き、「今夜どれ？」が持っている人の多いゲームを選びやすくなります。最近 2 週間に遊んだゲームは「遊んだ」に出ます。
-          </p>
-          <p className="text-[12px] leading-relaxed text-muted-foreground">
-            所持ゲームを読むには、Steam のプライバシー設定で「ゲームの詳細」が公開になっている必要があります。取り込むのはゲームの一覧とプレイ時間だけで、いつでも解除できます（解除すると取り込んだ情報も消えます）。
-          </p>
-          {status.linked ? (
-            <div className="flex items-center justify-between gap-3 rounded-xl bg-secondary/70 p-3">
-              <span className="text-[13px] font-medium text-foreground">{status.name} と連携中</span>
-              <Button variant="outline" size="sm" className="h-8 rounded-full px-4 text-xs" onClick={unlink} disabled={busy}>
-                解除
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <Input
-                value={profile}
-                onChange={(e) => setProfile(e.target.value)}
-                placeholder="https://steamcommunity.com/id/… または /profiles/…"
-                aria-label="Steam のプロフィール URL"
-              />
-              <Button
-                className="h-9 rounded-full bg-primary px-5 text-xs font-semibold text-white hover:bg-primary/90"
-                onClick={link}
-                disabled={busy || profile.trim().length < 2}
-              >
-                {busy && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-                連携する
-              </Button>
-              <p className="text-[11.5px] text-muted-foreground">Steam アプリでプロフィールを開き、右クリック →「ページの URL をコピー」で取れます</p>
-            </div>
-          )}
-        </div>
-      </ResponsiveSheet>
-    </>
-  );
-}
+// ---------------------------------------------------------------- 画面
 
 interface Props {
   guildId: string | null;
@@ -605,7 +389,13 @@ export const GameShelfScreen: React.FC<Props> = ({ guildId }) => {
     const f = board.scene.fresh.find((e) => e.appid === openId);
     const st = board.scene.streamers.find((e) => e.appid === openId);
     if (!f && !st) return undefined;
-    return { articles: f?.articles ?? [], streamers: f?.streamers.length ? f.streamers : st?.channels.map((c) => c.name) ?? [], jikkyou: f?.jikkyou ?? null };
+    const chans = st?.channels ?? [];
+    return {
+      articles: f?.articles ?? [],
+      streamers: f?.streamers.length ? f.streamers : chans.map((c) => c.name),
+      streamerImages: chans.map((c) => c.image ?? null),
+      jikkyou: f?.jikkyou ?? null,
+    };
   }, [openId, board]);
 
   const onMark = async (kind: 'want' | 'own', on: boolean) => {
@@ -613,16 +403,17 @@ export const GameShelfScreen: React.FC<Props> = ({ guildId }) => {
     setBusy(true);
     try {
       const r = await appApi.markGame(guildId, open.appid, kind, on);
+      const patch = (c: GameCard) => (c.appid === r.appid ? { ...c, want: r.want, own: r.own } : c);
       setBoard((b) =>
         b
           ? {
               ...b,
-              games: b.games.map((g) => (g.appid === r.appid ? { ...g, want: r.want, own: r.own } : g)),
+              games: b.games.map(patch),
               scene: b.scene
                 ? {
                     ...b.scene,
-                    fresh: b.scene.fresh.map((e) => (e.appid === r.appid ? { ...e, card: { ...e.card, want: r.want, own: r.own } } : e)),
-                    streamers: b.scene.streamers.map((e) => (e.card?.appid === r.appid ? { ...e, card: { ...e.card, want: r.want, own: r.own } } : e)),
+                    fresh: b.scene.fresh.map((e) => ({ ...e, card: patch(e.card) })),
+                    streamers: b.scene.streamers.map((e) => (e.card ? { ...e, card: patch(e.card) } : e)),
                   }
                 : b.scene,
             }
@@ -655,8 +446,9 @@ export const GameShelfScreen: React.FC<Props> = ({ guildId }) => {
   }
 
   const m = board.members;
+  const openGame = (g: GameCard) => setOpenId(g.appid);
   const voiceIds = board.now.voice.map((v) => v.user_id);
-  const channels = Array.from(new Set(board.now.voice.map((v) => v.channel).filter(Boolean)));
+  const vcNames = Array.from(new Set(board.now.voice.map((v) => v.channel).filter(Boolean)));
   const picks = board.tonight.picks.map((p) => ({ ...p, g: byId.get(p.appid) })).filter((p) => p.g) as { appid: string; why: string[]; g: GameCard }[];
   const sales = board.deadlines.sales.map((a) => byId.get(a)).filter(Boolean) as GameCard[];
   const releases = board.deadlines.releases.map((r) => ({ ...r, g: byId.get(r.appid) })).filter((r) => r.g) as { appid: string; date: string; released: boolean; g: GameCard }[];
@@ -664,207 +456,260 @@ export const GameShelfScreen: React.FC<Props> = ({ guildId }) => {
   const shelfGames = board.games.filter((g) => g.posted.count > 0);
   const list = shelfGames.filter((g) => f.test(g));
   const scene = board.scene;
-  // VC に 2 人以上いる＝「今夜なにやる？」の場面。答え（今夜どれ？）を一番上に
+  const n = players ?? board.tonight.players;
+  // VC に 2 人以上いる＝「今夜なにやる？」の場面。答え（今夜どれ？）を一番上に、大きなカードもそこに使う
   const gathered = voiceIds.length >= 2;
   const lastPlayed = board.recent[0];
   const rowPad = <div className="w-0.5 flex-shrink-0 sm:w-2" aria-hidden="true" />;
+  const refresh = (
+    <button type="button" onClick={() => void load(true)} className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-background" aria-label="更新">
+      <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+    </button>
+  );
 
+  // ---- いま
   const nowSection = (
     <section className="px-4 sm:px-6" data-tour="games-now" key="now">
-      {voiceIds.length || board.now.playing.length ? (
-        <div className="rounded-2xl border border-border bg-card p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[12px] font-semibold text-muted-foreground">いま</p>
-              {voiceIds.length ? (
-                <p className="mt-1 flex flex-wrap items-center gap-2 text-[15px] font-bold text-foreground">
-                  <Avatars ids={voiceIds} members={m} size={24} max={8} />
-                  {channels.join('・')} に {voiceIds.length} 人
-                </p>
-              ) : (
-                <p className="mt-1 text-[15px] font-semibold text-foreground">VC は空いています</p>
-              )}
-            </div>
-            <button type="button" onClick={() => void load(true)} className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary" aria-label="更新">
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
-          {board.now.playing.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {board.now.playing.map((p) => {
+      <div className="flex items-center gap-3 rounded-2xl bg-secondary/60 py-2 pl-4 pr-1.5">
+        {voiceIds.length > 0 && <AvatarStack images={memberImages(voiceIds, m)} size={30} max={6} />}
+        <div className="min-w-0 flex-1 py-1">
+          <p className="truncate text-[15px] font-semibold text-foreground">
+            {voiceIds.length ? `${vcNames.join('・')} に ${voiceIds.length} 人` : 'VC は空いています'}
+          </p>
+          {board.now.playing.length > 0 ? (
+            <p className="truncate text-[13px] text-muted-foreground">
+              {board.now.playing.map((p, i) => {
                 const g = p.appid ? byId.get(p.appid) : undefined;
                 return (
-                  <button
-                    key={p.appid || p.game_name}
-                    type="button"
-                    disabled={!g}
-                    onClick={() => g && setOpenId(g.appid)}
-                    className="inline-flex h-9 items-center gap-2 rounded-full border border-border bg-background pl-1 pr-3 text-[12.5px] font-medium text-foreground disabled:cursor-default"
-                  >
-                    <Avatars ids={p.users} members={m} size={24} />
-                    {p.game_name}
-                    <span className="text-muted-foreground">{p.users.length}人</span>
-                  </button>
+                  <React.Fragment key={p.appid || p.game_name}>
+                    {i > 0 && ' · '}
+                    {g ? (
+                      <button type="button" onClick={() => openGame(g)} className="font-medium text-foreground/80 underline-offset-2 hover:underline">
+                        {p.game_name}
+                      </button>
+                    ) : (
+                      <span className="font-medium text-foreground/80">{p.game_name}</span>
+                    )}{' '}
+                    {p.users.length}人
+                  </React.Fragment>
                 );
-              })}
-            </div>
+              })}{' '}
+              をプレイ中
+            </p>
+          ) : (
+            !voiceIds.length &&
+            lastPlayed && (
+              <p className="truncate text-[13px] text-muted-foreground">
+                最後は {lastPlayed.game_name}（{timeAgo(lastPlayed.last_at)}）
+              </p>
+            )
           )}
         </div>
-      ) : (
-        // 誰もいないときは 1 行だけ（一等地を空の箱で使わない）
-        <div className="flex items-center justify-between gap-3 rounded-2xl bg-secondary/60 py-1.5 pl-4 pr-1.5">
-          <p className="min-w-0 truncate text-[13px] text-muted-foreground">
-            <span className="font-semibold text-foreground">VC は空いています</span>
-            {lastPlayed && <span>・最後は {lastPlayed.game_name}（{timeAgo(lastPlayed.last_at)}）</span>}
-          </p>
-          <button type="button" onClick={() => void load(true)} className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-background" aria-label="更新">
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+        {refresh}
+      </div>
+    </section>
+  );
+
+  // ---- 人数のチップ
+  const playerChips = (
+    <div className="mb-3 flex gap-2 overflow-x-auto px-4 pb-1 sm:px-6" role="group" aria-label="人数">
+      {PLAYER_CHOICES.map((k) => {
+        const active = n === k;
+        return (
+          <button
+            key={k}
+            type="button"
+            onClick={() => setPlayers(k)}
+            aria-pressed={active}
+            className={`h-9 flex-shrink-0 rounded-full px-4 text-[13px] font-semibold transition-colors ${
+              active ? 'bg-foreground text-background' : 'bg-secondary/70 text-foreground/70 hover:text-foreground'
+            }`}
+          >
+            {k === 8 ? '8人+' : `${k}人`}
           </button>
-        </div>
-      )}
-    </section>
+        );
+      })}
+    </div>
   );
 
-  const sceneSection = scene && (scene.streamers.length > 0 || scene.fresh.length > 0) && (
-    <section data-tour="games-scene" key="scene">
-      <SectionTitle icon={<Flame className="h-4 w-4" />} title="界隈で話題" caption="配信者・ゲームメディア・Steam から" />
-      {scene.streamers.length > 0 && (
-        <div className="mb-4">
-          <h3 className="mb-2 px-4 text-[12.5px] font-semibold text-muted-foreground sm:px-6">配信者がいまやってる</h3>
-          <ScrollRow className="gap-2" ariaLabel="配信者がいまやってるゲーム">
-            {rowPad}
-            {scene.streamers.map((e, i) => (
-              <StreamerPill key={e.key} e={e} onOpen={(g) => setOpenId(g.appid)} anchor={i === 0 ? 'games-scene-first' : undefined} />
-            ))}
-            {rowPad}
-          </ScrollRow>
-        </div>
-      )}
-      {scene.fresh.length > 0 && (
-        <div>
-          <h3 className="mb-2 px-4 text-[12.5px] font-semibold text-muted-foreground sm:px-6">話題の新作・インディー</h3>
-          <ScrollRow className="gap-4" ariaLabel="話題の新作・インディー">
-            {rowPad}
-            {scene.fresh.map((e) => (
-              <FreshCard key={e.key} e={e} onOpen={(g) => setOpenId(g.appid)} />
-            ))}
-            {rowPad}
-          </ScrollRow>
-        </div>
-      )}
-    </section>
-  );
+  const pickReasons = (p: { why: string[] }) => p.why.filter((w) => !META_WHY.test(w)).slice(0, 2);
 
+  // ---- 今夜どれ？
   const tonightSection = (
     <section data-tour="games-tonight" key="tonight">
-      <SectionTitle
-        icon={<Swords className="h-4 w-4" />}
-        title="今夜どれ？"
-        caption={board.tonight.from_voice && players === null ? `VC の ${board.tonight.players} 人で` : undefined}
-      />
-      <div className="mb-3 flex gap-2 overflow-x-auto px-4 pb-1 sm:px-6" role="group" aria-label="人数">
-        {PLAYER_CHOICES.map((n) => {
-          const active = (players ?? board.tonight.players) === n;
-          return (
-            <button
-              key={n}
-              type="button"
-              onClick={() => setPlayers(n)}
-              aria-pressed={active}
-              className={`h-9 flex-shrink-0 rounded-full border px-4 text-[13px] font-semibold transition-colors ${
-                active ? 'border-transparent bg-primary text-white' : 'border-border bg-card text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {n === 8 ? '8人+' : `${n}人`}
-            </button>
-          );
-        })}
-      </div>
-      {picks.length ? (
+      <SectionHeader title="今夜どれ？" caption={board.tonight.from_voice && players === null ? `VC の ${n} 人で` : `${n} 人で`} />
+      {playerChips}
+      {!picks.length ? (
+        <p className="px-4 text-[13px] text-muted-foreground sm:px-6">{n} 人で遊べるゲームは置き場にまだありません</p>
+      ) : gathered ? (
+        <div className="px-4 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:items-start lg:gap-6">
+          <Hero
+            image={picks[0].g.image}
+            kicker={`${n} 人ならこれ`}
+            title={picks[0].g.name}
+            fact={[...pickReasons(picks[0]), playersLabel(picks[0].g), modeLabel(picks[0].g.modes), priceText(picks[0].g)].filter(Boolean).join(' · ')}
+            onClick={() => openGame(picks[0].g)}
+            anchor="games-first-pick"
+          />
+          <div className="-mx-4 mt-2 sm:mx-0 lg:mt-0">
+            <RankList ariaLabel="今夜の候補">
+              {picks.slice(1, 6).map((p, i) => {
+                const people = Array.from(new Set([...p.g.playing_now, ...p.g.played, ...p.g.own]));
+                return (
+                  <RankRow
+                    key={p.appid}
+                    rank={i + 2}
+                    thumb={p.g.image}
+                    title={p.g.name}
+                    meta={<Meta parts={[...pickReasons(p), ...gameMeta(p.g)]} />}
+                    right={people.length ? <AvatarStack images={memberImages(people, m)} size={22} max={3} /> : undefined}
+                    onClick={() => openGame(p.g)}
+                  />
+                );
+              })}
+            </RankList>
+          </div>
+        </div>
+      ) : (
         <ScrollRow className="gap-4" ariaLabel="今夜の候補">
           {rowPad}
-          {picks.map((p, i) => (
-            <PickCard key={p.appid} g={p.g} why={p.why} members={m} onOpen={(g) => setOpenId(g.appid)} anchor={i === 0 ? 'games-first-pick' : undefined} />
-          ))}
+          {picks.map((p, i) => {
+            const people = Array.from(new Set([...p.g.playing_now, ...p.g.played, ...p.g.own]));
+            const r = pickReasons(p);
+            return (
+              <GameTile
+                key={p.appid}
+                g={p.g}
+                onOpen={openGame}
+                anchor={i === 0 ? 'games-first-pick' : undefined}
+                below={
+                  (people.length > 0 || r.length > 0) && (
+                    <span className="mt-1 flex items-center gap-2">
+                      {people.length > 0 && <AvatarStack images={memberImages(people, m)} size={20} max={3} />}
+                      {r.length > 0 && <span className="truncate text-[13px] font-medium text-foreground/80">{r.join(' · ')}</span>}
+                    </span>
+                  )
+                }
+              />
+            );
+          })}
           {rowPad}
         </ScrollRow>
-      ) : (
-        <p className="px-4 text-[13px] text-muted-foreground sm:px-6">{board.tonight.players} 人で遊べるゲームは置き場にまだありません</p>
       )}
     </section>
   );
 
+  // ---- 界隈で話題
+  const fresh = scene?.fresh ?? [];
+  const streamers = scene?.streamers ?? [];
+  const freshHero = !gathered && fresh.length > 0 ? fresh[0] : null;
+  const freshRows = freshHero ? fresh.slice(1, 7) : fresh.slice(0, 6);
+  const freshMeta = (e: SceneFresh) => <Meta parts={[<span key="b" className="font-medium text-foreground/80">{e.badges[0]}</span>, playersLabel(e.card), <Price key="p" g={e.card} />]} />;
+  const streamerList = streamers.length > 0 && (
+    <div>
+      <SubHeader>配信者がいまやってる</SubHeader>
+      <RankList ariaLabel="配信者がいまやってるゲーム">
+        {streamers.slice(0, 6).map((e, i) => {
+          const who = e.channels.map((c) => cleanName(c.name));
+          const common = {
+            rank: i + 1,
+            thumb: e.image,
+            title: e.name,
+            meta: <Meta parts={[`${who.length}人`, names(who, 2)]} />,
+            right: <AvatarStack images={e.channels.map((c) => c.image)} size={24} max={3} label={`配信者 ${who.length} 人`} />,
+            anchor: i === 0 ? 'games-scene-first' : undefined,
+            ariaLabel: `${e.name}（配信者 ${who.length} 人）`,
+          };
+          return e.card ? (
+            <RankRow key={e.key} {...common} onClick={() => openGame(e.card!)} />
+          ) : (
+            <RankRow key={e.key} {...common} href={e.top ? `https://www.youtube.com/watch?v=${e.top.video_id}` : undefined} />
+          );
+        })}
+      </RankList>
+    </div>
+  );
+  const sceneSection = scene && (fresh.length > 0 || streamers.length > 0) && (
+    <section data-tour="games-scene" key="scene">
+      <SectionHeader title="界隈で話題" caption="配信者・ゲームメディア・Steam から" />
+      <div className={gathered ? 'lg:grid lg:grid-cols-2 lg:gap-6 lg:px-2' : ''}>
+        {fresh.length > 0 && (
+          <div aria-label="話題の新作・インディー" className={freshHero ? 'px-4 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:items-start lg:gap-6' : ''}>
+            {freshHero && (
+              <Hero
+                image={freshHero.card.image}
+                kicker="界隈でいま話題"
+                title={freshHero.card.name}
+                fact={[...freshHero.badges.slice(0, 2), playersLabel(freshHero.card), priceText(freshHero.card)].filter(Boolean).join(' · ')}
+                onClick={() => openGame(freshHero.card)}
+              />
+            )}
+            <div className={freshHero ? '-mx-4 mt-2 sm:mx-0 lg:mt-0' : ''}>
+              {!freshHero && <SubHeader>話題の新作・インディー</SubHeader>}
+              <RankList>
+                {freshRows.map((e, i) => (
+                  <RankRow key={e.key} rank={i + (freshHero ? 2 : 1)} thumb={e.card.image} title={e.card.name} meta={freshMeta(e)} onClick={() => openGame(e.card)} />
+                ))}
+              </RankList>
+            </div>
+          </div>
+        )}
+        <div className={gathered ? '' : 'mt-6'}>{streamerList}</div>
+      </div>
+    </section>
+  );
+
+  // ---- 期限つき
   const deadlinesSection = (board.deadlines.offers.length > 0 || sales.length > 0 || releases.length > 0) && (
     <section data-tour="games-deadlines" key="deadlines">
-      <SectionTitle icon={<Clock className="h-4 w-4" />} title="期限つき" caption="無料配布・セール・発売" />
+      <SectionHeader title="期限つき" caption="無料配布・セール・発売" />
       <ScrollRow className="gap-4" ariaLabel="無料配布・セール・発売">
         {rowPad}
         {board.deadlines.offers.map((o) => (
-          <OfferCard key={o.id} o={o} game={o.appid ? byId.get(o.appid) : undefined} onOpen={(g) => setOpenId(g.appid)} />
+          <OfferTile key={o.id} o={o} game={o.appid ? byId.get(o.appid) : undefined} onOpen={openGame} />
         ))}
         {sales.map((g) => (
-          <button key={`sale-${g.appid}`} type="button" onClick={() => setOpenId(g.appid)} className="w-[230px] min-w-[230px] self-start text-left">
-            <GameImage g={g} />
-            <h3 className="mt-2 line-clamp-1 text-[13.5px] font-semibold text-foreground">{g.name}</h3>
-            <div className="mt-1 flex items-center gap-1.5">
-              <PriceTag g={g} />
-              <span className="text-[11.5px] text-muted-foreground">{playersLabel(g)}</span>
-            </div>
-          </button>
+          <GameTile key={`sale-${g.appid}`} g={g} onOpen={openGame} />
         ))}
         {releases.map((r) => (
-          <button key={`rel-${r.appid}`} type="button" onClick={() => setOpenId(r.appid)} className="w-[230px] min-w-[230px] self-start text-left">
-            <GameImage g={r.g} />
-            <h3 className="mt-2 line-clamp-1 text-[13.5px] font-semibold text-foreground">{r.g.name}</h3>
-            <p className="mt-0.5 text-[11.5px] font-semibold text-primary">{r.released ? `${md(r.date)} に発売` : `${md(r.date)} 発売`}</p>
-          </button>
+          <GameTile
+            key={`rel-${r.appid}`}
+            g={r.g}
+            onOpen={openGame}
+            below={<span className="mt-0.5 block text-[13px] font-semibold text-primary">{r.released ? `${md(r.date)} に発売` : `${md(r.date)} 発売`}</span>}
+          />
         ))}
         {rowPad}
       </ScrollRow>
     </section>
   );
 
+  // ---- 最近ドデカで遊ばれた
   const recentSection = board.recent.length > 0 && (
     <section key="recent">
-      <SectionTitle icon={<Gift className="h-4 w-4" />} title="最近ドデカで遊ばれた" />
-      <ul className="space-y-1 px-4 sm:px-6">
+      <SectionHeader title="最近ドデカで遊ばれた" />
+      <RankList>
         {board.recent.slice(0, 6).map((r) => {
           const g = r.appid ? byId.get(r.appid) : undefined;
           return (
-            <li key={r.appid || r.game_name}>
-              <button
-                type="button"
-                disabled={!g}
-                onClick={() => g && setOpenId(g.appid)}
-                className="flex min-h-11 w-full items-center gap-3 rounded-xl px-2 py-1.5 text-left hover:bg-secondary/70 disabled:hover:bg-transparent"
-              >
-                {g?.image ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={g.image} alt="" className="h-9 w-[77px] flex-shrink-0 rounded-md object-cover" />
-                ) : (
-                  <span className="flex h-9 w-[77px] flex-shrink-0 items-center justify-center rounded-md bg-secondary text-[10px] text-muted-foreground">Steam外</span>
-                )}
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13.5px] font-semibold text-foreground">{r.game_name}</span>
-                  <span className="text-[11.5px] text-muted-foreground">{timeAgo(r.last_at)}</span>
-                </span>
-                <Avatars ids={r.users} members={m} size={22} />
-              </button>
-            </li>
+            <RankRow
+              key={r.appid || r.game_name}
+              thumb={g?.image ?? null}
+              title={r.game_name}
+              meta={<Meta parts={[timeAgo(r.last_at), r.minutes ? `${Math.round(r.minutes / 6) / 10} 時間` : null]} />}
+              right={<AvatarStack images={memberImages(r.users, m)} size={24} max={4} />}
+              onClick={g ? () => openGame(g) : undefined}
+            />
           );
         })}
-      </ul>
+      </RankList>
     </section>
   );
 
+  // ---- みんなが貼った
   const allSection = (
     <section data-tour="games-all" key="all">
-      <SectionTitle
-        icon={<Tag className="h-4 w-4" />}
-        title="みんなが貼った"
-        caption={`${shelfGames.length} 本`}
-        aside={<SteamLinkCard onChanged={() => { cache.clear(); void load(true); }} />}
-      />
+      <SectionHeader title="みんなが貼った" caption={`${shelfGames.length} 本`} action={<SteamLinkCard onChanged={() => { cache.clear(); void load(true); }} />} />
       <div className="mb-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:px-6" role="group" aria-label="絞り込み" data-tour="games-filters">
         {FILTERS.map((x) => (
           <button
@@ -872,18 +717,36 @@ export const GameShelfScreen: React.FC<Props> = ({ guildId }) => {
             type="button"
             onClick={() => setFilter(x.id)}
             aria-pressed={filter === x.id}
-            className={`h-9 flex-shrink-0 rounded-full border px-3.5 text-[13px] font-medium transition-colors ${
-              filter === x.id ? 'border-transparent bg-primary text-white' : 'border-border bg-card text-muted-foreground hover:text-foreground'
+            className={`h-9 flex-shrink-0 rounded-full px-3.5 text-[13px] font-medium transition-colors ${
+              filter === x.id ? 'bg-foreground text-background' : 'bg-secondary/70 text-foreground/70 hover:text-foreground'
             }`}
           >
-            {x.label} {shelfGames.filter((g) => x.test(g)).length}
+            {x.label} <span className="tabular-nums opacity-60">{shelfGames.filter((g) => x.test(g)).length}</span>
           </button>
         ))}
       </div>
-      <div className="grid grid-cols-2 gap-4 px-4 sm:grid-cols-3 sm:gap-5 sm:px-6 md:grid-cols-4 xl:grid-cols-5">
-        {list.map((g, i) => (
-          <GridCard key={g.appid} g={g} members={m} onOpen={(x) => setOpenId(x.appid)} anchor={i === 0 ? 'games-first-card' : undefined} />
-        ))}
+      <div className="grid grid-cols-2 gap-x-4 gap-y-6 px-4 sm:grid-cols-3 sm:gap-x-5 sm:px-6 md:grid-cols-4 xl:grid-cols-5">
+        {list.map((g, i) => {
+          const people = Array.from(new Set([...g.playing_now, ...g.played]));
+          const who = people.length ? people : g.want;
+          return (
+            <GameTile
+              key={g.appid}
+              g={g}
+              wide
+              onOpen={openGame}
+              anchor={i === 0 ? 'games-first-card' : undefined}
+              below={
+                who.length > 0 && (
+                  <span className="mt-1 flex items-center gap-1.5 text-[12px] text-muted-foreground">
+                    <AvatarStack images={memberImages(who, m)} size={18} max={4} />
+                    {g.playing_now.length ? 'プレイ中' : people.length ? '遊んだ' : 'やりたい'}
+                  </span>
+                )
+              }
+            />
+          );
+        })}
       </div>
       {list.length === 0 && <p className="px-4 py-6 text-center text-[13px] text-muted-foreground sm:px-6">該当するゲームはありません</p>}
     </section>
@@ -895,7 +758,7 @@ export const GameShelfScreen: React.FC<Props> = ({ guildId }) => {
 
   return (
     <div className="h-full overflow-y-auto overflow-x-hidden bg-background">
-      <div className="space-y-8 py-4 sm:py-6">{order}</div>
+      <div className="mx-auto max-w-[1280px] space-y-10 pb-10 pt-4 sm:pt-6">{order}</div>
 
       <ResponsiveSheet open={!!open} onOpenChange={(o) => !o && setOpenId(null)} title={open?.name ?? ''} dataTour="game-detail">
         {open && <GameDetail g={open} board={board} myId={myId} onMark={onMark} busy={busy} extra={openExtra} />}

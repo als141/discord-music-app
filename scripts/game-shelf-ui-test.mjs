@@ -96,12 +96,12 @@ for (const vp of [{ name: 'mobile-390x844', width: 390, height: 844, mobile: tru
     await page.getByText('今夜どれ？').waitFor({ timeout: 15000 });
     await page.waitForTimeout(1200);
     check(`${tag}: いま（VC 3 人）`, await page.getByText(/ゲーム に 3 人/).isVisible());
-    check(`${tag}: プレイ中のチップ`, await page.getByRole('button', { name: /R\.E\.P\.O\..*2人/ }).isVisible());
+    check(`${tag}: プレイ中の表示`, await page.locator('[data-tour="games-now"]').getByText(/R\.E\.P\.O\./).first().isVisible());
     if (board.scene) {
       const scene = page.locator('[data-tour="games-scene"]');
       check(`${tag}: 界隈で話題`, await scene.isVisible());
       const streamerCards = await scene.locator('[aria-label="配信者がいまやってるゲーム"]').locator('button, a').count();
-      const freshCards = await scene.locator('[aria-label="話題の新作・インディー"] h3').count();
+      const freshCards = await scene.locator('[aria-label="話題の新作・インディー"] button').count();
       check(`${tag}: 配信者がいまやってる・話題の新作`, streamerCards >= 3 && freshCards >= 3, `${streamerCards}/${freshCards}`);
       // 置き場に無い話題作を開く → 「界隈では」と やりたい
       const notOnShelf = board.scene.fresh.find((e) => !e.on_shelf);
@@ -121,7 +121,7 @@ for (const vp of [{ name: 'mobile-390x844', width: 390, height: 844, mobile: tru
       const yS = (await page.locator('[data-tour="games-scene"]').boundingBox())?.y ?? 0;
       check(`${tag}: VC に人がいると今夜どれ？が先`, yT < yS, `${Math.round(yT)} < ${Math.round(yS)}`);
     }
-    const picks = await page.locator('[data-tour="games-tonight"] button h3').count();
+    const picks = await page.locator('[data-tour="games-tonight"] [data-tour="games-first-pick"], [data-tour="games-tonight"] [aria-label="今夜の候補"] button').count();
     check(`${tag}: 今夜どれ？の候補`, picks >= 3, `${picks}`);
     check(`${tag}: 横スクロールなし`, await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
     await page.screenshot({ path: join(OUT, `games-${tag}-1-top.png`) });
@@ -177,7 +177,7 @@ for (const vp of [{ name: 'mobile-390x844', width: 390, height: 844, mobile: tru
       await page.locator('[data-tour="tab-shelf"]').click();
       const sec = page.locator('[data-tour="shelf-scene"]');
       await sec.waitFor({ timeout: 10000 });
-      check(`${tag}: 曲置き場に「界隈の新曲」`, (await sec.locator('h3').count()) >= 3);
+      check(`${tag}: 曲置き場に「界隈の新曲」`, (await sec.locator('button[aria-label$="をキューに追加"]').count()) >= 3);
       check(`${tag}: 曲置き場に「みんなが貼った」`, await page.getByRole('heading', { name: 'みんなが貼った' }).isVisible());
       await page.screenshot({ path: join(OUT, `games-${tag}-4-songs.png`) });
       await sec.locator('button[aria-label$="をキューに追加"]').first().click();

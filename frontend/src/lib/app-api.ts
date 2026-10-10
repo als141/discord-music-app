@@ -182,7 +182,7 @@ export interface SceneStreamerGame {
   appid: string | null;
   card: GameCard | null;
   image: string | null;
-  channels: { name: string; group: string }[];
+  channels: { name: string; group: string; image: string | null }[];
   videos: number;
   views: number;
   top: { video_id: string; title: string; thumb: string | null; channel: string; views: number } | null;
@@ -215,7 +215,7 @@ export interface SceneSong {
   hook: string | null;
   orig_video_id: string | null;
   play_video_id: string;
-  videos: { video_id: string; title: string; thumb: string | null; channel: string; group: string; views: number; at: string; type: string | null; hook: string | null }[];
+  videos: { video_id: string; title: string; thumb: string | null; channel: string; channel_image: string | null; group: string; views: number; at: string; type: string | null; hook: string | null }[];
   channels: string[];
   /** 歌った・踊った人の数（本人の公式と Topic チャンネルは 1 人） */
   people: number;

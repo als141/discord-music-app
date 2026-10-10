@@ -158,6 +158,20 @@ async def fetch_channel_videos(days: int = 7, chans: Optional[List[Dict[str, str
     return [v for v in out if v["video_id"]]
 
 
+async def channel_images(ids: List[str]) -> Dict[str, Optional[str]]:
+    """チャンネルのアイコン（50 チャンネルで 1 ユニット）"""
+    out: Dict[str, Optional[str]] = {}
+    if not yt_key():
+        return out
+    async with _session() as s:
+        for i in range(0, len(ids), 50):
+            d = await _yt(s, "channels", part="snippet", id=",".join(ids[i:i + 50]))
+            for it in d.get("items") or []:
+                th = (it.get("snippet") or {}).get("thumbnails") or {}
+                out[it["id"]] = ((th.get("default") or th.get("medium")) or {}).get("url")
+    return out
+
+
 async def video_channels(ids: List[str]) -> Dict[str, tuple]:
     """動画 ID → (チャンネル ID, チャンネル名)。50 本で 1 ユニット"""
     out: Dict[str, tuple] = {}

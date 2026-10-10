@@ -147,6 +147,11 @@ async def refresh_music() -> None:
     chans = [{"channel_id": c["channel_id"], "name": c["name"], "group": "曲置き場"}
              for c in await asyncio.to_thread(store.music_channels) if c["channel_id"] not in scene_ids]
     await _ingest_videos(await sources.fetch_channel_videos(30, chans), f"music({len(chans)}ch)")
+    # アイコン（曲の行に歌った人の顔を出す）
+    have = await asyncio.to_thread(store.channel_images)
+    need = [c["channel_id"] for c in chans if c["channel_id"] not in have]
+    if need:
+        await asyncio.to_thread(store.save_channel_images, await sources.channel_images(need))
 
 
 async def refresh_jikkyou() -> None:
@@ -194,6 +199,15 @@ async def scheduler() -> None:
 
 
 # ---------------------------------------------------------------- 組み立て
+
+def _images() -> Dict[str, str]:
+    """チャンネル ID → アイコン（界隈の配信者は channels.json、曲置き場の投稿元は DB）"""
+    out = store.channel_images()
+    for c in sources.channels():
+        if c.get("image"):
+            out[c["channel_id"]] = c["image"]
+    return out
+
 
 def _gkey(appid: Optional[str], name: Optional[str]) -> str:
     return f"app:{appid}" if appid else "name:" + re.sub(r"[\s\W_]+", "", (name or "").lower())
@@ -267,6 +281,7 @@ def build_games(guild_id: str, board: Dict[str, Any]) -> Dict[str, Any]:
         return game_shelf._card(g, [], {}, None, [], gdb.lowest_price(appid))
 
     # 配信者がいまやってる（7 日）
+    imgs = _images()
     groups: Dict[str, Dict[str, Any]] = {}
     for v in store.videos_since(7, ["game"]):
         name = v.get("game") or v.get("game_en")
@@ -276,7 +291,7 @@ def build_games(guild_id: str, board: Dict[str, Any]) -> Dict[str, Any]:
         e = groups.setdefault(k, {"key": k, "name": name, "appid": v.get("appid"), "channels": {}, "videos": 0, "views": 0, "top": None})
         e["videos"] += 1
         e["views"] += v.get("views") or 0
-        e["channels"].setdefault(v["channel_name"], v["channel_group"])
+        e["channels"].setdefault(v["channel_name"], (v["channel_group"], imgs.get(v["channel_id"])))
         if not e["top"] or (v.get("views") or 0) > (e["top"].get("views") or 0):
             e["top"] = {"video_id": v["video_id"], "title": v["title"], "thumb": v.get("thumb"), "channel": v["channel_name"],
                         "views": v.get("views") or 0}
@@ -289,7 +304,7 @@ def build_games(guild_id: str, board: Dict[str, Any]) -> Dict[str, Any]:
             # 名前は配信での呼び方（Steam の日本語名「エーペックスレジェンズ」ではなく「Apex Legends」）
             "key": e["key"], "name": e["name"], "appid": e["appid"], "card": cd,
             "image": (cd or {}).get("image") or (e["top"] or {}).get("thumb"),
-            "channels": [{"name": n, "group": gr} for n, gr in e["channels"].items()],
+            "channels": [{"name": n, "group": gr, "image": im} for n, (gr, im) in e["channels"].items()],
             "videos": e["videos"], "views": e["views"], "top": e["top"],
             "on_shelf": bool(e["appid"] and e["appid"] in shelf_cards and shelf_cards[e["appid"]]["posted"]["count"]),
         })
@@ -345,6 +360,7 @@ def build_songs() -> Dict[str, Any]:
     """曲置き場の「界隈の新曲」: 曲置き場に貼られたことのある歌い手・アーティストと、配信者・VTuber の
     新曲・MV・歌ってみた・踊ってみた（30 日）。何人もやっている曲（流行り）を上に"""
     posts = {c["channel_id"]: c["posts"] for c in store.music_channels()}
+    imgs = _images()
     groups: Dict[str, Dict[str, Any]] = {}
     for v in store.videos_since(30, ["song"]):
         if v.get("song_type") == "other" or (v.get("song_type") == "live" and not v.get("song")):
@@ -354,6 +370,7 @@ def build_songs() -> Dict[str, Any]:
         e = groups.setdefault(k, {"key": k, "song": song, "artist": v.get("artist"), "orig_video_id": v.get("orig_video_id"),
                                   "videos": [], "channels": set(), "views": 0, "latest": v["published_at"], "posted_affinity": 0})
         e["videos"].append({"video_id": v["video_id"], "title": v["title"], "thumb": v.get("thumb"), "channel": v["channel_name"],
+                            "channel_image": imgs.get(v["channel_id"]),
                             "group": v["channel_group"], "views": v.get("views") or 0, "at": v["published_at"],
                             "type": v.get("song_type"), "hook": v.get("hook")})
         e["channels"].add(v["channel_name"])

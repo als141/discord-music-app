@@ -1,13 +1,13 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Flame } from 'lucide-react';
-import { ScrollRow } from '@/components/home/ScrollRow';
+import { Play } from 'lucide-react';
+import { AvatarStack, Hero, Meta, RankList, RankRow, SectionHeader } from '@/components/games/ui';
 import { appApi, SceneSong } from '@/lib/app-api';
 import type { PlayableItem } from '@/utils/api';
 
 /**
- * 曲置き場の「界隈の新曲」。ゲーム置き場の「界隈で話題」と対になる。
+ * 曲置き場の「界隈の新曲」。ゲーム置き場の「界隈で話題」と同じ部品・同じ形（1 位を大きく＋順位）で対になる。
  *
  * 材料は、曲置き場に貼られたことのある歌い手・アーティストのチャンネルと、メンバーがよく見る配信者・VTuber の
  * 新曲・MV・歌ってみた・踊ってみた（30 日）。何人もやっている曲（流行り）が上に来る。
@@ -27,44 +27,28 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 const watch = (id: string) => `https://www.youtube.com/watch?v=${id}`;
+const thumbOf = (id: string) => `https://i.ytimg.com/vi/${id}/mqdefault.jpg`;
 
-function SongCard({ s, onPlay, anchor }: { s: SceneSong; onPlay: (item: PlayableItem) => void; anchor?: string }) {
+/** 「葛葉 / Kuzuha」→「葛葉」 */
+const cleanName = (n: string) => n.split(/\s*[/／|｜【(（]\s*/)[0].trim() || n;
+
+function songTitle(s: SceneSong): string {
+  return s.song || s.videos[0].title;
+}
+
+function songMeta(s: SceneSong): React.ReactNode[] {
   const top = s.videos[0];
-  const title = s.song || top.title;
-  const thumb = top.thumb || `https://i.ytimg.com/vi/${top.video_id}/mqdefault.jpg`;
-  const label = top.type ? TYPE_LABEL[top.type] : null;
-  const playOrig = !!s.orig_video_id && s.orig_video_id !== s.play_video_id;
-  return (
-    <div className="w-[200px] min-w-[200px] self-start sm:w-[220px] sm:min-w-[220px]" data-tour={anchor}>
-      <button
-        type="button"
-        onClick={() => onPlay({ title, artist: s.artist || top.channel, thumbnail: thumb, url: watch(s.play_video_id), type: 'song' })}
-        className="group block w-full text-left"
-        aria-label={`${title} をキューに追加`}
-      >
-        <div className="relative mb-2 overflow-hidden rounded-xl bg-secondary" style={{ aspectRatio: '16 / 9' }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={thumb} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
-          {label && <span className="absolute left-2 top-2 rounded-md bg-background/90 px-1.5 py-0.5 text-[10.5px] font-bold text-foreground">{label}</span>}
-        </div>
-        <h3 className="line-clamp-1 text-[13.5px] font-semibold text-foreground">{title}</h3>
-        <p className="line-clamp-1 text-[12px] text-muted-foreground">{s.hook || `${top.channel}${s.artist ? `・${s.artist}` : ''}`}</p>
-      </button>
-      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
-        {s.people > 1 && <span className="rounded-full bg-primary/10 px-2 py-0.5 font-semibold text-primary">{s.people}人がやってる</span>}
-        {s.posted_affinity >= 2 && <span className="rounded-full bg-secondary px-2 py-0.5 font-semibold text-foreground/75">よく貼られる人</span>}
-        {playOrig && (
-          <button
-            type="button"
-            onClick={() => onPlay({ title, artist: s.artist || '', thumbnail: `https://i.ytimg.com/vi/${s.orig_video_id}/mqdefault.jpg`, url: watch(s.orig_video_id!), type: 'song' })}
-            className="font-semibold text-primary hover:text-primary/80"
-          >
-            原曲を流す
-          </button>
-        )}
-      </div>
-    </div>
-  );
+  const who = Array.from(new Set(s.videos.map((v) => cleanName(v.channel))));
+  return [
+    top.type ? TYPE_LABEL[top.type] : null,
+    s.artist || cleanName(top.channel),
+    s.people > 1 ? <span key="p" className="font-semibold text-primary">{s.people}人がやってる</span> : who.length > 1 ? who.slice(0, 2).join('、') : null,
+  ];
+}
+
+function toItem(s: SceneSong, videoId: string): PlayableItem {
+  const top = s.videos[0];
+  return { title: songTitle(s), artist: s.artist || cleanName(top.channel), thumbnail: thumbOf(videoId), url: watch(videoId), type: 'song' };
 }
 
 export function SceneSongs({ guildId, onSelectTrack }: { guildId: string; onSelectTrack?: (item: PlayableItem) => void }) {
@@ -91,20 +75,56 @@ export function SceneSongs({ guildId, onSelectTrack }: { guildId: string; onSele
   }, [guildId]);
 
   if (!songs || songs.length === 0) return null;
+  const play = (s: SceneSong, id = s.play_video_id) => onSelectTrack?.(toItem(s, id));
+  const [first, ...rest] = songs;
+  const firstTop = first.videos[0];
   return (
-    <section className="mb-7 -mx-4 sm:-mx-6" data-tour="shelf-scene">
-      <h2 className="mb-3 flex items-baseline gap-2 px-4 text-[17px] font-bold tracking-tight text-foreground sm:px-6">
-        <Flame className="h-4 w-4 self-center text-primary" />
-        <span className="flex-shrink-0">界隈の新曲</span>
-        <span className="truncate text-[11.5px] font-medium text-muted-foreground">よく貼られる人・配信者の新着</span>
-      </h2>
-      <ScrollRow className="gap-4" ariaLabel="界隈の新曲">
-        <div className="w-0.5 flex-shrink-0 sm:w-2" aria-hidden="true" />
-        {songs.map((s, i) => (
-          <SongCard key={s.key} s={s} onPlay={(item) => onSelectTrack?.(item)} anchor={i === 0 ? 'shelf-scene-first' : undefined} />
-        ))}
-        <div className="w-0.5 flex-shrink-0 sm:w-2" aria-hidden="true" />
-      </ScrollRow>
+    <section className="-mx-4 mb-10 sm:-mx-6" data-tour="shelf-scene">
+      <SectionHeader title="界隈の新曲" caption="よく貼られる人・配信者の新着" />
+      <div className="px-4 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:items-start lg:gap-6" aria-label="界隈の新曲">
+        <div>
+          <Hero
+            image={thumbOf(first.play_video_id).replace('mqdefault', 'hqdefault')}
+            ratio="16 / 9"
+            kicker={first.people > 1 ? `${first.people}人がやってる` : firstTop.type ? `界隈の${TYPE_LABEL[firstTop.type]}` : '界隈の新曲'}
+            title={songTitle(first)}
+            fact={[first.artist || cleanName(firstTop.channel), first.hook].filter(Boolean).join(' · ')}
+            onClick={() => play(first)}
+            anchor="shelf-scene-first"
+            ariaLabel={`${songTitle(first)} をキューに追加`}
+            badge={
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/90 text-foreground shadow-md" aria-hidden="true">
+                <Play className="ml-0.5 h-5 w-5 fill-current" />
+              </span>
+            }
+          />
+          {first.orig_video_id && first.orig_video_id !== first.play_video_id && (
+            <button type="button" onClick={() => play(first, first.orig_video_id!)} className="mt-2 text-[13px] font-semibold text-primary hover:text-primary/80">
+              原曲を流す
+            </button>
+          )}
+        </div>
+        <div className="-mx-4 mt-2 sm:mx-0 lg:mt-0">
+          <RankList>
+            {rest.slice(0, 7).map((s, i) => {
+              const top = s.videos[0];
+              return (
+                <RankRow
+                  key={s.key}
+                  rank={i + 2}
+                  thumb={top.thumb || thumbOf(s.play_video_id)}
+                  thumbRatio="16 / 9"
+                  title={songTitle(s)}
+                  meta={<Meta parts={songMeta(s)} />}
+                  right={<AvatarStack images={Array.from(new Set(s.videos.map((v) => v.channel_image)))} size={24} max={3} />}
+                  onClick={() => play(s)}
+                  ariaLabel={`${songTitle(s)} をキューに追加`}
+                />
+              );
+            })}
+          </RankList>
+        </div>
+      </div>
     </section>
   );
 }

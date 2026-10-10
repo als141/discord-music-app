@@ -39,6 +39,7 @@ def init() -> None:
         c.execute("CREATE TABLE IF NOT EXISTS scene_music_channels (channel_id TEXT PRIMARY KEY, title TEXT, posts INTEGER, "
                   "updated_at TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS scene_video_channel (video_id TEXT PRIMARY KEY, channel_id TEXT, channel_title TEXT)")
+        c.execute("CREATE TABLE IF NOT EXISTS scene_channel_image (channel_id TEXT PRIMARY KEY, image TEXT, at TEXT)")
         # 界隈で初めて見た日（あとで #ゲーム置き場 に貼られたら「イリーナが先に見つけた」）
         c.execute("CREATE TABLE IF NOT EXISTS scene_seen (key TEXT PRIMARY KEY, kind TEXT, name TEXT, appid TEXT, first_seen_at TEXT)")
 
@@ -140,6 +141,17 @@ def rebuild_music_channels() -> None:
         c.execute("DELETE FROM scene_music_channels")
         c.execute("INSERT INTO scene_music_channels (channel_id, title, posts, updated_at) "
                   "SELECT channel_id, MAX(channel_title), COUNT(*), ? FROM scene_video_channel GROUP BY channel_id", (now_iso(),))
+
+
+def channel_images() -> Dict[str, str]:
+    with db._connect() as c:
+        return {r[0]: r[1] for r in c.execute("SELECT channel_id, image FROM scene_channel_image WHERE image IS NOT NULL")}
+
+
+def save_channel_images(rows: Dict[str, Optional[str]]) -> None:
+    with db._connect() as c:
+        c.executemany("INSERT OR REPLACE INTO scene_channel_image (channel_id, image, at) VALUES (?, ?, ?)",
+                      [(k, v, now_iso()) for k, v in rows.items()])
 
 
 def music_channels() -> List[Dict[str, Any]]:
