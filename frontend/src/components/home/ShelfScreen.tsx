@@ -335,8 +335,22 @@ export const ShelfScreen: React.FC<ShelfScreenProps> = ({
   const content = (
     <>
       {withScene && <SceneSongs guildId={guildId} onSelectTrack={onSelectTrack} />}
-      {withScene && <h2 className="mb-2 text-[17px] font-bold tracking-tight text-foreground">みんなが貼った</h2>}
-      {intro}
+      {withScene ? (
+        // ゲーム置き場と同じ見出し。説明文は出さず、使い方は見出しの横から
+        <div className="mb-3 flex items-baseline justify-between gap-3">
+          <h2 className="flex items-baseline gap-2 text-[17px] font-bold tracking-tight text-foreground">
+            みんなが貼った
+            <span className="text-[11.5px] font-medium text-muted-foreground">押すとキューに追加</span>
+          </h2>
+          {onShowGuide && (
+            <button type="button" onClick={onShowGuide} className="text-[12px] font-semibold text-primary hover:text-primary/80">
+              使い方
+            </button>
+          )}
+        </div>
+      ) : (
+        intro
+      )}
       {chips}
       {body}
     </>

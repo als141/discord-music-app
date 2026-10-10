@@ -490,8 +490,10 @@ export const MainApp: React.FC = () => {
             )}
           </main>
 
-          {/* Now Playing パネル（デスクトップ） */}
-          {isDesktop && (
+          {/* Now Playing パネル（デスクトップ）。置き場のタブで何も流れていない（キューも空）ときは出さず、幅を置き場に回す */}
+          {isDesktop && !(
+            (homeActiveTab === 'games' || homeActiveTab === 'shelf') && !currentTrack && queue.length === 0 && !isLoading
+          ) && (
             <aside className="now-playing-aside hidden lg:flex flex-col min-h-0" aria-label="再生中パネル">
               <MainPlayer {...playerProps} variant="docked" />
             </aside>

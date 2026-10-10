@@ -754,7 +754,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
               <motion.button
                 key={tab.id}
                 data-tour={`tab-${tab.id}`}
-                className={`flex items-center gap-1.5 px-4 sm:px-5 py-2 text-sm font-medium rounded-full transition-all duration-200 whitespace-nowrap ${
+                className={`relative flex items-center gap-1.5 px-3 sm:px-5 py-2 text-[13.5px] sm:text-sm font-medium rounded-full transition-all duration-200 whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'bg-white text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground'
@@ -768,12 +768,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
                 id={`tab-${tab.id}`}
                 aria-label={isNew ? `${tab.ariaLabel}（新機能）` : tab.ariaLabel}
               >
-                {tab.icon}
+                {/* スマホは 4 つのタブが 1 行に収まるよう、アイコンを出さず NEW は点にする */}
+                <span className="hidden sm:inline-flex">{tab.icon}</span>
                 <span>{tab.label}</span>
                 {isNew && (
-                  <span className="ml-0.5 rounded-full bg-primary px-1.5 py-[3px] text-[9px] font-bold leading-none tracking-wide text-white" aria-hidden="true">
-                    NEW
-                  </span>
+                  <>
+                    <span className="ml-0.5 hidden rounded-full bg-primary px-1.5 py-[3px] text-[9px] font-bold leading-none tracking-wide text-white sm:inline" aria-hidden="true">
+                      NEW
+                    </span>
+                    <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-primary sm:hidden" aria-hidden="true" />
+                  </>
                 )}
               </motion.button>
               );
@@ -781,8 +785,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
           </nav>
         </div>
 
-        {/* Version display */}
-        <VersionDisplay onOpen={openNoticeCenter} />
+        {/* バージョン表示（押すとお知らせ一覧）は「音楽」タブだけ。置き場のタブでは縦の場所を使わない */}
+        {activeTab === 'home' && <VersionDisplay onOpen={openNoticeCenter} />}
       </div>
 
       {/* Main content area */}

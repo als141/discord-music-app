@@ -84,6 +84,9 @@ for (const vp of [{ name: 'mobile-390x844', width: 390, height: 844, mobile: tru
     check(`${tag}: ゲーム置き場タブに NEW`, (await tab.getAttribute('aria-label')).includes('新機能'));
     const firstTab = await page.locator('[role="tab"]').first().getAttribute('data-tour');
     check(`${tag}: 先頭のタブがゲーム置き場`, firstTab === 'tab-games', firstTab);
+    // スマホでも 4 つのタブが 1 行に収まる（最後のタブが画面の中）
+    const lastTabBox = await page.locator('[role="tab"]').last().boundingBox();
+    check(`${tag}: タブが画面に収まる`, !!lastTabBox && lastTabBox.x + lastTabBox.width <= vp.width, JSON.stringify(lastTabBox));
     // ハイドレーション前のクリックは効かないので、選ばれるまで押し直す
     for (let i = 0; i < 10; i++) {
       await tab.click();
@@ -97,7 +100,7 @@ for (const vp of [{ name: 'mobile-390x844', width: 390, height: 844, mobile: tru
     if (board.scene) {
       const scene = page.locator('[data-tour="games-scene"]');
       check(`${tag}: 界隈で話題`, await scene.isVisible());
-      const streamerCards = await scene.locator('[aria-label="配信者がいまやってるゲーム"] h3').count();
+      const streamerCards = await scene.locator('[aria-label="配信者がいまやってるゲーム"]').locator('button, a').count();
       const freshCards = await scene.locator('[aria-label="話題の新作・インディー"] h3').count();
       check(`${tag}: 配信者がいまやってる・話題の新作`, streamerCards >= 3 && freshCards >= 3, `${streamerCards}/${freshCards}`);
       // 置き場に無い話題作を開く → 「界隈では」と やりたい
@@ -111,6 +114,12 @@ for (const vp of [{ name: 'mobile-390x844', width: 390, height: 844, mobile: tru
         await page.keyboard.press('Escape');
         await page.waitForTimeout(400);
       }
+    }
+    // VC に 2 人以上なら「今夜どれ？」が「界隈で話題」より上（答えを先に）
+    if (board.now.voice.length >= 2 && board.scene) {
+      const yT = (await page.locator('[data-tour="games-tonight"]').boundingBox())?.y ?? 0;
+      const yS = (await page.locator('[data-tour="games-scene"]').boundingBox())?.y ?? 0;
+      check(`${tag}: VC に人がいると今夜どれ？が先`, yT < yS, `${Math.round(yT)} < ${Math.round(yS)}`);
     }
     const picks = await page.locator('[data-tour="games-tonight"] button h3').count();
     check(`${tag}: 今夜どれ？の候補`, picks >= 3, `${picks}`);
@@ -137,6 +146,8 @@ for (const vp of [{ name: 'mobile-390x844', width: 390, height: 844, mobile: tru
     await sheet.waitFor({ timeout: 8000 });
     await page.waitForTimeout(600);
     check(`${tag}: 詳細に人数・価格`, (await sheet.innerText()).includes('価格'));
+    const wantBox = await sheet.getByRole('button', { name: 'やりたい' }).boundingBox();
+    check(`${tag}: 詳細の操作がスクロールせずに見える`, !!wantBox && wantBox.y + wantBox.height <= vp.height, JSON.stringify(wantBox));
     await sheet.getByRole('button', { name: 'やりたい' }).scrollIntoViewIfNeeded();
     await sheet.getByRole('button', { name: 'やりたい' }).click();
     await page.waitForTimeout(600);

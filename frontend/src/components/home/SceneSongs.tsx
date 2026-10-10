@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Flame, Info } from 'lucide-react';
+import { Flame } from 'lucide-react';
 import { ScrollRow } from '@/components/home/ScrollRow';
 import { appApi, SceneSong } from '@/lib/app-api';
 import type { PlayableItem } from '@/utils/api';
@@ -35,7 +35,7 @@ function SongCard({ s, onPlay, anchor }: { s: SceneSong; onPlay: (item: Playable
   const label = top.type ? TYPE_LABEL[top.type] : null;
   const playOrig = !!s.orig_video_id && s.orig_video_id !== s.play_video_id;
   return (
-    <div className="w-[200px] min-w-[200px] sm:w-[220px] sm:min-w-[220px]" data-tour={anchor}>
+    <div className="w-[200px] min-w-[200px] self-start sm:w-[220px] sm:min-w-[220px]" data-tour={anchor}>
       <button
         type="button"
         onClick={() => onPlay({ title, artist: s.artist || top.channel, thumbnail: thumb, url: watch(s.play_video_id), type: 'song' })}
@@ -93,14 +93,11 @@ export function SceneSongs({ guildId, onSelectTrack }: { guildId: string; onSele
   if (!songs || songs.length === 0) return null;
   return (
     <section className="mb-7 -mx-4 sm:-mx-6" data-tour="shelf-scene">
-      <h2 className="mb-2 flex items-center gap-2 px-4 text-[17px] font-bold tracking-tight text-foreground sm:px-6">
-        <Flame className="h-4 w-4 text-primary" />
-        界隈の新曲
+      <h2 className="mb-3 flex items-baseline gap-2 px-4 text-[17px] font-bold tracking-tight text-foreground sm:px-6">
+        <Flame className="h-4 w-4 self-center text-primary" />
+        <span className="flex-shrink-0">界隈の新曲</span>
+        <span className="truncate text-[11.5px] font-medium text-muted-foreground">よく貼られる人・配信者の新着</span>
       </h2>
-      <p className="mb-3 flex items-start gap-1.5 px-4 text-[12.5px] leading-relaxed text-muted-foreground sm:px-6">
-        <Info className="mt-[3px] h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
-        曲置き場に貼られたことのある歌い手・アーティストと、よく見る配信者・VTuber の新曲・歌ってみた。押すとキューに追加されます
-      </p>
       <ScrollRow className="gap-4" ariaLabel="界隈の新曲">
         <div className="w-0.5 flex-shrink-0 sm:w-2" aria-hidden="true" />
         {songs.map((s, i) => (

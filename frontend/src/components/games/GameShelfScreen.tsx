@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { Clock, ExternalLink, Flame, Gift, Info, Loader2, PlayCircle, RefreshCw, Swords, Tag, Users } from 'lucide-react';
+import { Clock, ExternalLink, Flame, Gift, Loader2, PlayCircle, RefreshCw, Swords, Tag, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
 import { ScrollRow } from '@/components/home/ScrollRow';
@@ -14,8 +14,10 @@ import { appApi, GameBoard, GameCard, GameOffer, SceneFresh, SceneStreamerGame, 
 /**
  * 「ゲーム置き場」タブ。#ゲーム置き場 に貼られたゲームを、ドデカの「いま」に結びつけて見せる。
  *
- * 上から: いま（VC とプレイ中）→ 界隈で話題（配信者がいまやってる・話題の新作/インディー）→ 今夜どれ？（人数で絞った候補）
- *        → 期限つき（無料配布・セール・発売）→ 最近ドデカで遊ばれた → 置き場（全部・絞り込み）。カードを押すと詳しい情報とボタン
+ * 並びは場面で変える:
+ *   VC に 2 人以上 → いま → 今夜どれ？（その人数で）→ 期限つき → 界隈で話題 → 最近遊ばれた → みんなが貼った
+ *   それ以外       → いま（1 行）→ 界隈で話題 → 今夜どれ？ → 期限つき → 最近遊ばれた → みんなが貼った
+ * 説明文は置かない（見出しの横に出どころを一言だけ。詳しくは案内ツアー）。カードを押すと詳しい情報、操作は下に固定
  * 曲置き場（ShelfScreen）と同じ骨組み（いま → 界隈 → みんなが貼った）で対になる
  * データは `GET /games/{guild}/board`（本人のトークン）。60 秒だけメモリにキャッシュ
  */
@@ -109,16 +111,22 @@ function Avatars({ ids, members, size = 20, max = 5 }: { ids: string[]; members:
   );
 }
 
-function SectionTitle({ icon, title, aside }: { icon: React.ReactNode; title: string; aside?: React.ReactNode }) {
+function SectionTitle({ icon, title, caption, aside }: { icon: React.ReactNode; title: string; caption?: string; aside?: React.ReactNode }) {
   return (
     <div className="mb-3 flex items-center justify-between gap-3 px-4 sm:px-6">
-      <h2 className="flex items-center gap-2 text-[17px] font-bold tracking-tight text-foreground">
-        <span className="text-primary">{icon}</span>
-        {title}
+      <h2 className="flex min-w-0 items-baseline gap-2 text-[17px] font-bold tracking-tight text-foreground">
+        <span className="self-center text-primary">{icon}</span>
+        <span className="flex-shrink-0">{title}</span>
+        {caption && <span className="truncate text-[11.5px] font-medium text-muted-foreground">{caption}</span>}
       </h2>
       {aside}
     </div>
   );
+}
+
+/** チャンネル名の「葛葉 / Kuzuha」「ローレン・イロアス【にじさんじ】」から日本語の呼び名だけ */
+function cleanName(n: string): string {
+  return n.split(/\s*[/／|｜【(（]\s*/)[0].trim() || n;
 }
 
 function GameImage({ g, className = '' }: { g: GameCard | { image: string | null; name: string }; className?: string }) {
@@ -175,21 +183,28 @@ function GridCard({ g, members, onOpen, anchor }: { g: GameCard; members: Member
   );
 }
 
+/** why（backend の理由）のうち、カードの下の行（人数・モード・価格）と重なるものは出さない */
+const META_WHY = /^(最大\d+人|\d+人まで|協力|対戦|¥[\d,]+|\d+%オフ.*|無料)$/;
+
 function PickCard({ g, why, members, onOpen, anchor }: { g: GameCard; why: string[]; members: Members; onOpen: (g: GameCard) => void; anchor?: string }) {
   const people = Array.from(new Set([...g.playing_now, ...g.played, ...g.own]));
+  const reasons = why.filter((w) => !META_WHY.test(w)).slice(0, 2);
   return (
-    <button type="button" onClick={() => onOpen(g)} data-tour={anchor} className="group w-[230px] min-w-[230px] text-left sm:w-[260px] sm:min-w-[260px]">
+    <button type="button" onClick={() => onOpen(g)} data-tour={anchor} className="group w-[230px] min-w-[230px] self-start text-left sm:w-[260px] sm:min-w-[260px]">
       <GameImage g={g} className="mb-2" />
       <h3 className="line-clamp-1 text-[14px] font-semibold text-foreground">{g.name}</h3>
       <p className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-muted-foreground">{g.hook}</p>
-      <div className="mt-1.5 flex flex-wrap gap-1">
-        {why.slice(0, 4).map((w) => (
-          <Chip key={w} tone={/無料|オフ/.test(w) ? 'accent' : /持って|遊んだ/.test(w) ? 'ok' : 'muted'}>{w}</Chip>
-        ))}
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11.5px] text-foreground/75">
+        <span className="font-semibold text-primary">{playersLabel(g)}</span>
+        <span>{modeLabel(g.modes)}</span>
+        <PriceTag g={g} />
       </div>
-      {people.length > 0 && (
-        <div className="mt-1.5">
-          <Avatars ids={people} members={members} size={18} />
+      {(reasons.length > 0 || people.length > 0) && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          {people.length > 0 && <Avatars ids={people} members={members} size={18} />}
+          {reasons.map((w) => (
+            <Chip key={w} tone={/持って|遊んだ/.test(w) ? 'ok' : 'muted'}>{w}</Chip>
+          ))}
         </div>
       )}
     </button>
@@ -218,11 +233,11 @@ function OfferCard({ o, game, onOpen }: { o: GameOffer; game?: GameCard; onOpen:
     </>
   );
   return game ? (
-    <button type="button" onClick={() => onOpen(game)} className="w-[230px] min-w-[230px] text-left">
+    <button type="button" onClick={() => onOpen(game)} className="w-[230px] min-w-[230px] self-start text-left">
       {body}
     </button>
   ) : (
-    <a href={o.url || '#'} target="_blank" rel="noopener noreferrer" className="block w-[230px] min-w-[230px]">
+    <a href={o.url || '#'} target="_blank" rel="noopener noreferrer" className="block w-[230px] min-w-[230px] self-start">
       {body}
     </a>
   );
@@ -236,30 +251,34 @@ function names(list: string[], max = 3): string {
   return list.length > max ? `${list.slice(0, max).join('・')} ほか${list.length - max}人` : list.join('・');
 }
 
-function StreamerGameCard({ e, onOpen, anchor }: { e: SceneStreamerGame; onOpen: (g: GameCard) => void; anchor?: string }) {
+/** 配信者がいまやってる: 全員知っているゲームが多いので、大きなカードではなく 1 行のピル */
+function StreamerPill({ e, onOpen, anchor }: { e: SceneStreamerGame; onOpen: (g: GameCard) => void; anchor?: string }) {
+  const who = e.channels.map((c) => cleanName(c.name));
   const inner = (
     <>
-      <GameImage g={{ image: e.image, name: e.name }} className="mb-2" />
-      <h3 className="line-clamp-1 text-[14px] font-semibold text-foreground">{e.name}</h3>
-      <p className="mt-0.5 line-clamp-1 text-[12px] text-muted-foreground">{names(e.channels.map((c) => c.name))}</p>
-      <div className="mt-1.5 flex flex-wrap gap-1">
-        <Chip tone="accent">配信者 {e.channels.length}人</Chip>
-        {e.views >= 10000 && <Chip>動画 {fmtViews(e.views)}</Chip>}
-        {e.on_shelf && <Chip tone="ok">置き場にある</Chip>}
-      </div>
+      {e.image ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={e.image} alt="" loading="lazy" className="h-8 w-[60px] flex-shrink-0 rounded-full object-cover" />
+      ) : (
+        <span className="h-8 w-[60px] flex-shrink-0 rounded-full bg-secondary" />
+      )}
+      <span className="min-w-0">
+        <span className="block max-w-[150px] truncate text-[13px] font-semibold leading-tight text-foreground">{e.name}</span>
+        <span className="block max-w-[150px] truncate text-[11px] leading-tight text-muted-foreground">{who.length}人・{who.slice(0, 2).join('・')}</span>
+      </span>
     </>
   );
-  const cls = 'group w-[200px] min-w-[200px] text-left sm:w-[230px] sm:min-w-[230px]';
+  const cls = 'flex h-11 flex-shrink-0 items-center gap-2 rounded-full border border-border bg-card py-1 pl-1 pr-3.5 text-left hover:bg-secondary/60';
   if (e.card) {
     const card = e.card;
     return (
-      <button type="button" onClick={() => onOpen(card)} data-tour={anchor} className={cls}>
+      <button type="button" onClick={() => onOpen(card)} data-tour={anchor} className={cls} aria-label={`${e.name}（配信者 ${who.length} 人）`}>
         {inner}
       </button>
     );
   }
   return (
-    <a href={e.top ? `https://www.youtube.com/watch?v=${e.top.video_id}` : '#'} target="_blank" rel="noopener noreferrer" data-tour={anchor} className={`block ${cls}`}>
+    <a href={e.top ? `https://www.youtube.com/watch?v=${e.top.video_id}` : '#'} target="_blank" rel="noopener noreferrer" data-tour={anchor} className={cls} aria-label={`${e.name}（配信者 ${who.length} 人、YouTube で開く）`}>
       {inner}
     </a>
   );
@@ -267,20 +286,23 @@ function StreamerGameCard({ e, onOpen, anchor }: { e: SceneStreamerGame; onOpen:
 
 function FreshCard({ e, onOpen, anchor }: { e: SceneFresh; onOpen: (g: GameCard) => void; anchor?: string }) {
   const g = e.card;
+  // いちばん強い理由を 2 つだけ（並びは backend が強い順に作っている）
+  const reasons = e.badges.slice(0, 2);
   return (
-    <button type="button" onClick={() => onOpen(g)} data-tour={anchor} className="group w-[230px] min-w-[230px] text-left sm:w-[260px] sm:min-w-[260px]">
+    <button type="button" onClick={() => onOpen(g)} data-tour={anchor} className="group w-[230px] min-w-[230px] self-start text-left sm:w-[260px] sm:min-w-[260px]">
       <GameImage g={g} className="mb-2" />
       <h3 className="line-clamp-1 text-[14px] font-semibold text-foreground">{g.name}</h3>
       <p className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-muted-foreground">{g.hook}</p>
-      <div className="mt-1.5 flex flex-wrap gap-1">
-        {e.badges.slice(0, 3).map((b) => (
-          <Chip key={b} tone={/実況|配信者|売上/.test(b) ? 'accent' : 'muted'}>{b}</Chip>
-        ))}
-      </div>
-      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-        <span>{playersLabel(g)}・{modeLabel(g.modes)}</span>
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11.5px] text-foreground/75">
+        <span className="font-semibold text-primary">{playersLabel(g)}</span>
+        <span>{modeLabel(g.modes)}</span>
         <PriceTag g={g} />
-        {e.on_shelf ? <Chip tone="ok">置き場にある</Chip> : <span>まだ誰も貼ってない</span>}
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-1">
+        {reasons.map((b, i) => (
+          <Chip key={b} tone={i === 0 ? 'accent' : 'muted'}>{b}</Chip>
+        ))}
+        {e.on_shelf && <Chip tone="ok">置き場にある</Chip>}
       </div>
     </button>
   );
@@ -293,7 +315,7 @@ function SceneDetail({ x }: { x: SceneExtra }) {
   return (
     <div className="space-y-2 rounded-xl border border-border p-3 text-[12.5px]">
       <p className="text-[11px] font-semibold text-muted-foreground">界隈では</p>
-      {x.streamers.length > 0 && <p className="text-foreground/85">{names(x.streamers, 5)} が直近 1 週間に配信・投稿</p>}
+      {x.streamers.length > 0 && <p className="text-foreground/85">{names(x.streamers.map(cleanName), 5)} が直近 1 週間に配信・投稿</p>}
       {x.jikkyou?.top_video && (
         <a href={`https://www.youtube.com/watch?v=${x.jikkyou.top_video}`} target="_blank" rel="noopener noreferrer" className="flex items-start gap-1.5 text-foreground/85 hover:text-foreground">
           <PlayCircle className="mt-[2px] h-3.5 w-3.5 flex-shrink-0 text-primary" />
@@ -330,7 +352,7 @@ function GameDetail({ g, board, myId, onMark, busy, extra }: { g: GameCard; boar
             {playersLabel(g)}
           </Chip>
           <Chip>{modeLabel(g.modes)}</Chip>
-          {g.vibe.slice(0, 3).map((v) => (
+          {g.vibe.filter((v) => v !== modeLabel(g.modes) && !['協力', '対戦'].includes(v)).slice(0, 3).map((v) => (
             <Chip key={v}>{v}</Chip>
           ))}
         </div>
@@ -381,7 +403,8 @@ function GameDetail({ g, board, myId, onMark, busy, extra }: { g: GameCard; boar
           {posted} が置いた{g.posted.at ? `（${md(g.posted.at)}）` : ''}{g.posted.count > 1 ? `・${g.posted.count} 回貼られた` : ''}
         </p>
       )}
-      <div className="flex flex-wrap gap-2">
+      {/* 操作は下に固定（長い詳細をスクロールしなくても押せる） */}
+      <div className="sticky bottom-0 -mx-5 -mb-4 flex flex-wrap gap-2 border-t border-border/70 bg-background/95 px-5 py-3 backdrop-blur">
         <Button
           size="sm"
           variant={iWant ? 'default' : 'outline'}
@@ -638,227 +661,241 @@ export const GameShelfScreen: React.FC<Props> = ({ guildId }) => {
   const sales = board.deadlines.sales.map((a) => byId.get(a)).filter(Boolean) as GameCard[];
   const releases = board.deadlines.releases.map((r) => ({ ...r, g: byId.get(r.appid) })).filter((r) => r.g) as { appid: string; date: string; released: boolean; g: GameCard }[];
   const f = FILTERS.find((x) => x.id === filter)!;
-  const list = board.games.filter((g) => g.posted.count > 0 && f.test(g));
+  const shelfGames = board.games.filter((g) => g.posted.count > 0);
+  const list = shelfGames.filter((g) => f.test(g));
+  const scene = board.scene;
+  // VC に 2 人以上いる＝「今夜なにやる？」の場面。答え（今夜どれ？）を一番上に
+  const gathered = voiceIds.length >= 2;
+  const lastPlayed = board.recent[0];
+  const rowPad = <div className="w-0.5 flex-shrink-0 sm:w-2" aria-hidden="true" />;
+
+  const nowSection = (
+    <section className="px-4 sm:px-6" data-tour="games-now" key="now">
+      {voiceIds.length || board.now.playing.length ? (
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[12px] font-semibold text-muted-foreground">いま</p>
+              {voiceIds.length ? (
+                <p className="mt-1 flex flex-wrap items-center gap-2 text-[15px] font-bold text-foreground">
+                  <Avatars ids={voiceIds} members={m} size={24} max={8} />
+                  {channels.join('・')} に {voiceIds.length} 人
+                </p>
+              ) : (
+                <p className="mt-1 text-[15px] font-semibold text-foreground">VC は空いています</p>
+              )}
+            </div>
+            <button type="button" onClick={() => void load(true)} className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary" aria-label="更新">
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+          {board.now.playing.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {board.now.playing.map((p) => {
+                const g = p.appid ? byId.get(p.appid) : undefined;
+                return (
+                  <button
+                    key={p.appid || p.game_name}
+                    type="button"
+                    disabled={!g}
+                    onClick={() => g && setOpenId(g.appid)}
+                    className="inline-flex h-9 items-center gap-2 rounded-full border border-border bg-background pl-1 pr-3 text-[12.5px] font-medium text-foreground disabled:cursor-default"
+                  >
+                    <Avatars ids={p.users} members={m} size={24} />
+                    {p.game_name}
+                    <span className="text-muted-foreground">{p.users.length}人</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
+        // 誰もいないときは 1 行だけ（一等地を空の箱で使わない）
+        <div className="flex items-center justify-between gap-3 rounded-2xl bg-secondary/60 py-1.5 pl-4 pr-1.5">
+          <p className="min-w-0 truncate text-[13px] text-muted-foreground">
+            <span className="font-semibold text-foreground">VC は空いています</span>
+            {lastPlayed && <span>・最後は {lastPlayed.game_name}（{timeAgo(lastPlayed.last_at)}）</span>}
+          </p>
+          <button type="button" onClick={() => void load(true)} className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-background" aria-label="更新">
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+      )}
+    </section>
+  );
+
+  const sceneSection = scene && (scene.streamers.length > 0 || scene.fresh.length > 0) && (
+    <section data-tour="games-scene" key="scene">
+      <SectionTitle icon={<Flame className="h-4 w-4" />} title="界隈で話題" caption="配信者・ゲームメディア・Steam から" />
+      {scene.streamers.length > 0 && (
+        <div className="mb-4">
+          <h3 className="mb-2 px-4 text-[12.5px] font-semibold text-muted-foreground sm:px-6">配信者がいまやってる</h3>
+          <ScrollRow className="gap-2" ariaLabel="配信者がいまやってるゲーム">
+            {rowPad}
+            {scene.streamers.map((e, i) => (
+              <StreamerPill key={e.key} e={e} onOpen={(g) => setOpenId(g.appid)} anchor={i === 0 ? 'games-scene-first' : undefined} />
+            ))}
+            {rowPad}
+          </ScrollRow>
+        </div>
+      )}
+      {scene.fresh.length > 0 && (
+        <div>
+          <h3 className="mb-2 px-4 text-[12.5px] font-semibold text-muted-foreground sm:px-6">話題の新作・インディー</h3>
+          <ScrollRow className="gap-4" ariaLabel="話題の新作・インディー">
+            {rowPad}
+            {scene.fresh.map((e) => (
+              <FreshCard key={e.key} e={e} onOpen={(g) => setOpenId(g.appid)} />
+            ))}
+            {rowPad}
+          </ScrollRow>
+        </div>
+      )}
+    </section>
+  );
+
+  const tonightSection = (
+    <section data-tour="games-tonight" key="tonight">
+      <SectionTitle
+        icon={<Swords className="h-4 w-4" />}
+        title="今夜どれ？"
+        caption={board.tonight.from_voice && players === null ? `VC の ${board.tonight.players} 人で` : undefined}
+      />
+      <div className="mb-3 flex gap-2 overflow-x-auto px-4 pb-1 sm:px-6" role="group" aria-label="人数">
+        {PLAYER_CHOICES.map((n) => {
+          const active = (players ?? board.tonight.players) === n;
+          return (
+            <button
+              key={n}
+              type="button"
+              onClick={() => setPlayers(n)}
+              aria-pressed={active}
+              className={`h-9 flex-shrink-0 rounded-full border px-4 text-[13px] font-semibold transition-colors ${
+                active ? 'border-transparent bg-primary text-white' : 'border-border bg-card text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {n === 8 ? '8人+' : `${n}人`}
+            </button>
+          );
+        })}
+      </div>
+      {picks.length ? (
+        <ScrollRow className="gap-4" ariaLabel="今夜の候補">
+          {rowPad}
+          {picks.map((p, i) => (
+            <PickCard key={p.appid} g={p.g} why={p.why} members={m} onOpen={(g) => setOpenId(g.appid)} anchor={i === 0 ? 'games-first-pick' : undefined} />
+          ))}
+          {rowPad}
+        </ScrollRow>
+      ) : (
+        <p className="px-4 text-[13px] text-muted-foreground sm:px-6">{board.tonight.players} 人で遊べるゲームは置き場にまだありません</p>
+      )}
+    </section>
+  );
+
+  const deadlinesSection = (board.deadlines.offers.length > 0 || sales.length > 0 || releases.length > 0) && (
+    <section data-tour="games-deadlines" key="deadlines">
+      <SectionTitle icon={<Clock className="h-4 w-4" />} title="期限つき" caption="無料配布・セール・発売" />
+      <ScrollRow className="gap-4" ariaLabel="無料配布・セール・発売">
+        {rowPad}
+        {board.deadlines.offers.map((o) => (
+          <OfferCard key={o.id} o={o} game={o.appid ? byId.get(o.appid) : undefined} onOpen={(g) => setOpenId(g.appid)} />
+        ))}
+        {sales.map((g) => (
+          <button key={`sale-${g.appid}`} type="button" onClick={() => setOpenId(g.appid)} className="w-[230px] min-w-[230px] self-start text-left">
+            <GameImage g={g} />
+            <h3 className="mt-2 line-clamp-1 text-[13.5px] font-semibold text-foreground">{g.name}</h3>
+            <div className="mt-1 flex items-center gap-1.5">
+              <PriceTag g={g} />
+              <span className="text-[11.5px] text-muted-foreground">{playersLabel(g)}</span>
+            </div>
+          </button>
+        ))}
+        {releases.map((r) => (
+          <button key={`rel-${r.appid}`} type="button" onClick={() => setOpenId(r.appid)} className="w-[230px] min-w-[230px] self-start text-left">
+            <GameImage g={r.g} />
+            <h3 className="mt-2 line-clamp-1 text-[13.5px] font-semibold text-foreground">{r.g.name}</h3>
+            <p className="mt-0.5 text-[11.5px] font-semibold text-primary">{r.released ? `${md(r.date)} に発売` : `${md(r.date)} 発売`}</p>
+          </button>
+        ))}
+        {rowPad}
+      </ScrollRow>
+    </section>
+  );
+
+  const recentSection = board.recent.length > 0 && (
+    <section key="recent">
+      <SectionTitle icon={<Gift className="h-4 w-4" />} title="最近ドデカで遊ばれた" />
+      <ul className="space-y-1 px-4 sm:px-6">
+        {board.recent.slice(0, 6).map((r) => {
+          const g = r.appid ? byId.get(r.appid) : undefined;
+          return (
+            <li key={r.appid || r.game_name}>
+              <button
+                type="button"
+                disabled={!g}
+                onClick={() => g && setOpenId(g.appid)}
+                className="flex min-h-11 w-full items-center gap-3 rounded-xl px-2 py-1.5 text-left hover:bg-secondary/70 disabled:hover:bg-transparent"
+              >
+                {g?.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={g.image} alt="" className="h-9 w-[77px] flex-shrink-0 rounded-md object-cover" />
+                ) : (
+                  <span className="flex h-9 w-[77px] flex-shrink-0 items-center justify-center rounded-md bg-secondary text-[10px] text-muted-foreground">Steam外</span>
+                )}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13.5px] font-semibold text-foreground">{r.game_name}</span>
+                  <span className="text-[11.5px] text-muted-foreground">{timeAgo(r.last_at)}</span>
+                </span>
+                <Avatars ids={r.users} members={m} size={22} />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+
+  const allSection = (
+    <section data-tour="games-all" key="all">
+      <SectionTitle
+        icon={<Tag className="h-4 w-4" />}
+        title="みんなが貼った"
+        caption={`${shelfGames.length} 本`}
+        aside={<SteamLinkCard onChanged={() => { cache.clear(); void load(true); }} />}
+      />
+      <div className="mb-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:px-6" role="group" aria-label="絞り込み" data-tour="games-filters">
+        {FILTERS.map((x) => (
+          <button
+            key={x.id}
+            type="button"
+            onClick={() => setFilter(x.id)}
+            aria-pressed={filter === x.id}
+            className={`h-9 flex-shrink-0 rounded-full border px-3.5 text-[13px] font-medium transition-colors ${
+              filter === x.id ? 'border-transparent bg-primary text-white' : 'border-border bg-card text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {x.label} {shelfGames.filter((g) => x.test(g)).length}
+          </button>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-4 px-4 sm:grid-cols-3 sm:gap-5 sm:px-6 md:grid-cols-4 xl:grid-cols-5">
+        {list.map((g, i) => (
+          <GridCard key={g.appid} g={g} members={m} onOpen={(x) => setOpenId(x.appid)} anchor={i === 0 ? 'games-first-card' : undefined} />
+        ))}
+      </div>
+      {list.length === 0 && <p className="px-4 py-6 text-center text-[13px] text-muted-foreground sm:px-6">該当するゲームはありません</p>}
+    </section>
+  );
+
+  const order = gathered
+    ? [nowSection, tonightSection, deadlinesSection, sceneSection, recentSection, allSection]
+    : [nowSection, sceneSection, tonightSection, deadlinesSection, recentSection, allSection];
 
   return (
     <div className="h-full overflow-y-auto overflow-x-hidden bg-background">
-      <div className="space-y-8 py-4 sm:py-6">
-        {/* いま */}
-        <section className="px-4 sm:px-6" data-tour="games-now">
-          <div className="rounded-2xl border border-border bg-card p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[12px] font-semibold text-muted-foreground">いま</p>
-                {voiceIds.length ? (
-                  <p className="mt-1 flex flex-wrap items-center gap-2 text-[15px] font-bold text-foreground">
-                    <Avatars ids={voiceIds} members={m} size={24} max={8} />
-                    {channels.join('・')} に {voiceIds.length} 人
-                  </p>
-                ) : (
-                  <p className="mt-1 text-[15px] font-semibold text-foreground">VC には誰もいません</p>
-                )}
-              </div>
-              <button type="button" onClick={() => void load(true)} className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary" aria-label="更新">
-                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
-            {board.now.playing.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {board.now.playing.map((p) => {
-                  const g = p.appid ? byId.get(p.appid) : undefined;
-                  return (
-                    <button
-                      key={p.appid || p.game_name}
-                      type="button"
-                      disabled={!g}
-                      onClick={() => g && setOpenId(g.appid)}
-                      className="inline-flex items-center gap-2 rounded-full border border-border bg-background py-1 pl-1 pr-3 text-[12.5px] font-medium text-foreground disabled:cursor-default"
-                    >
-                      <Avatars ids={p.users} members={m} size={22} />
-                      {p.game_name}
-                      <span className="text-muted-foreground">{p.users.length}人</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* 界隈で話題 */}
-        {board.scene && (board.scene.streamers.length > 0 || board.scene.fresh.length > 0) && (
-          <section data-tour="games-scene">
-            <SectionTitle icon={<Flame className="h-4 w-4" />} title="界隈で話題" />
-            <p className="mb-3 flex items-start gap-1.5 px-4 text-[12.5px] leading-relaxed text-muted-foreground sm:px-6">
-              <Info className="mt-[3px] h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
-              よく見る配信者・VTuber の動画と、#ゲーム置き場 の記事の出どころ（電ファミ・AUTOMATON・Game*Spark など）、Steam の日本の売れ筋から自動で集めています
-            </p>
-            {board.scene.streamers.length > 0 && (
-              <div className="mb-5">
-                <h3 className="mb-2 px-4 text-[13px] font-semibold text-foreground/80 sm:px-6">配信者がいまやってる</h3>
-                <ScrollRow className="gap-4" ariaLabel="配信者がいまやってるゲーム">
-                  <div className="w-0.5 flex-shrink-0 sm:w-2" aria-hidden="true" />
-                  {board.scene.streamers.map((e, i) => (
-                    <StreamerGameCard key={e.key} e={e} onOpen={(g) => setOpenId(g.appid)} anchor={i === 0 ? 'games-scene-first' : undefined} />
-                  ))}
-                  <div className="w-0.5 flex-shrink-0 sm:w-2" aria-hidden="true" />
-                </ScrollRow>
-              </div>
-            )}
-            {board.scene.fresh.length > 0 && (
-              <div>
-                <h3 className="mb-2 px-4 text-[13px] font-semibold text-foreground/80 sm:px-6">話題の新作・インディー</h3>
-                <ScrollRow className="gap-4" ariaLabel="話題の新作・インディー">
-                  <div className="w-0.5 flex-shrink-0 sm:w-2" aria-hidden="true" />
-                  {board.scene.fresh.map((e) => (
-                    <FreshCard key={e.key} e={e} onOpen={(g) => setOpenId(g.appid)} />
-                  ))}
-                  <div className="w-0.5 flex-shrink-0 sm:w-2" aria-hidden="true" />
-                </ScrollRow>
-              </div>
-            )}
-          </section>
-        )}
-
-        {/* 今夜どれ？ */}
-        <section data-tour="games-tonight">
-          <SectionTitle icon={<Swords className="h-4 w-4" />} title="今夜どれ？" />
-          <div className="mb-3 flex gap-2 overflow-x-auto px-4 pb-1 sm:px-6" role="group" aria-label="人数">
-            {PLAYER_CHOICES.map((n) => {
-              const active = (players ?? board.tonight.players) === n;
-              return (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setPlayers(n)}
-                  aria-pressed={active}
-                  className={`h-8 flex-shrink-0 rounded-full border px-3.5 text-[13px] font-semibold transition-colors ${
-                    active ? 'border-transparent bg-primary text-white' : 'border-border bg-card text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {n === 8 ? '8人+' : `${n}人`}
-                </button>
-              );
-            })}
-            {board.tonight.from_voice && players === null && <span className="self-center text-[11.5px] text-muted-foreground">VC の人数</span>}
-          </div>
-          {picks.length ? (
-            <ScrollRow className="gap-4" ariaLabel="今夜の候補">
-              <div className="w-0.5 flex-shrink-0 sm:w-2" aria-hidden="true" />
-              {picks.map((p, i) => (
-                <PickCard key={p.appid} g={p.g} why={p.why} members={m} onOpen={(g) => setOpenId(g.appid)} anchor={i === 0 ? 'games-first-pick' : undefined} />
-              ))}
-              <div className="w-0.5 flex-shrink-0 sm:w-2" aria-hidden="true" />
-            </ScrollRow>
-          ) : (
-            <p className="px-4 text-[13px] text-muted-foreground sm:px-6">{board.tonight.players} 人で遊べるゲームは置き場にまだありません</p>
-          )}
-        </section>
-
-        {/* 期限つき */}
-        {(board.deadlines.offers.length > 0 || sales.length > 0 || releases.length > 0) && (
-          <section data-tour="games-deadlines">
-            <SectionTitle icon={<Clock className="h-4 w-4" />} title="期限つき" />
-            <ScrollRow className="gap-4" ariaLabel="無料配布・セール・発売">
-              <div className="w-0.5 flex-shrink-0 sm:w-2" aria-hidden="true" />
-              {board.deadlines.offers.map((o) => (
-                <OfferCard key={o.id} o={o} game={o.appid ? byId.get(o.appid) : undefined} onOpen={(g) => setOpenId(g.appid)} />
-              ))}
-              {sales.map((g) => (
-                <button key={`sale-${g.appid}`} type="button" onClick={() => setOpenId(g.appid)} className="w-[230px] min-w-[230px] text-left">
-                  <GameImage g={g} />
-                  <h3 className="mt-2 line-clamp-1 text-[13.5px] font-semibold text-foreground">{g.name}</h3>
-                  <div className="mt-1 flex items-center gap-1.5">
-                    <PriceTag g={g} />
-                    <span className="text-[11.5px] text-muted-foreground">{playersLabel(g)}</span>
-                  </div>
-                </button>
-              ))}
-              {releases.map((r) => (
-                <button key={`rel-${r.appid}`} type="button" onClick={() => setOpenId(r.appid)} className="w-[230px] min-w-[230px] text-left">
-                  <GameImage g={r.g} />
-                  <h3 className="mt-2 line-clamp-1 text-[13.5px] font-semibold text-foreground">{r.g.name}</h3>
-                  <p className="mt-0.5 text-[11.5px] font-semibold text-primary">{r.released ? `${md(r.date)} に発売` : `${md(r.date)} 発売`}</p>
-                </button>
-              ))}
-              <div className="w-0.5 flex-shrink-0 sm:w-2" aria-hidden="true" />
-            </ScrollRow>
-          </section>
-        )}
-
-        {/* 最近ドデカで遊ばれた */}
-        {board.recent.length > 0 && (
-          <section>
-            <SectionTitle icon={<Gift className="h-4 w-4" />} title="最近ドデカで遊ばれた" />
-            <ul className="space-y-2 px-4 sm:px-6">
-              {board.recent.slice(0, 8).map((r) => {
-                const g = r.appid ? byId.get(r.appid) : undefined;
-                return (
-                  <li key={r.appid || r.game_name}>
-                    <button
-                      type="button"
-                      disabled={!g}
-                      onClick={() => g && setOpenId(g.appid)}
-                      className="flex w-full items-center gap-3 rounded-xl px-2 py-1.5 text-left hover:bg-secondary/70 disabled:hover:bg-transparent"
-                    >
-                      {g?.image ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={g.image} alt="" className="h-9 w-[77px] flex-shrink-0 rounded-md object-cover" />
-                      ) : (
-                        <span className="flex h-9 w-[77px] flex-shrink-0 items-center justify-center rounded-md bg-secondary text-[10px] text-muted-foreground">Steam外</span>
-                      )}
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[13.5px] font-semibold text-foreground">{r.game_name}</span>
-                        <span className="text-[11.5px] text-muted-foreground">{timeAgo(r.last_at)}</span>
-                      </span>
-                      <Avatars ids={r.users} members={m} size={22} />
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        )}
-
-        {/* 置き場 */}
-        <section data-tour="games-all">
-          <SectionTitle
-            icon={<Tag className="h-4 w-4" />}
-            title="みんなが貼った"
-            aside={
-              <span className="flex items-center gap-3">
-                <SteamLinkCard onChanged={() => { cache.clear(); void load(true); }} />
-                <span className="text-[12px] text-muted-foreground">{board.games.filter((g) => g.posted.count > 0).length} 本</span>
-              </span>
-            }
-          />
-          <p className="mb-3 flex items-start gap-1.5 px-4 text-[12.5px] leading-relaxed text-muted-foreground sm:px-6">
-            <Info className="mt-[3px] h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
-            #ゲーム置き場 に貼られた Steam のゲームと X の記事から、何人で遊べるか・価格を自動でまとめています
-          </p>
-          <div className="mb-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:px-6" role="group" aria-label="絞り込み" data-tour="games-filters">
-            {FILTERS.map((x) => (
-              <button
-                key={x.id}
-                type="button"
-                onClick={() => setFilter(x.id)}
-                aria-pressed={filter === x.id}
-                className={`h-8 flex-shrink-0 rounded-full border px-3 text-[13px] font-medium transition-colors ${
-                  filter === x.id ? 'border-transparent bg-primary text-white' : 'border-border bg-card text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {x.label} {board.games.filter((g) => g.posted.count > 0 && x.test(g)).length}
-              </button>
-            ))}
-          </div>
-          <div className="grid grid-cols-2 gap-4 px-4 sm:grid-cols-3 sm:gap-5 sm:px-6 md:grid-cols-4 xl:grid-cols-5">
-            {list.map((g, i) => (
-              <GridCard key={g.appid} g={g} members={m} onOpen={(x) => setOpenId(x.appid)} anchor={i === 0 ? 'games-first-card' : undefined} />
-            ))}
-          </div>
-          {list.length === 0 && <p className="px-4 py-6 text-center text-[13px] text-muted-foreground sm:px-6">該当するゲームはありません</p>}
-        </section>
-      </div>
+      <div className="space-y-8 py-4 sm:py-6">{order}</div>
 
       <ResponsiveSheet open={!!open} onOpenChange={(o) => !o && setOpenId(null)} title={open?.name ?? ''} dataTour="game-detail">
         {open && <GameDetail g={open} board={board} myId={myId} onMark={onMark} busy={busy} extra={openExtra} />}
