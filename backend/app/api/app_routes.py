@@ -10,12 +10,13 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 import aiohttp
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from .. import db
 from ..services import push, push_events
-from ..services.app_auth import AppUser, current_user, require_admin
+from ..services.app_auth import AppUser, current_user, require_admin, user_or_internal
+from ..services import game_shelf, game_db
 
 router = APIRouter()
 
@@ -67,6 +68,15 @@ class DeviceReport(BaseModel):
 class PrefsIn(BaseModel):
     shelf: Optional[bool] = None
     vc_music: Optional[bool] = None
+    game_deals: Optional[bool] = None
+    game_gather: Optional[bool] = None
+    gather_min: Optional[int] = Field(default=None, ge=2, le=8)
+    show_playing: Optional[bool] = None
+
+
+class MarkIn(BaseModel):
+    kind: str = Field(pattern="^(want|own)$")
+    on: bool
 
 
 class AdminPushIn(BaseModel):
@@ -172,7 +182,11 @@ async def get_prefs(user: AppUser = Depends(current_user)):
 @router.put("/me/notification-prefs")
 async def put_prefs(body: PrefsIn, user: AppUser = Depends(current_user)):
     changes = {k: v for k, v in body.model_dump().items() if v is not None}
-    return await asyncio.to_thread(db.save_notif_prefs, user.id, changes)
+    saved = await asyncio.to_thread(db.save_notif_prefs, user.id, changes)
+    if changes.get("show_playing") is False:
+        # 「自分のプレイ中を出す」をオフにしたら、これまでの記録も消す
+        await asyncio.to_thread(game_db.delete_sessions_for, user.id)
+    return saved
 
 
 _test_calls: Dict[str, List[float]] = {}
@@ -193,6 +207,92 @@ async def push_test(user: AppUser = Depends(current_user)):
     res = await push.send_logged(kind="test", title="テスト通知", body="イリーナからの通知はこんなふうに届きます",
                                  url="/", devices=devices, created_by=user.id, ttl=600, urgency="high")
     return res
+
+
+# ---------------------------------------------------------------------------
+# ゲーム置き場
+# ---------------------------------------------------------------------------
+
+def _check_game_guild(guild_id: str) -> None:
+    if guild_id not in game_shelf.game_guild_ids():
+        raise HTTPException(status_code=404, detail="このサーバーにはゲーム置き場がありません")
+
+
+async def _require_member(guild_id: str, user: AppUser) -> None:
+    """ゲーム置き場はメンバーの表示名・プレイ中を返すので、そのサーバーのメンバーだけに見せる"""
+    try:
+        info = await _guild_members(guild_id)
+        ids = {m["id"] for m in info["members"]}
+    except Exception:
+        # Discord に聞けないときは、これまでに VC・プレイ中で見かけたメンバーで判定する
+        ids = set((await asyncio.to_thread(game_db.members, guild_id)).keys())
+    if user.id not in ids:
+        raise HTTPException(status_code=403, detail="このサーバーのメンバーだけが見られます")
+
+
+@router.get("/games/{guild_id}/board")
+async def game_board(guild_id: str, request: Request, players: Optional[int] = None,
+                     user: Optional[AppUser] = Depends(user_or_internal)):
+    _check_game_guild(guild_id)
+    if user is None:
+        # イリーナのチャットから: そのサーバーでの会話のときだけ
+        if (request.headers.get("x-irina-guild") or "") != guild_id:
+            raise HTTPException(status_code=403, detail="このサーバーでの会話からだけ見られます")
+    else:
+        await _require_member(guild_id, user)
+    if players is not None and not 1 <= players <= 16:
+        raise HTTPException(status_code=400, detail="players は 1〜16")
+    return await asyncio.to_thread(game_shelf.build_board, guild_id, players)
+
+
+class SteamLinkIn(BaseModel):
+    profile: str = Field(min_length=2, max_length=200)
+
+
+@router.get("/me/steam")
+async def get_steam(user: AppUser = Depends(current_user)):
+    link = await asyncio.to_thread(game_db.get_steam_link, user.id)
+    if not link:
+        return {"linked": False}
+    return {"linked": True, "name": link["name"], "avatar": link["avatar"], "games": link["games_count"],
+            "private": link["games_count"] is None, "synced_at": link["synced_at"]}
+
+
+_steam_calls: Dict[str, List[float]] = {}
+
+
+@router.post("/me/steam")
+async def link_steam(body: SteamLinkIn, user: AppUser = Depends(current_user)):
+    now = time.time()
+    recent = [t for t in _steam_calls.get(user.id, []) if now - t < 60]
+    if len(recent) >= 5:
+        raise HTTPException(status_code=429, detail="少し待ってからもう一度試してください")
+    _steam_calls[user.id] = recent + [now]
+    from ..services import game_sources
+    if not game_sources.steam_key():
+        raise HTTPException(status_code=503, detail="Steam 連携の準備ができていません")
+    res = await game_shelf.link_steam(user.id, body.profile)
+    if not res.get("ok"):
+        raise HTTPException(status_code=404, detail=res.get("error") or "見つかりませんでした")
+    return res
+
+
+@router.delete("/me/steam")
+async def unlink_steam(user: AppUser = Depends(current_user)):
+    await asyncio.to_thread(game_db.delete_steam_link, user.id)
+    return {"linked": False}
+
+
+@router.post("/games/{guild_id}/{appid}/mark")
+async def game_mark(guild_id: str, appid: str, body: MarkIn, user: AppUser = Depends(current_user)):
+    _check_game_guild(guild_id)
+    await _require_member(guild_id, user)
+    if not appid.isdigit():
+        raise HTTPException(status_code=400, detail="bad appid")
+    await asyncio.to_thread(game_db.set_mark, guild_id, user.id, appid, body.kind, body.on)
+    await asyncio.to_thread(game_db.upsert_member, guild_id, user.id, user.name or None, user.image or None)
+    marks = await asyncio.to_thread(game_db.marks, guild_id)
+    return {"appid": appid, **marks.get(appid, {"want": [], "own": []})}
 
 
 # ---------------------------------------------------------------------------

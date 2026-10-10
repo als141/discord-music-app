@@ -208,8 +208,11 @@ export const AppSettingsSheet: React.FC = () => {
     );
   })();
 
-  const prefRows: { key: 'announce' | 'shelf' | 'vc_music'; label: string; note: string }[] = [
+  type BoolPref = 'shelf' | 'vc_music' | 'game_deals' | 'game_gather';
+  const prefRows: { key: 'announce' | BoolPref; label: string; note: string }[] = [
     { key: 'announce', label: 'お知らせ', note: '新機能や大事なお知らせ。必ず届きます' },
+    { key: 'game_gather', label: 'VC に人がそろったら', note: '下で決めた人数に届いたら（自分が VC にいないとき、3 時間に 1 回まで）' },
+    { key: 'game_deals', label: 'ゲーム置き場のセール・無料配布', note: '1 日 1 回、19 時ごろにまとめて（やりたいゲームを先頭に）' },
     { key: 'shelf', label: '曲置き場に曲が置かれたとき', note: '#曲置き場 にリンクが貼られたら（30 分に 1 回まで）' },
     { key: 'vc_music', label: 'VC で音楽が流れ始めたとき', note: 'しばらく静かだった VC で再生が始まったら（3 時間に 1 回まで）' },
   ];
@@ -232,8 +235,8 @@ export const AppSettingsSheet: React.FC = () => {
           <ul className="space-y-3">
             {prefRows.map((row) => {
               const fixed = row.key === 'announce';
-              // 曲置き場・VC は既定オフ（オンにした人にだけ届く）
-              const checked = fixed ? true : prefs ? prefs[row.key as 'shelf' | 'vc_music'] : false;
+              // お知らせ以外は既定オフ（オンにした人にだけ届く）
+              const checked = fixed ? true : prefs ? Boolean(prefs[row.key as BoolPref]) : false;
               return (
                 <li key={row.key} className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
@@ -245,7 +248,7 @@ export const AppSettingsSheet: React.FC = () => {
                     disabled={fixed || !prefs}
                     onCheckedChange={(v) => {
                       if (fixed) return;
-                      setPref(row.key as 'shelf' | 'vc_music', v).catch(() =>
+                      setPref(row.key as BoolPref, v).catch(() =>
                         toast({ title: '保存できませんでした', variant: 'destructive' })
                       );
                     }}
@@ -255,9 +258,43 @@ export const AppSettingsSheet: React.FC = () => {
               );
             })}
           </ul>
+          {prefs?.game_gather && (
+            <div className="mt-3 flex items-center gap-2" role="group" aria-label="そろったら教える人数">
+              <span className="text-[12.5px] text-muted-foreground">知らせる人数</span>
+              {[2, 3, 4, 5, 6].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setPref('gather_min', n).catch(() => toast({ title: '保存できませんでした', variant: 'destructive' }))}
+                  aria-pressed={prefs.gather_min === n}
+                  className={`h-7 rounded-full border px-2.5 text-[12px] font-semibold ${
+                    prefs.gather_min === n ? 'border-transparent bg-primary text-white' : 'border-border bg-card text-muted-foreground'
+                  }`}
+                >
+                  {n}人
+                </button>
+              ))}
+            </div>
+          )}
           {!notifOn && (
             <p className="mt-3 text-[12px] text-muted-foreground">この端末で通知をオンにすると届くようになります</p>
           )}
+        </Section>
+        <Section title="ゲーム置き場">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-[14px] font-medium text-foreground">自分のプレイ中を出す</p>
+              <p className="text-[12px] leading-relaxed text-muted-foreground">
+                Discord の「プレイ中」を、ドデカのメンバーだけが見られるゲーム置き場の「いま」「最近遊ばれた」に出します（記録は 60 日まで）。オフにすると、これまでの記録も消えます
+              </p>
+            </div>
+            <Switch
+              checked={prefs ? prefs.show_playing : true}
+              disabled={!prefs}
+              onCheckedChange={(v) => setPref('show_playing', v).catch(() => toast({ title: '保存できませんでした', variant: 'destructive' }))}
+              aria-label="自分のプレイ中を出す"
+            />
+          </div>
         </Section>
         {isAdmin && (
           <Section title="管理">

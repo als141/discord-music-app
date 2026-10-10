@@ -15,10 +15,10 @@
 import type { TourId } from './tours';
 
 /** 現在のアプリのバージョン（ホームのバージョン表示・お知らせ一覧の見出しに使う） */
-export const APP_VERSION = '1.2.0';
-export const APP_RELEASE_DATE = '2026-09-28';
+export const APP_VERSION = '1.3.0';
+export const APP_RELEASE_DATE = '2026-10-11';
 
-export type HomeTab = 'home' | 'shelf' | 'uploaded-music';
+export type HomeTab = 'home' | 'shelf' | 'games' | 'uploaded-music';
 
 export type NoticeKind = 'feature' | 'improvement' | 'info';
 
@@ -54,6 +54,24 @@ export interface Notice {
 }
 
 export const NOTICES: Notice[] = [
+  {
+    id: '2026-10-games',
+    publishedAt: '2026-10-11',
+    version: '1.3.0',
+    kind: 'feature',
+    title: 'ゲーム置き場',
+    body:
+      '#ゲーム置き場 に貼られたゲームが、何人で遊べるか・協力か対戦か・価格・セール付きで「ゲーム置き場」タブに並ぶようになりました。VC の人数に合わせた「今夜どれ？」、期限つきの無料配布、誰が何をプレイ中かも見られます（自分のプレイ中を出したくない人は「通知とアプリ」でオフに）。',
+    promo: {
+      until: '2026-11-10',
+      summary: '置き場のゲームを、今夜の人数で遊べるものから選べるようになりました',
+    },
+    actions: [
+      { type: 'tour', tourId: 'games', label: '使い方を見る' },
+      { type: 'open-tab', tab: 'games', label: '開く' },
+    ],
+    newBadge: { tab: 'games' },
+  },
   {
     id: '2026-09-push',
     publishedAt: '2026-09-28',

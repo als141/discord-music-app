@@ -282,7 +282,7 @@ export const MainApp: React.FC = () => {
     deepLinkHandledRef.current = true;
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab');
-    if (tab === 'home' || tab === 'shelf' || tab === 'uploaded-music') setHomeActiveTab(tab);
+    if (tab === 'home' || tab === 'shelf' || tab === 'games' || tab === 'uploaded-music') setHomeActiveTab(tab);
     if (params.get('open') === 'settings') useDeviceStore.getState().openSettings();
     reportNotificationOpen(params.get('n'));
     if (params.get('shared') === 'unsupported') {
@@ -303,7 +303,7 @@ export const MainApp: React.FC = () => {
       const tab = params.get('tab');
       setIsSearchActive(false);
       setIsMenuOpen(false);
-      if (tab === 'home' || tab === 'shelf' || tab === 'uploaded-music') {
+      if (tab === 'home' || tab === 'shelf' || tab === 'games' || tab === 'uploaded-music') {
         setIsMainPlayerVisible(false);
         setHomeActiveTab(tab);
       }

@@ -21,6 +21,7 @@ import {
   Plus,
   Sparkles,
   Bookmark,
+  Gamepad2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,6 +34,7 @@ import { SectionAllDialog } from './home/SectionAllDialog';
 import { GuildStatsCard } from './home/GuildStatsCard';
 import { CollectionDialog } from './home/CollectionDialog';
 import { ShelfScreen } from './home/ShelfScreen';
+import { GameShelfScreen } from './games/GameShelfScreen';
 import { useGuideStore } from '@/store/useGuideStore';
 import { APP_RELEASE_DATE, APP_VERSION, newBadgeTabs } from '@/lib/guide/notices';
 
@@ -561,6 +563,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
       ariaLabel: '曲置き場（チャンネルに貼られた曲）を表示'
     },
     {
+      id: 'games',
+      label: 'ゲーム置き場',
+      icon: <Gamepad2 className="w-4 h-4" />,
+      ariaLabel: 'ゲーム置き場（#ゲーム置き場のゲームと今夜の候補）を表示'
+    },
+    {
       id: 'uploaded-music',
       label: 'ライブラリ',
       icon: <Music2 className="w-4 h-4" />,
@@ -806,6 +814,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
               {activeTab === 'shelf' && (
                 <ShelfScreen guildId={guildId} onSelectTrack={onSelectTrack} onShowGuide={showShelfGuide} />
               )}
+
+              {activeTab === 'games' && <GameShelfScreen guildId={guildId} />}
 
               {activeTab === 'uploaded-music' && (
                 <div className="h-full bg-background">

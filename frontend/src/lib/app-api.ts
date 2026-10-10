@@ -103,6 +103,74 @@ export interface PublicDevice {
 export interface NotifPrefs {
   shelf: boolean;
   vc_music: boolean;
+  game_deals: boolean;
+  game_gather: boolean;
+  /** VC に何人そろったら「揃ったら教えて」を送るか（2〜8） */
+  gather_min: number;
+  /** 自分のプレイ中をゲーム置き場に出すか */
+  show_playing: boolean;
+}
+
+// ---- ゲーム置き場 ----
+
+export interface GameCard {
+  appid: string;
+  name: string;
+  image: string | null;
+  hook: string;
+  players: { min: number | null; max: number | null; best: string | null };
+  modes: string[];
+  vibe: string[];
+  fit: number | null;
+  price: { final: number | null; initial: number | null; discount: number; free: boolean; lowest: number | null };
+  release: { text: string; soon: boolean };
+  review: { desc: string | null; pct: number | null; total: number | null };
+  live_players: number | null;
+  posted: { by: string | null; at: string | null; count: number; last_at: string | null };
+  want: string[];
+  own: string[];
+  played: string[];
+  last_played_at: string | null;
+  playing_now: string[];
+  news: string[];
+  store_url: string;
+}
+
+export interface SteamLink {
+  linked?: boolean;
+  name: string | null;
+  avatar: string | null;
+  games: number | null;
+  /** ゲームの詳細が非公開で所持ゲームが取れない */
+  private: boolean;
+  synced_at?: string | null;
+}
+
+export interface GameOffer {
+  id: string;
+  source: string;
+  title: string;
+  url: string | null;
+  image: string | null;
+  appid: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  active: boolean;
+}
+
+export interface GameBoard {
+  guild_id: string;
+  now: {
+    voice: { user_id: string; channel: string | null; since: string }[];
+    playing: { game_name: string; appid: string | null; users: string[]; since: string }[];
+  };
+  tonight: { players: number; from_voice: boolean; picks: { appid: string; score: number; why: string[] }[]; fits: number };
+  deadlines: { offers: GameOffer[]; sales: string[]; releases: { appid: string; date: string; released: boolean }[] };
+  recent: { appid: string | null; game_name: string; users: string[]; last_at: string; minutes: number }[];
+  games: GameCard[];
+  news: { url: string; text: string; posted_by: string | null; posted_at: string }[];
+  members: Record<string, { name: string | null; image: string | null }>;
+  updated_at: string;
 }
 
 export interface DeviceReportResult {
@@ -178,4 +246,15 @@ export const appApi = {
   adminOverview: () => call<AdminOverview>('/admin/overview'),
   adminPush: (body: { title: string; body: string; url: string; user_ids: string[] }) =>
     call<PushSendResult>('/admin/push', { method: 'POST', body: JSON.stringify(body) }),
+  gameBoard: (guildId: string, players?: number) =>
+    call<GameBoard>(`/games/${guildId}/board${players ? `?players=${players}` : ''}`),
+  steamStatus: () => call<SteamLink>('/me/steam'),
+  linkSteam: (profile: string) =>
+    call<SteamLink & { ok: boolean; wishlist: number | null }>('/me/steam', { method: 'POST', body: JSON.stringify({ profile }) }),
+  unlinkSteam: () => call<{ linked: false }>('/me/steam', { method: 'DELETE' }),
+  markGame: (guildId: string, appid: string, kind: 'want' | 'own', on: boolean) =>
+    call<{ appid: string; want: string[]; own: string[] }>(`/games/${guildId}/${appid}/mark`, {
+      method: 'POST',
+      body: JSON.stringify({ kind, on }),
+    }),
 };

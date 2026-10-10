@@ -193,6 +193,199 @@ def init_db():
             changed_at TEXT NOT NULL
         )
         """)
+        # 受け取り設定の追加列（ゲーム置き場: セール・無料 / 揃ったら教えて / プレイ中の表示）
+        for col, ddl in (("game_deals", "INTEGER NOT NULL DEFAULT 0"), ("game_gather", "INTEGER NOT NULL DEFAULT 0"),
+                         ("gather_min", "INTEGER NOT NULL DEFAULT 3"), ("show_playing", "INTEGER NOT NULL DEFAULT 1")):
+            try:
+                conn.execute(f"ALTER TABLE notif_prefs ADD COLUMN {col} {ddl}")
+            except sqlite3.OperationalError:
+                pass
+        # ---- ゲーム置き場 ----
+        # Steam のゲーム（appid 単位）。Steam の情報 + Claude で作った「何人で・どう遊ぶか」（profile JSON）
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS games (
+            appid            TEXT PRIMARY KEY,
+            name             TEXT,
+            type             TEXT,
+            header_image     TEXT,
+            short_desc       TEXT,
+            is_free          INTEGER NOT NULL DEFAULT 0,
+            price_initial    INTEGER,
+            price_final      INTEGER,
+            discount_percent INTEGER NOT NULL DEFAULT 0,
+            currency         TEXT,
+            release_text     TEXT,
+            coming_soon      INTEGER NOT NULL DEFAULT 0,
+            categories       TEXT,
+            genres           TEXT,
+            review_desc      TEXT,
+            review_total     INTEGER,
+            review_pct       INTEGER,
+            current_players  INTEGER,
+            players_at       TEXT,
+            profile          TEXT,
+            profile_at       TEXT,
+            fullgame_appid   TEXT,
+            details_at       TEXT,
+            price_at         TEXT,
+            fail_count       INTEGER NOT NULL DEFAULT 0
+        )
+        """)
+        # #ゲーム置き場 などに貼られたリンク（Steam / X / その他）。本文は保存しない（X は記事の本文だけ控える）
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS game_posts (
+            id              INTEGER PRIMARY KEY,
+            guild_id        TEXT NOT NULL,
+            channel_id      TEXT NOT NULL,
+            message_id      TEXT NOT NULL,
+            kind            TEXT NOT NULL,
+            url             TEXT NOT NULL,
+            ref             TEXT,
+            appid           TEXT,
+            x_text          TEXT,
+            posted_by_id    TEXT,
+            posted_by_name  TEXT,
+            posted_by_image TEXT,
+            posted_at       TEXT NOT NULL,
+            resolved        INTEGER NOT NULL DEFAULT 0,
+            tries           INTEGER NOT NULL DEFAULT 0,
+            UNIQUE(guild_id, message_id, url)
+        )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_game_posts_guild ON game_posts(guild_id, posted_at DESC)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_game_posts_appid ON game_posts(appid)")
+        # やりたい / 持ってる（アプリのボタン）
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS game_marks (
+            guild_id   TEXT NOT NULL,
+            user_id    TEXT NOT NULL,
+            appid      TEXT NOT NULL,
+            kind       TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (guild_id, user_id, appid, kind)
+        )
+        """)
+        # Discord の「プレイ中」（プレゼンス）から作る遊んだ記録。ended_at が NULL のものが「いま」
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS game_sessions (
+            id             INTEGER PRIMARY KEY,
+            guild_id       TEXT NOT NULL,
+            user_id        TEXT NOT NULL,
+            game_name      TEXT NOT NULL,
+            discord_app_id TEXT,
+            appid          TEXT,
+            started_at     TEXT NOT NULL,
+            ended_at       TEXT
+        )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_game_sessions_open ON game_sessions(guild_id, ended_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_game_sessions_app ON game_sessions(appid, started_at)")
+        # いま VC にいる人（voice プロセスが書き、web プロセスが読む）
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS voice_presence (
+            guild_id     TEXT NOT NULL,
+            user_id      TEXT NOT NULL,
+            user_name    TEXT,
+            user_image   TEXT,
+            channel_id   TEXT NOT NULL,
+            channel_name TEXT,
+            joined_at    TEXT NOT NULL,
+            PRIMARY KEY (guild_id, user_id)
+        )
+        """)
+        # メンバーの表示名・アバター（プレゼンス・VC で見えた人。表示用）
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS guild_members (
+            guild_id   TEXT NOT NULL,
+            user_id    TEXT NOT NULL,
+            name       TEXT,
+            image      TEXT,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (guild_id, user_id)
+        )
+        """)
+        # 価格の記録（1 日 1 行。過去最安の判定やセール開始の検知に使う）
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS game_price_history (
+            appid            TEXT NOT NULL,
+            day              TEXT NOT NULL,
+            price_final      INTEGER,
+            discount_percent INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (appid, day)
+        )
+        """)
+        # 期限つきの無料配布（Epic など）
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS free_offers (
+            id         TEXT PRIMARY KEY,
+            source     TEXT NOT NULL,
+            title      TEXT NOT NULL,
+            url        TEXT,
+            image      TEXT,
+            appid      TEXT,
+            starts_at  TEXT,
+            ends_at    TEXT,
+            active     INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL
+        )
+        """)
+        # セール開始・無料化などの出来事（セール・無料配布の通知のまとめに使う）
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS game_deal_events (
+            id               INTEGER PRIMARY KEY,
+            appid            TEXT,
+            offer_id         TEXT,
+            kind             TEXT NOT NULL,
+            discount_percent INTEGER,
+            price_final      INTEGER,
+            at               TEXT NOT NULL
+        )
+        """)
+        # 小さな設定・時刻の置き場（最後に価格を見た時刻など）
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS app_kv (
+            key        TEXT PRIMARY KEY,
+            value      TEXT,
+            updated_at TEXT NOT NULL
+        )
+        """)
+        # 本人が連携した Steam（所持ゲーム・ウィッシュリストで「持ってる」「やりたい」を自動で付ける）
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS steam_links (
+            user_id     TEXT PRIMARY KEY,
+            steamid     TEXT NOT NULL,
+            name        TEXT,
+            avatar      TEXT,
+            public      INTEGER NOT NULL DEFAULT 1,
+            games_count INTEGER,
+            linked_at   TEXT NOT NULL,
+            synced_at   TEXT
+        )
+        """)
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS steam_owned (
+            user_id      TEXT NOT NULL,
+            appid        TEXT NOT NULL,
+            playtime_min INTEGER NOT NULL DEFAULT 0,
+            playtime_2w  INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (user_id, appid)
+        )
+        """)
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS steam_wishlist (
+            user_id TEXT NOT NULL,
+            appid   TEXT NOT NULL,
+            PRIMARY KEY (user_id, appid)
+        )
+        """)
+        # Discord のゲーム名 → Steam appid（プレイ中の表示を置き場のゲームに結びつける）
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS game_name_map (
+            name       TEXT PRIMARY KEY,
+            appid      TEXT,
+            updated_at TEXT NOT NULL
+        )
+        """)
 
 
 # ---------------------------------------------------------------------------
@@ -687,31 +880,46 @@ def list_push_devices(user_ids: Optional[List[str]] = None) -> List[Dict[str, An
 
 
 # 曲置き場・VC の自動通知は既定オフ（ユーザー指定 2026-09-28）。行が無い人はこの値
-DEFAULT_NOTIF_PREFS = {"shelf": False, "vc_music": False}
+# 曲置き場・VC・ゲームの自動通知は既定オフ（ユーザー指定 2026-09-28）。行が無い人はこの値
+# gather_min = 「VC に何人そろったら教えるか」、show_playing = 自分のプレイ中をゲーム置き場に出すか（既定は出す）
+DEFAULT_NOTIF_PREFS: Dict[str, Any] = {"shelf": False, "vc_music": False, "game_deals": False, "game_gather": False,
+                                       "gather_min": 3, "show_playing": True}
+_PREF_COLS = list(DEFAULT_NOTIF_PREFS.keys())
 
 
-def get_notif_prefs(user_id: str) -> Dict[str, bool]:
+def _pref_row(r) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    for k, v in zip(_PREF_COLS, r):
+        out[k] = int(v) if k == "gather_min" else bool(v)
+    return out
+
+
+def get_notif_prefs(user_id: str) -> Dict[str, Any]:
     with _connect() as conn:
-        r = conn.execute("SELECT shelf, vc_music FROM notif_prefs WHERE user_id = ?", (user_id,)).fetchone()
-    if not r:
-        return dict(DEFAULT_NOTIF_PREFS)
-    return {"shelf": bool(r[0]), "vc_music": bool(r[1])}
+        r = conn.execute(f"SELECT {', '.join(_PREF_COLS)} FROM notif_prefs WHERE user_id = ?", (user_id,)).fetchone()
+    return _pref_row(r) if r else dict(DEFAULT_NOTIF_PREFS)
 
 
-def get_all_notif_prefs() -> Dict[str, Dict[str, bool]]:
+def get_all_notif_prefs() -> Dict[str, Dict[str, Any]]:
     with _connect() as conn:
-        rows = conn.execute("SELECT user_id, shelf, vc_music FROM notif_prefs").fetchall()
-    return {r[0]: {"shelf": bool(r[1]), "vc_music": bool(r[2])} for r in rows}
+        rows = conn.execute(f"SELECT user_id, {', '.join(_PREF_COLS)} FROM notif_prefs").fetchall()
+    return {r[0]: _pref_row(r[1:]) for r in rows}
 
 
-def save_notif_prefs(user_id: str, prefs: Dict[str, bool]) -> Dict[str, bool]:
-    merged = {**get_notif_prefs(user_id), **{k: bool(v) for k, v in prefs.items() if k in DEFAULT_NOTIF_PREFS}}
+def save_notif_prefs(user_id: str, prefs: Dict[str, Any]) -> Dict[str, Any]:
+    merged = dict(get_notif_prefs(user_id))
+    for k, v in prefs.items():
+        if k not in DEFAULT_NOTIF_PREFS or v is None:
+            continue
+        merged[k] = max(2, min(8, int(v))) if k == "gather_min" else bool(v)
+    cols = ", ".join(_PREF_COLS)
+    marks = ", ".join("?" for _ in _PREF_COLS)
+    updates = ", ".join(f"{c} = excluded.{c}" for c in _PREF_COLS)
     with _connect() as conn:
         conn.execute(
-            """INSERT INTO notif_prefs (user_id, shelf, vc_music, updated_at) VALUES (?, ?, ?, ?)
-               ON CONFLICT(user_id) DO UPDATE SET shelf = excluded.shelf, vc_music = excluded.vc_music,
-               updated_at = excluded.updated_at""",
-            (user_id, int(merged["shelf"]), int(merged["vc_music"]), _now_iso()),
+            f"""INSERT INTO notif_prefs (user_id, {cols}, updated_at) VALUES (?, {marks}, ?)
+                ON CONFLICT(user_id) DO UPDATE SET {updates}, updated_at = excluded.updated_at""",
+            (user_id, *[int(merged[c]) for c in _PREF_COLS], _now_iso()),
         )
     return merged
 

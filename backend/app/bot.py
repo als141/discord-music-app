@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 # xAI SDK (Grok 4.1 Agent Tools API)
-from .services import irina_chat, shared_links, now_playing_status, push_events
+from .services import irina_chat, shared_links, now_playing_status, push_events, game_shelf
 from .services import music_player as _music_player_module
 from PIL import Image
 from io import BytesIO
@@ -134,6 +134,9 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
 intents.voice_states = True
+# ゲーム置き場: 「プレイ中」（プレゼンス）とメンバー一覧。開発者ポータル側の Presence / Server Members intent は有効化済み
+intents.presences = True
+intents.members = True
 
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
@@ -152,6 +155,7 @@ _voice_disconnect_processing: set = set()
 _shelf_resolver_task = None
 _rembg_warmup_task = None
 _trends_task = None
+_game_task = None
 
 # 画像をローカルに保存するヘルパー関数 (変更なし)
 async def save_image(image_data, prefix="img"):
@@ -593,6 +597,12 @@ async def on_ready():
     if _trends_task is None or _trends_task.done():
         from .services import irina_trends
         _trends_task = client.loop.create_task(irina_trends.scheduler(irina_chat._get_client, irina_chat.XAI_MODEL))
+    # ゲーム置き場: 今の VC とプレイ中を取り込み（Steam 名の照合で on_ready を待たせないよう別タスク）、
+    # 定期更新（価格・無料配布・同時接続数）を 1 回だけ起動
+    client.loop.create_task(game_shelf.seed(client))
+    global _game_task
+    if _game_task is None or _game_task.done():
+        _game_task = client.loop.create_task(game_shelf.scheduler())
     # 画像の背景透過（rembg）のモデルを先読み。イベントループは塞がない（別スレッド）
     global _rembg_warmup_task
     if _rembg_warmup_task is None or _rembg_warmup_task.done():
@@ -657,6 +667,8 @@ async def _rejoin_occupied_voice_channels():
 async def on_message(message: discord.Message):
     # ① 「棚」: 貼られた YouTube リンクを黙って集める（絶対に send しない。判定は shared_links 側）
     await shared_links.collect(message)
+    # ①' ゲーム置き場: #ゲーム置き場 の Steam / X / Epic のリンクを黙って集める（送信しない）
+    await game_shelf.collect(message)
     # ② bot 専用チャンネル（とその中のスレッド）だけ、メンション無しでイリーナが返答する。
     #    対象外・bot・空メッセージなどの判定は irina_chat 側で行い、それ以外の場所では何もしない
     try:
@@ -665,9 +677,18 @@ async def on_message(message: discord.Message):
         print(f"[irina-chat] on_message error: {type(e).__name__}: {e}")
 
 @client.event
+async def on_presence_update(before: discord.Member, after: discord.Member):
+    # ゲーム置き場の「いま」: 誰が何をプレイ中か（表示しない設定の人は記録しない）
+    await game_shelf.on_presence(after)
+
+
+@client.event
 async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
     guild = member.guild
     guild_id = str(guild.id)
+    # ゲーム置き場の「いま」と「揃ったら教えて」（VC の人数）
+    if not member.bot:
+        asyncio.create_task(game_shelf.on_voice_change(guild))
 
     # ボット自身の状態変化を処理（チャンネル移動・切断への対応）
     if member.id == client.user.id:

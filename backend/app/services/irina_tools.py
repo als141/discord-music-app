@@ -89,7 +89,7 @@ def _truncate(value: Any) -> Any:
 
 
 async def http_request(service: str, method: str, path: str, query: Optional[Dict[str, Any]] = None,
-                       body: Optional[Any] = None, actor: str = "") -> Dict[str, Any]:
+                       body: Optional[Any] = None, actor: str = "", guild_id: str = "") -> Dict[str, Any]:
     """1 回の HTTP リクエスト。戻り値は {"status", "ok", "body"} か {"error"}"""
     service = (service or "").strip().lower()
     method = (method or "GET").strip().upper()
@@ -117,6 +117,11 @@ async def http_request(service: str, method: str, path: str, query: Optional[Dic
         if any(re.match(p, path) for p in _IRINA_DENY_PATHS):
             return {"error": f"{path} はこのツールからは使えない（ファイルアップロード/編集系）"}
         url = _irina_base() + path
+        # 内部専用のルート（ゲーム置き場の board など）用の合言葉。どのサーバーでの会話かも渡す
+        from .app_auth import internal_token
+        if internal_token():
+            headers["X-Irina-Internal"] = internal_token()
+            headers["X-Irina-Guild"] = guild_id or ""
 
     if method != "GET" and _write_rate_limited():
         return {"error": "書き込み系リクエストが多すぎる（1 分 20 回まで）。少し待ってから"}

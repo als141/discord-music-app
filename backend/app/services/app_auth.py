@@ -16,7 +16,7 @@ import time
 from dataclasses import dataclass
 from typing import Optional
 
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
 
 ISSUER = "irina-web"
 AUDIENCE = "irina-api"
@@ -83,6 +83,24 @@ def current_user(authorization: Optional[str] = Header(default=None)) -> AppUser
         return verify_token(authorization[7:].strip())
     except Exception:  # 形式不正・署名違い・期限切れ・非 ASCII など、理由を問わず 401
         raise HTTPException(status_code=401, detail="ログインの確認に失敗しました。ページを読み込み直してください")
+
+
+def internal_token() -> str:
+    """同じ Pi の中の呼び出し（イリーナのチャットの http_request → web）に付ける合言葉。署名鍵から導出する"""
+    key = _signing_key()
+    return hmac.new(key, b"irina-internal-v1", hashlib.sha256).hexdigest() if key else ""
+
+
+def user_or_internal(request: Request, authorization: Optional[str] = Header(default=None)) -> Optional[AppUser]:
+    """本人のトークンか、同じ Pi の中からの呼び出し（X-Irina-Internal 付き）なら通す。内部呼び出しは None を返す"""
+    if authorization:
+        return current_user(authorization)
+    host = request.client.host if request.client else ""
+    want = internal_token()
+    got = request.headers.get("x-irina-internal") or ""
+    if want and got and host in ("127.0.0.1", "::1") and hmac.compare_digest(want, got):
+        return None
+    raise HTTPException(status_code=401, detail="ログインが必要です")
 
 
 def require_admin(user: AppUser = Depends(current_user)) -> AppUser:

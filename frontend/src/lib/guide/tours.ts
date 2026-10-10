@@ -14,7 +14,7 @@
 
 import type { HomeTab } from './notices';
 
-export type TourId = 'shelf';
+export type TourId = 'shelf' | 'games';
 
 export interface GuideNavigation {
   homeTab?: HomeTab;
@@ -39,6 +39,57 @@ export interface Tour {
 }
 
 export const TOURS: Record<TourId, Tour> = {
+  games: {
+    id: 'games',
+    title: 'ゲーム置き場の使い方',
+    steps: [
+      {
+        id: 'tab',
+        target: 'tab-games',
+        title: 'ここがゲーム置き場',
+        body: '#ゲーム置き場 に貼られたゲームが、何人で遊べるか・いくらか付きでここに並びます。タブを押しても次へ進めます。',
+        interactive: true,
+      },
+      {
+        id: 'now',
+        target: 'games-now',
+        skipIf: 'games-empty',
+        navigate: { homeTab: 'games' },
+        title: 'いま',
+        body: 'VC にいる人と、Discord で何をプレイ中かが出ます。見られるのはドデカのメンバーだけ。出したくない人は「通知とアプリ」でオフにすると、これまでの記録も消えます。',
+      },
+      {
+        id: 'tonight',
+        target: 'games-tonight',
+        skipIf: 'games-empty',
+        navigate: { homeTab: 'games' },
+        title: '今夜どれ？',
+        body: '人数を選ぶと、その人数で遊べるゲームを置き場から選びます。VC に人がいるときはその人数で、持っている人が多いものを上に出します。',
+      },
+      {
+        id: 'deadlines',
+        target: 'games-deadlines',
+        skipIf: 'games-empty',
+        navigate: { homeTab: 'games' },
+        title: '期限つき',
+        body: 'Epic や Steam の期限つき無料配布、置き場のゲームのセール、もうすぐ発売のものです。',
+      },
+      {
+        id: 'card',
+        target: 'games-first-card',
+        skipIf: 'games-empty',
+        navigate: { homeTab: 'games' },
+        title: 'カードを押すと詳しく',
+        body: '人数・協力か対戦か・価格・評価・誰が遊んだかが見られて、「やりたい」「持ってる」を付けられます。Steam を連携すると自動で付きます。',
+      },
+      {
+        id: 'done',
+        navigate: { homeTab: 'games' },
+        title: '貼るのはいつも通り',
+        body: '#ゲーム置き場 にリンクを貼るだけで増えていきます。セールや「VC に人がそろったら」の通知は「通知とアプリ」で選べます。',
+      },
+    ],
+  },
   shelf: {
     id: 'shelf',
     title: '曲置き場の使い方',

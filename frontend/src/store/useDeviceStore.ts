@@ -24,6 +24,15 @@ import {
  */
 
 const REPORT_INTERVAL_MS = 5 * 60 * 1000;
+/** サーバーの DEFAULT_NOTIF_PREFS と同じ（自動通知は既定オフ、プレイ中の表示は既定オン） */
+export const DEFAULT_PREFS: NotifPrefs = {
+  shelf: false,
+  vc_music: false,
+  game_deals: false,
+  game_gather: false,
+  gather_min: 3,
+  show_playing: true,
+};
 const NUDGE_INTERVALS_MS = [0, 24 * 3600e3, 3 * 24 * 3600e3, 7 * 24 * 3600e3];
 const BUILD_ID = process.env.NEXT_PUBLIC_BUILD_ID || '';
 
@@ -54,7 +63,7 @@ interface DeviceState {
   refreshInstallPrompt: () => void;
   enablePush: () => Promise<EnablePushResult>;
   disablePush: () => Promise<void>;
-  setPref: (key: keyof NotifPrefs, value: boolean) => Promise<void>;
+  setPref: <K extends keyof NotifPrefs>(key: K, value: NotifPrefs[K]) => Promise<void>;
   sendTest: () => Promise<PushSendResult>;
   install: () => Promise<'accepted' | 'dismissed' | 'unavailable'>;
   openSettings: () => void;
@@ -167,7 +176,7 @@ export const useDeviceStore = create<DeviceState>()(
 
       setPref: async (key, value) => {
         const prev = get().prefs;
-        set({ prefs: { ...(prev ?? { shelf: false, vc_music: false }), [key]: value } });
+        set({ prefs: { ...(prev ?? DEFAULT_PREFS), [key]: value } });
         try {
           const saved = await appApi.putPrefs({ [key]: value });
           set({ prefs: saved });
