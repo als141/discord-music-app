@@ -232,6 +232,37 @@ async def _require_member(guild_id: str, user: AppUser) -> None:
         raise HTTPException(status_code=403, detail="このサーバーのメンバーだけが見られます")
 
 
+# 定番（「また遊ぶ」に出さない。いつでも遊ばれているので）
+_STAPLE = re.compile(r"apex|valorant|street ?fighter|ストリートファイター|league of legends|pubg|overwatch|minecraft|fortnite|counter-strike",
+                     re.IGNORECASE)
+
+
+def _replay_first(board: Dict[str, Any]) -> None:
+    """続いた新作は「誰かが繰り返し誘い直した」もの（2026-10-11 のジャーニー集計）。
+    直近 7 日にメンバー 3 人以上で 30 分以上遊んだ定番以外のゲームを、今夜どれ？の先頭に「また遊ぶ」として出す"""
+    from datetime import datetime, timedelta, timezone
+    n = board["tonight"]["players"]
+    games = {g["appid"]: g for g in board.get("games") or []}
+    adds = []
+    for r in board.get("recent") or []:
+        a = r.get("appid")
+        if not a or a not in games or len(r.get("users") or []) < 3 or (r.get("minutes") or 0) < 30:
+            continue
+        if _STAPLE.search(r.get("game_name") or ""):
+            continue
+        try:
+            if datetime.now(timezone.utc) - datetime.fromisoformat(r["last_at"]) > timedelta(days=7):
+                continue
+        except (KeyError, ValueError):
+            continue
+        if (games[a]["players"].get("max") or 99) < n:
+            continue
+        adds.append({"appid": a, "score": 99.0, "why": [f"また遊ぶ: {len(r['users'])}人で{round(r['minutes'] / 60, 1)}時間"]})
+    if adds:
+        seen = {x["appid"] for x in adds[:2]}
+        board["tonight"]["picks"] = adds[:2] + [p for p in board["tonight"]["picks"] if p["appid"] not in seen]
+
+
 @router.get("/games/{guild_id}/board")
 async def game_board(guild_id: str, request: Request, players: Optional[int] = None,
                      user: Optional[AppUser] = Depends(user_or_internal)):
@@ -245,6 +276,10 @@ async def game_board(guild_id: str, request: Request, players: Optional[int] = N
     if players is not None and not 1 <= players <= 16:
         raise HTTPException(status_code=400, detail="players は 1〜16")
     board = await asyncio.to_thread(game_shelf.build_board, guild_id, players)
+    try:
+        _replay_first(board)
+    except Exception as e:
+        print(f"[game] replay rank failed: {type(e).__name__}: {str(e)[:120]}")
     try:
         board["lobbies"] = await asyncio.to_thread(lobby.list_open, guild_id)
     except Exception as e:

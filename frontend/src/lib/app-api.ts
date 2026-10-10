@@ -201,6 +201,10 @@ export interface SceneFresh {
   jikkyou: { views: number; videos: number; top_video: string | null; top_title: string | null; at: string } | null;
   on_shelf: boolean;
   found_first: boolean;
+  /** X で話題（Grok の x_search）。根拠のポスト付き */
+  x?: { why: string; posts: { url: string; handle: string; summary: string; likes: number | null }[] } | null;
+  /** Claude（Opus 5.5）がドデカ向けに付けた一言 */
+  why?: string | null;
 }
 
 export interface Lobby {

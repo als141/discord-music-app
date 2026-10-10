@@ -189,13 +189,25 @@ function OfferTile({ o, game, onOpen }: { o: GameOffer; game?: GameCard; onOpen:
 
 // ---------------------------------------------------------------- 詳細
 
-type SceneExtra = { articles: SceneFresh['articles']; streamers: string[]; streamerImages: (string | null)[]; jikkyou: SceneFresh['jikkyou'] };
+type SceneExtra = { articles: SceneFresh['articles']; streamers: string[]; streamerImages: (string | null)[]; jikkyou: SceneFresh['jikkyou']; x: SceneFresh['x']; why: string | null };
 
 function SceneDetail({ x }: { x: SceneExtra }) {
-  if (!x.articles.length && !x.streamers.length && !x.jikkyou?.top_video) return null;
+  if (!x.articles.length && !x.streamers.length && !x.jikkyou?.top_video && !x.x && !x.why) return null;
   return (
     <div className="space-y-2.5">
       <p className="text-[13px] font-semibold text-muted-foreground">界隈では</p>
+      {x.why && <p className="text-[15px] font-semibold leading-snug text-foreground">{x.why}</p>}
+      {x.x && (
+        <div className="space-y-1">
+          <p className="text-[13px] text-foreground/85">X で話題: {x.x.why}</p>
+          {x.x.posts.map((p) => (
+            <a key={p.url} href={p.url} target="_blank" rel="noopener noreferrer" className="block truncate text-[13px] text-muted-foreground hover:text-foreground">
+              @{p.handle} {p.summary}
+              {p.likes ? ` · ♡${p.likes.toLocaleString()}` : ''}
+            </a>
+          ))}
+        </div>
+      )}
       {x.streamers.length > 0 && (
         <div className="flex items-center gap-2.5">
           <AvatarStack images={x.streamerImages} size={26} max={5} />
@@ -294,7 +306,7 @@ function GameDetail({ g, board, myId, onMark, busy, extra, onLobby }: { g: GameC
           size="sm"
           onClick={() => onLobby(g)}
           disabled={!myId}
-          className="h-10 rounded-full bg-primary px-5 text-[13px] font-semibold text-white hover:bg-primary/90"
+          className="h-10 rounded-full bg-primary px-4 text-[13px] font-semibold text-white hover:bg-primary/90"
           data-tour="game-detail-lobby"
         >
           これで募集
@@ -302,7 +314,7 @@ function GameDetail({ g, board, myId, onMark, busy, extra, onLobby }: { g: GameC
         <Button
           size="sm"
           variant={iWant ? 'default' : 'outline'}
-          className={`h-10 rounded-full px-5 text-[13px] font-semibold ${iWant ? 'bg-primary text-white hover:bg-primary/90' : ''}`}
+          className={`h-10 rounded-full px-4 text-[13px] font-semibold ${iWant ? 'bg-primary text-white hover:bg-primary/90' : ''}`}
           disabled={busy || !myId}
           onClick={() => onMark('want', !iWant)}
           aria-pressed={iWant}
@@ -312,7 +324,7 @@ function GameDetail({ g, board, myId, onMark, busy, extra, onLobby }: { g: GameC
         <Button
           size="sm"
           variant={iOwn ? 'default' : 'outline'}
-          className={`h-10 rounded-full px-5 text-[13px] font-semibold ${iOwn ? 'bg-foreground text-background hover:bg-foreground/90' : ''}`}
+          className={`h-10 rounded-full px-4 text-[13px] font-semibold ${iOwn ? 'bg-foreground text-background hover:bg-foreground/90' : ''}`}
           disabled={busy || !myId}
           onClick={() => onMark('own', !iOwn)}
           aria-pressed={iOwn}
@@ -321,8 +333,8 @@ function GameDetail({ g, board, myId, onMark, busy, extra, onLobby }: { g: GameC
         </Button>
         <Button asChild size="sm" variant="ghost" className="h-10 rounded-full px-3 text-[13px]">
           <a href={isDesktop ? `steam://store/${g.appid}` : g.store_url} target={isDesktop ? undefined : '_blank'} rel="noopener noreferrer">
-            <ExternalLink className="mr-1.5 h-4 w-4" />
-            Steam で見る
+            <ExternalLink className="mr-1 h-4 w-4" />
+            Steam
           </a>
         </Button>
       </div>
@@ -414,6 +426,8 @@ export const GameShelfScreen: React.FC<Props> = ({ guildId }) => {
       streamers: f?.streamers.length ? f.streamers : chans.map((c) => c.name),
       streamerImages: chans.map((c) => c.image ?? null),
       jikkyou: f?.jikkyou ?? null,
+      x: f?.x ?? null,
+      why: f?.why ?? null,
     };
   }, [openId, board]);
 
@@ -655,7 +669,8 @@ export const GameShelfScreen: React.FC<Props> = ({ guildId }) => {
   const streamers = scene?.streamers ?? [];
   const freshHero = !gathered && fresh.length > 0 ? fresh[0] : null;
   const freshRows = freshHero ? fresh.slice(1, 7) : fresh.slice(0, 6);
-  const freshMeta = (e: SceneFresh) => <Meta parts={[<span key="b" className="font-medium text-foreground/80">{e.badges[0]}</span>, playersLabel(e.card), <Price key="p" g={e.card} />]} />;
+  // 1 行目の理由は Opus 5.5 の一言があればそれ、無ければいちばん強いバッジ
+  const freshMeta = (e: SceneFresh) => <Meta parts={[<span key="b" className="font-medium text-foreground/80">{e.why || e.badges[0]}</span>, playersLabel(e.card), <Price key="p" g={e.card} />]} />;
   const streamerList = streamers.length > 0 && (
     <div>
       <SubHeader>配信者がいまやってる</SubHeader>
@@ -691,7 +706,7 @@ export const GameShelfScreen: React.FC<Props> = ({ guildId }) => {
                 image={freshHero.card.image}
                 kicker="界隈でいま話題"
                 title={freshHero.card.name}
-                fact={[...freshHero.badges.slice(0, 2), playersLabel(freshHero.card), priceText(freshHero.card)].filter(Boolean).join(' · ')}
+                fact={freshHero.why || [...freshHero.badges.slice(0, 2), playersLabel(freshHero.card), priceText(freshHero.card)].filter(Boolean).join(' · ')}
                 onClick={() => openGame(freshHero.card)}
               />
             )}

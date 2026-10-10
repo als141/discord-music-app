@@ -40,6 +40,10 @@ def init() -> None:
                   "updated_at TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS scene_video_channel (video_id TEXT PRIMARY KEY, channel_id TEXT, channel_title TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS scene_channel_image (channel_id TEXT PRIMARY KEY, image TEXT, at TEXT)")
+        # X の話題（xbuzz.py）と LLM の費用の記録
+        c.execute("CREATE TABLE IF NOT EXISTS scene_xbuzz (id INTEGER PRIMARY KEY, at TEXT, game TEXT, game_ja TEXT, players TEXT, "
+                  "kind TEXT, why TEXT, evidence TEXT, appid TEXT)")
+        c.execute("CREATE TABLE IF NOT EXISTS scene_llm_cost (at TEXT, vendor TEXT, model TEXT, purpose TEXT, usd REAL)")
         # 界隈で初めて見た日（あとで #ゲーム置き場 に貼られたら「イリーナが先に見つけた」）
         c.execute("CREATE TABLE IF NOT EXISTS scene_seen (key TEXT PRIMARY KEY, kind TEXT, name TEXT, appid TEXT, first_seen_at TEXT)")
 

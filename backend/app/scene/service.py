@@ -9,7 +9,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Set
 
-from . import classify, sources, store
+from . import classify, curate, sources, store, xbuzz
 from ..services import game_db as gdb, game_shelf, game_sources as gsrc
 
 FRESH_DAYS = 180          # 「新作・インディー」に出すのは発売から半年以内（と近日発売）
@@ -177,13 +177,28 @@ async def refresh_jikkyou() -> None:
         print(f"[scene] jikkyou: measured {len(todo)}")
 
 
+async def refresh_x() -> None:
+    """X で話題のゲーム（Grok の x_search、1 日 1 回）→ Steam に結びつける → Opus 5.5 で「話題の新作」を並べ直す"""
+    if xbuzz.enabled():
+        rows = []
+        for b in await xbuzz.scout():
+            appid = await _appid_for(b.game_ja, b.game)
+            if appid:
+                appid = await game_shelf.ensure_game(appid, [b.why]) or appid
+            rows.append({**b.model_dump(), "evidence": [e.model_dump() for e in b.evidence][:3], "appid": appid})
+        await asyncio.to_thread(xbuzz.save, rows)
+        print(f"[scene] x buzz linked: {sum(1 for r in rows if r['appid'])}/{len(rows)} to Steam")
+    cands = await asyncio.to_thread(_fresh_candidates)
+    await curate.curate(cands[:16])
+
+
 async def scheduler() -> None:
     await asyncio.sleep(45)
     await asyncio.to_thread(store.init)
     while True:
         for key, hours, fn in (("scene_media_at", 2, refresh_media), ("scene_videos_at", 3, refresh_videos),
                                ("scene_music_at", 6, refresh_music), ("scene_charts_at", 6, refresh_charts),
-                               ("scene_jikkyou_at", 6, refresh_jikkyou)):
+                               ("scene_jikkyou_at", 6, refresh_jikkyou), ("scene_x_at", 24, refresh_x)):
             try:
                 # ゲーム置き場の取り込みスクリプトが動いている間は Steam を二重に叩かない
                 if not await asyncio.to_thread(_due, "game_backfill_lock", 1):
@@ -223,7 +238,7 @@ def _fresh_candidates() -> List[Dict[str, Any]]:
 
     def c(appid: str) -> Dict[str, Any]:
         return cand.setdefault(appid, {"appid": appid, "articles": [], "outlets": set(), "chart": {}, "streamers": set(),
-                                       "fit": 0, "hooks": set(), "query": None})
+                                       "fit": 0, "hooks": set(), "query": None, "x": None})
     for a in arts:
         if a.get("appid"):
             e = c(a["appid"])
@@ -238,6 +253,14 @@ def _fresh_candidates() -> List[Dict[str, Any]]:
                 c(appid)["chart"][lst] = rank
     for v in vids:
         c(v["appid"])["streamers"].add(v["channel_name"])
+    # X で話題（直近 2 日の Grok の観測）
+    for b in xbuzz.recent(2):
+        if b.get("appid"):
+            e = c(b["appid"])
+            e["x"] = {"why": b["why"], "posts": b["evidence"][:3]}
+            if b["kind"] in ("free", "demo"):
+                e["hooks"].add(b["kind"])
+            e["query"] = e["query"] or b.get("game_ja") or b.get("game")
     games = {g["appid"]: g for g in gdb.all_games(cand.keys())}
     out = []
     for appid, e in cand.items():
@@ -257,6 +280,7 @@ def _fresh_candidates() -> List[Dict[str, Any]]:
         s += 0.5 if e["chart"].get("comingsoon") else 0
         s += 0.3 * (prof.get("party_fit") or 0)
         s += 0.5 if e["hooks"] & {"free", "demo"} else 0
+        s += 1.5 if e["x"] else 0
         out.append({**e, "outlets": sorted(e["outlets"]), "streamers": sorted(e["streamers"]), "hooks": sorted(h for h in e["hooks"] if h),
                     "name": g.get("name") or appid, "query": e["query"] or g.get("name"), "jikkyou": j or None, "score": round(s, 2)})
     out.sort(key=lambda x: -x["score"])
@@ -311,7 +335,14 @@ def build_games(guild_id: str, board: Dict[str, Any]) -> Dict[str, Any]:
 
     # 話題の新作・インディー
     fresh_out = []
-    for e in _fresh_candidates()[:16]:
+    cands = _fresh_candidates()
+    # Opus 5.5 の並び（36 時間以内）があれば、それを先頭に。残りは点数順
+    cur = curate.current()
+    why = {p["appid"]: p["why"] for p in (cur or {}).get("picks", [])}
+    if why:
+        order = {a: i for i, a in enumerate(why)}
+        cands.sort(key=lambda x: (order.get(x["appid"], 99), -x["score"]))
+    for e in cands[:16]:
         cd = card(e["appid"])
         if not cd:
             continue
@@ -319,6 +350,8 @@ def build_games(guild_id: str, board: Dict[str, Any]) -> Dict[str, Any]:
         j = e.get("jikkyou") or {}
         if (j.get("views") or 0) >= 1000:
             badges.append(f"実況 {_fmt_views(j['views'])}/2週")
+        if e.get("x"):
+            badges.append("X で話題")
         if e["streamers"]:
             badges.append(f"配信者 {len(e['streamers'])}人")
         tr = e["chart"].get("topsellers")
@@ -343,6 +376,7 @@ def build_games(guild_id: str, board: Dict[str, Any]) -> Dict[str, Any]:
         fresh_out.append({
             "key": k, "appid": e["appid"], "card": cd, "badges": badges, "score": e["score"],
             "articles": e["articles"][:3], "streamers": e["streamers"], "jikkyou": e.get("jikkyou"),
+            "x": e.get("x"), "why": why.get(e["appid"]),
             "on_shelf": on_shelf,
             # 界隈で先に見つけて、あとから誰かが貼った
             "found_first": bool(on_shelf and first and cd["posted"]["at"] and first < cd["posted"]["at"]),
