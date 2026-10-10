@@ -115,6 +115,10 @@ async def tick() -> None:
     await _presence()
     if _tick_n % 4 == 0:  # 1 分ごと
         await _react_posts()
+    if _tick_n % 40 == 5:  # 10 分ごとに「今日の分」を書いたか確かめる
+        await _channel_topics()
+        from . import weekly_recap
+        await weekly_recap.maybe_post(_client)
 
 
 # ---------------------------------------------------------------- 募集: 見た目
@@ -462,3 +466,60 @@ async def _react_posts() -> None:
     if done:
         await asyncio.to_thread(gdb.mark_reacted, done)
         print(f"[irina-discord] reacted to {len(done)} post(s)")
+
+
+# ---------------------------------------------------------------- チャンネルトピック（1 日 1 回、通知も投稿も出ない）
+
+TOPIC_MARK = "── "
+TOPIC_GAME_CHANNELS = _pairs("IRINA_TOPIC_GAME_CHANNELS", "1093915551174234212:1381958352267116574")
+TOPIC_SONG_CHANNELS = _pairs("IRINA_TOPIC_SONG_CHANNELS", "1093915551174234212:1426606582606860428")
+
+
+def _merge_topic(current: Optional[str], mine: str) -> str:
+    """人が書いた部分（区切り線より上）は残し、下のイリーナの部分だけ差し替える"""
+    human = (current or "").split(f"\n{TOPIC_MARK}")[0]
+    if (current or "").startswith(TOPIC_MARK):
+        human = ""
+    return ((human.rstrip() + "\n") if human.strip() else "") + TOPIC_MARK + mine
+
+
+async def _set_topic(guild: discord.Guild, channel_id: Optional[str], mine: str) -> None:
+    ch = guild.get_channel(int(channel_id)) if channel_id else None
+    if not isinstance(ch, discord.TextChannel):
+        return
+    new = _merge_topic(ch.topic, mine)[:1024]
+    if new == (ch.topic or ""):
+        return
+    try:
+        await ch.edit(topic=new, reason="イリーナ: 今日の界隈")
+        print(f"[irina-discord] topic updated: #{ch.name}")
+    except discord.HTTPException as e:
+        print(f"[irina-discord] topic failed #{ch.name}: {e}")
+
+
+async def _channel_topics(force: bool = False) -> None:
+    """#ゲーム置き場 に「今日の界隈」、#曲置き場 に「界隈の新曲」（17 時以降に 1 日 1 回）"""
+    now = datetime.now(JST)
+    if not force and (now.hour < 17 or gdb.kv_get("topic_day") == now.strftime("%Y-%m-%d")):
+        return
+    from ..scene import service as sc
+    for gid in game_shelf.game_guild_ids():
+        guild = _client.get_guild(int(gid)) if _client else None
+        if not guild:
+            continue
+        try:
+            board = await asyncio.to_thread(game_shelf.build_board, gid, None)
+            scene = await asyncio.to_thread(sc.build_games, gid, board)
+            songs = await asyncio.to_thread(sc.build_songs)
+        except Exception as e:
+            print(f"[irina-discord] topic build failed: {type(e).__name__}: {str(e)[:120]}")
+            continue
+        fresh = scene.get("fresh") or []
+        if fresh:
+            items = [f"{f['card']['name']}（{f.get('why') or (f['badges'] or [''])[0]}）" for f in fresh[:3]]
+            await _set_topic(guild, TOPIC_GAME_CHANNELS.get(gid), f"今日の界隈（イリーナ）: " + " · ".join(items) + " ｜ /募集 /今夜 /界隈")
+        top = (songs.get("songs") or [])[:3]
+        if top:
+            items = [f"{s.get('song') or s['videos'][0]['title']}（{(s.get('artist') or s['videos'][0]['channel']).split('/')[0].strip()}）" for s in top]
+            await _set_topic(guild, TOPIC_SONG_CHANNELS.get(gid), "界隈の新曲（イリーナ）: " + " · ".join(items) + " ｜ /イントロ")
+    gdb.kv_set("topic_day", now.strftime("%Y-%m-%d"))

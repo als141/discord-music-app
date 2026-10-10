@@ -334,3 +334,15 @@ def register(tree: app_commands.CommandTree, client: discord.Client) -> None:
     @tree.command(name="界隈", description="配信者がいまやってるゲームと話題の新作を、自分にだけ出す", guilds=guilds)
     async def _scene(interaction: discord.Interaction):
         await scene(interaction)
+
+    @tree.command(name="今週", description="今週のドデカ（VC の時間・遊ばれたゲーム・イントロ王など）を自分にだけ出す", guilds=guilds)
+    @app_commands.rename(last="先週")
+    @app_commands.describe(last="先週の分を見る")
+    async def _week(interaction: discord.Interaction, last: bool = False):
+        from . import weekly_recap
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        start, end = weekly_recap.week_range()
+        if last:
+            start, end = start - timedelta(days=7), start
+        st = await asyncio.to_thread(weekly_recap.stats, str(interaction.guild_id), start, end)
+        await interaction.followup.send(embed=weekly_recap.embed(st, None if not last else None), ephemeral=True)

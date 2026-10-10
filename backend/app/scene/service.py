@@ -181,7 +181,13 @@ async def refresh_x() -> None:
     """X で話題のゲーム（Grok の x_search、1 日 1 回）→ Steam に結びつける → Opus 5.5 で「話題の新作」を並べ直す"""
     if xbuzz.enabled():
         rows = []
-        for b in await xbuzz.scout():
+        try:
+            found = await xbuzz.scout()
+        except Exception as e:
+            # xAI のクレジット切れなど。X の観測だけ飛ばして、選定は続ける
+            print(f"[scene] x buzz failed: {type(e).__name__}: {str(e)[:160]}")
+            found = []
+        for b in found:
             appid = await _appid_for(b.game_ja, b.game)
             if appid:
                 appid = await game_shelf.ensure_game(appid, [b.why]) or appid
