@@ -146,6 +146,10 @@ irina_discord.configure(client)
 irina_commands.register(tree, client)
 
 music_players = {}
+# イントロクイズ（/イントロ）。曲置き場の曲を VC で流して当てる。music_players を見て、音楽が流れているときは始めない
+from .services import intro_quiz
+intro_quiz.init()
+intro_quiz.register(tree, client, music_players)
 active_connections = {}
 
 # ボイスチャンネル自動参加のクールダウン管理

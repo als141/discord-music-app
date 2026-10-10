@@ -343,7 +343,8 @@ def _cost(usage) -> float:
 
 
 async def claude_profile(details: Dict[str, Any], news: List[str]) -> Optional[Dict[str, Any]]:
-    if not claude_enabled():
+    from . import llm_budget
+    if not claude_enabled() or not llm_budget.allowed("anthropic"):
         return None
     cats = ", ".join(c.get("description", "") for c in details.get("categories") or [])
     genres = ", ".join(g.get("description", "") for g in details.get("genres") or [])
@@ -378,13 +379,16 @@ async def claude_profile(details: Dict[str, Any], news: List[str]) -> Optional[D
             print(f"[game] player-count search failed: {type(e).__name__}: {str(e)[:100]}")
     prof["model"] = CLAUDE_MODEL
     prof["usd"] = round(usd, 4)
+    llm_budget.log("anthropic", CLAUDE_MODEL, "profile", usd)
     return prof
 
 
 async def claude_title_from_news(text: str) -> Optional[str]:
-    if not claude_enabled():
+    from . import llm_budget
+    if not claude_enabled() or not llm_budget.allowed("anthropic"):
         return None
     r = await _client().messages.parse(model=CLAUDE_MODEL, max_tokens=1000, output_config={"effort": "low"},
                                        messages=[{"role": "user", "content": f"次のゲームニュースの投稿が主に扱っているゲームの名前は？\n\n{_strip(text, 600)}"}],
                                        output_format=TitlePick)
+    llm_budget.log("anthropic", CLAUDE_MODEL, "title", _cost(r.usage))
     return r.parsed_output.game_title if r.parsed_output else None

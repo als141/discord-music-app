@@ -298,6 +298,8 @@ def init_db():
             PRIMARY KEY (guild_id, user_id)
         )
         """)
+        # LLM の費用（services/llm_budget.py が月の上限に使う）
+        conn.execute("CREATE TABLE IF NOT EXISTS scene_llm_cost (at TEXT, vendor TEXT, model TEXT, purpose TEXT, usd REAL)")
         # VC の入退室の記録（「今週のドデカ」の材料。プレイ中を出さない人も VC にいた時間だけは数える）
         conn.execute("""
         CREATE TABLE IF NOT EXISTS vc_sessions (

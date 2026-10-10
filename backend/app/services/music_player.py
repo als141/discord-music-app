@@ -298,6 +298,12 @@ class MusicPlayer:
                 await self.next.wait()
                 continue
 
+            # イントロクイズ中は流さない（クイズが VC を使っている。終わったら続きから）
+            from .intro_quiz import busy as _quiz_busy
+            if _quiz_busy(self.guild_id):
+                await asyncio.sleep(1)
+                continue
+
             song = self.queue[0]
             if song.pending:
                 # 先頭がまだ情報取得中のプレースホルダ → 差し替え/削除されるまで少し待つ

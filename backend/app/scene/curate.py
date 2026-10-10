@@ -11,8 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-from ..services import game_db as gdb, game_sources as gsrc
-from . import xbuzz
+from ..services import game_db as gdb, game_sources as gsrc, llm_budget
 
 MODEL = os.getenv("IRINA_SCENE_CURATOR_MODEL") or "claude-opus-5-5"
 PRICE = {"claude-opus-5-5": (5.0, 25.0), "claude-sonnet-5-5": (2.0, 10.0)}
@@ -51,7 +50,7 @@ def _brief(c: Dict[str, Any], g: Dict[str, Any]) -> str:
 
 
 async def curate(cands: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    if not gsrc.claude_enabled() or not cands:
+    if not gsrc.claude_enabled() or not cands or not llm_budget.allowed("anthropic"):
         return None
     games = {g["appid"]: g for g in gdb.all_games([c["appid"] for c in cands])}
     lines = [_brief(c, games[c["appid"]]) for c in cands if c["appid"] in games]
@@ -60,7 +59,7 @@ async def curate(cands: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         messages=[{"role": "user", "content": "候補:\n" + "\n".join(lines)}], output_format=Curation)
     pin, pout = PRICE.get(MODEL, (5.0, 25.0))
     usd = r.usage.input_tokens / 1e6 * pin + r.usage.output_tokens / 1e6 * pout
-    xbuzz.log_cost("anthropic", MODEL, "curation", usd)
+    llm_budget.log("anthropic", MODEL, "curation", usd)
     valid = {c["appid"] for c in cands}
     picks = [p.model_dump() for p in (r.parsed_output.picks if r.parsed_output else []) if p.appid in valid][:8]
     out = {"at": datetime.now(timezone.utc).isoformat(), "model": MODEL, "picks": picks}

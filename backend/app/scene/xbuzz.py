@@ -19,7 +19,8 @@ MODEL = os.getenv("IRINA_SCENE_X_MODEL") or "grok-4.7"
 
 
 def enabled() -> bool:
-    return bool(os.getenv("XAI_API_KEY")) and os.getenv("IRINA_SCENE_X", "1") != "0"
+    from ..services import llm_budget
+    return bool(os.getenv("XAI_API_KEY")) and os.getenv("IRINA_SCENE_X", "1") != "0" and llm_budget.allowed("xai")
 
 
 class Evidence(BaseModel):
@@ -50,9 +51,8 @@ def init() -> None:
 
 
 def log_cost(vendor: str, model: str, purpose: str, usd: float) -> None:
-    with db._connect() as c:
-        c.execute("INSERT INTO scene_llm_cost (at, vendor, model, purpose, usd) VALUES (?, ?, ?, ?, ?)",
-                  (datetime.now(timezone.utc).isoformat(), vendor, model, purpose, usd))
+    from ..services import llm_budget
+    llm_budget.log(vendor, model, purpose, usd)
 
 
 def recent(days: float = 2) -> List[dict]:

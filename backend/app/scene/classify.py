@@ -8,7 +8,7 @@ from typing import Dict, List, Literal, Optional, Tuple
 
 from pydantic import BaseModel, Field
 
-from ..services import game_sources as gsrc
+from ..services import game_sources as gsrc, llm_budget
 
 MODEL = os.getenv("IRINA_SCENE_MODEL") or "claude-sonnet-5-5"
 
@@ -57,6 +57,8 @@ async def judge_articles(rows: List[Dict]) -> Tuple[Dict[str, Dict], float]:
     res: Dict[str, Dict] = {}
     usd = 0.0
     for i in range(0, len(rows), 30):
+        if not llm_budget.allowed("anthropic"):
+            break
         chunk = rows[i:i + 30]
         lines = "\n".join(f"[{r['id']}] {r['text']}" for r in chunk)
         r = await gsrc._client().messages.parse(
@@ -64,6 +66,7 @@ async def judge_articles(rows: List[Dict]) -> Tuple[Dict[str, Dict], float]:
             messages=[{"role": "user", "content": "次の記事それぞれについて判定して、全件を返して。\n\n" + lines}],
             output_format=ArticleBatch)
         usd += gsrc._cost(r.usage)
+        llm_budget.log("anthropic", MODEL, "scene_articles", gsrc._cost(r.usage))
         for it in (r.parsed_output.items if r.parsed_output else []):
             res[it.id] = it.model_dump()
     return res, usd
@@ -74,6 +77,8 @@ async def judge_videos(rows: List[Dict]) -> Tuple[Dict[str, Dict], float]:
     res: Dict[str, Dict] = {}
     usd = 0.0
     for i in range(0, len(rows), 40):
+        if not llm_budget.allowed("anthropic"):
+            break
         chunk = rows[i:i + 40]
         lines = "\n".join(f"[{r['id']}] {r['text']}" for r in chunk)
         r = await gsrc._client().messages.parse(
@@ -82,6 +87,7 @@ async def judge_videos(rows: List[Dict]) -> Tuple[Dict[str, Dict], float]:
             messages=[{"role": "user", "content": "次の動画（チャンネル名 | 題名）それぞれについて判定して、全件を返して。\n\n" + lines}],
             output_format=VideoBatch)
         usd += gsrc._cost(r.usage)
+        llm_budget.log("anthropic", MODEL, "scene_videos", gsrc._cost(r.usage))
         for it in (r.parsed_output.items if r.parsed_output else []):
             res[it.id] = it.model_dump()
     return res, usd
