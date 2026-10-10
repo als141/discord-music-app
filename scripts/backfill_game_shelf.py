@@ -20,6 +20,9 @@ import urllib.error
 from datetime import timezone, datetime
 
 sys.path.insert(0, os.getcwd())
+from dotenv import load_dotenv  # noqa: E402
+
+load_dotenv(os.path.join(os.getcwd(), ".env"))  # DISCORD_TOKEN / STEAM_API_KEY / CLAUDE_API_KEY
 from app import db  # noqa: E402
 from app.services import game_db as gdb, game_shelf, game_sources as src  # noqa: E402
 
