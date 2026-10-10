@@ -7,6 +7,7 @@ import { Info, Play } from 'lucide-react';
 import { useInView } from 'react-intersection-observer';
 import { api, PlayableItem, SharedTrack, SharedTrackChannel, SharedTracksResponse } from '@/utils/api';
 import { Loading } from '@/components/ui/loading';
+import { SceneSongs } from '@/components/home/SceneSongs';
 import { Button } from '@/components/ui/button';
 
 /**
@@ -329,8 +330,12 @@ export const ShelfScreen: React.FC<ShelfScreenProps> = ({
     </div>
   );
 
+  // ゲーム置き場と同じ骨組み: 界隈 → みんなが貼った（ログイン後のページ表示だけ。プレビューでは出さない）
+  const withScene = variant === 'page' && !readOnly && !!guildId;
   const content = (
     <>
+      {withScene && <SceneSongs guildId={guildId} onSelectTrack={onSelectTrack} />}
+      {withScene && <h2 className="mb-2 text-[17px] font-bold tracking-tight text-foreground">みんなが貼った</h2>}
       {intro}
       {chips}
       {body}

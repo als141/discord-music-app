@@ -2,20 +2,21 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { Clock, ExternalLink, Gift, Info, Loader2, RefreshCw, Swords, Tag, Users } from 'lucide-react';
+import { Clock, ExternalLink, Flame, Gift, Info, Loader2, PlayCircle, RefreshCw, Swords, Tag, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
 import { ScrollRow } from '@/components/home/ScrollRow';
 import { useIsDesktop } from '@/hooks/use-media-query';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
-import { appApi, GameBoard, GameCard, GameOffer, SteamLink } from '@/lib/app-api';
+import { appApi, GameBoard, GameCard, GameOffer, SceneFresh, SceneStreamerGame, SteamLink } from '@/lib/app-api';
 
 /**
  * 「ゲーム置き場」タブ。#ゲーム置き場 に貼られたゲームを、ドデカの「いま」に結びつけて見せる。
  *
- * 上から: いま（VC とプレイ中）→ 今夜どれ？（人数で絞った候補）→ 期限つき（無料配布・セール・発売）
- *        → 最近ドデカで遊ばれた → 置き場（全部・絞り込み）。カードを押すと詳しい情報とボタン
+ * 上から: いま（VC とプレイ中）→ 界隈で話題（配信者がいまやってる・話題の新作/インディー）→ 今夜どれ？（人数で絞った候補）
+ *        → 期限つき（無料配布・セール・発売）→ 最近ドデカで遊ばれた → 置き場（全部・絞り込み）。カードを押すと詳しい情報とボタン
+ * 曲置き場（ShelfScreen）と同じ骨組み（いま → 界隈 → みんなが貼った）で対になる
  * データは `GET /games/{guild}/board`（本人のトークン）。60 秒だけメモリにキャッシュ
  */
 
@@ -227,7 +228,92 @@ function OfferCard({ o, game, onOpen }: { o: GameOffer; game?: GameCard; onOpen:
   );
 }
 
-function GameDetail({ g, board, myId, onMark, busy }: { g: GameCard; board: GameBoard; myId: string | null; onMark: (kind: 'want' | 'own', on: boolean) => void; busy: boolean }) {
+function fmtViews(n: number): string {
+  return n >= 10000 ? `${Math.round(n / 10000).toLocaleString()}万回` : `${n.toLocaleString()}回`;
+}
+
+function names(list: string[], max = 3): string {
+  return list.length > max ? `${list.slice(0, max).join('・')} ほか${list.length - max}人` : list.join('・');
+}
+
+function StreamerGameCard({ e, onOpen, anchor }: { e: SceneStreamerGame; onOpen: (g: GameCard) => void; anchor?: string }) {
+  const inner = (
+    <>
+      <GameImage g={{ image: e.image, name: e.name }} className="mb-2" />
+      <h3 className="line-clamp-1 text-[14px] font-semibold text-foreground">{e.name}</h3>
+      <p className="mt-0.5 line-clamp-1 text-[12px] text-muted-foreground">{names(e.channels.map((c) => c.name))}</p>
+      <div className="mt-1.5 flex flex-wrap gap-1">
+        <Chip tone="accent">配信者 {e.channels.length}人</Chip>
+        {e.views >= 10000 && <Chip>動画 {fmtViews(e.views)}</Chip>}
+        {e.on_shelf && <Chip tone="ok">置き場にある</Chip>}
+      </div>
+    </>
+  );
+  const cls = 'group w-[200px] min-w-[200px] text-left sm:w-[230px] sm:min-w-[230px]';
+  if (e.card) {
+    const card = e.card;
+    return (
+      <button type="button" onClick={() => onOpen(card)} data-tour={anchor} className={cls}>
+        {inner}
+      </button>
+    );
+  }
+  return (
+    <a href={e.top ? `https://www.youtube.com/watch?v=${e.top.video_id}` : '#'} target="_blank" rel="noopener noreferrer" data-tour={anchor} className={`block ${cls}`}>
+      {inner}
+    </a>
+  );
+}
+
+function FreshCard({ e, onOpen, anchor }: { e: SceneFresh; onOpen: (g: GameCard) => void; anchor?: string }) {
+  const g = e.card;
+  return (
+    <button type="button" onClick={() => onOpen(g)} data-tour={anchor} className="group w-[230px] min-w-[230px] text-left sm:w-[260px] sm:min-w-[260px]">
+      <GameImage g={g} className="mb-2" />
+      <h3 className="line-clamp-1 text-[14px] font-semibold text-foreground">{g.name}</h3>
+      <p className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-muted-foreground">{g.hook}</p>
+      <div className="mt-1.5 flex flex-wrap gap-1">
+        {e.badges.slice(0, 3).map((b) => (
+          <Chip key={b} tone={/実況|配信者|売上/.test(b) ? 'accent' : 'muted'}>{b}</Chip>
+        ))}
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+        <span>{playersLabel(g)}・{modeLabel(g.modes)}</span>
+        <PriceTag g={g} />
+        {e.on_shelf ? <Chip tone="ok">置き場にある</Chip> : <span>まだ誰も貼ってない</span>}
+      </div>
+    </button>
+  );
+}
+
+type SceneExtra = { articles: SceneFresh['articles']; streamers: string[]; jikkyou: SceneFresh['jikkyou'] };
+
+function SceneDetail({ x }: { x: SceneExtra }) {
+  if (!x.articles.length && !x.streamers.length && !x.jikkyou?.top_video) return null;
+  return (
+    <div className="space-y-2 rounded-xl border border-border p-3 text-[12.5px]">
+      <p className="text-[11px] font-semibold text-muted-foreground">界隈では</p>
+      {x.streamers.length > 0 && <p className="text-foreground/85">{names(x.streamers, 5)} が直近 1 週間に配信・投稿</p>}
+      {x.jikkyou?.top_video && (
+        <a href={`https://www.youtube.com/watch?v=${x.jikkyou.top_video}`} target="_blank" rel="noopener noreferrer" className="flex items-start gap-1.5 text-foreground/85 hover:text-foreground">
+          <PlayCircle className="mt-[2px] h-3.5 w-3.5 flex-shrink-0 text-primary" />
+          <span className="min-w-0">
+            日本語の実況 {x.jikkyou.videos} 本・{fmtViews(x.jikkyou.views)}（2 週間）
+            <span className="block truncate text-[11.5px] text-muted-foreground">{x.jikkyou.top_title}</span>
+          </span>
+        </a>
+      )}
+      {x.articles.map((a) => (
+        <a key={a.url} href={a.url} target="_blank" rel="noopener noreferrer" className="block text-foreground/85 hover:text-foreground">
+          <span className="mr-1.5 text-[11px] font-semibold text-muted-foreground">{a.src}</span>
+          <span className="line-clamp-2">{a.title}</span>
+        </a>
+      ))}
+    </div>
+  );
+}
+
+function GameDetail({ g, board, myId, onMark, busy, extra }: { g: GameCard; board: GameBoard; myId: string | null; onMark: (kind: 'want' | 'own', on: boolean) => void; busy: boolean; extra?: SceneExtra }) {
   const isDesktop = useIsDesktop();
   const m = board.members;
   const posted = g.posted.by ? m[g.posted.by]?.name : null;
@@ -289,6 +375,7 @@ function GameDetail({ g, board, myId, onMark, busy }: { g: GameCard; board: Game
           ))}
         </div>
       )}
+      {extra && <SceneDetail x={extra} />}
       {posted && (
         <p className="text-[11.5px] text-muted-foreground">
           {posted} が置いた{g.posted.at ? `（${md(g.posted.at)}）` : ''}{g.posted.count > 1 ? `・${g.posted.count} 回貼られた` : ''}
@@ -482,8 +569,21 @@ export const GameShelfScreen: React.FC<Props> = ({ guildId }) => {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [load]);
 
-  const byId = useMemo(() => new Map((board?.games ?? []).map((g) => [g.appid, g])), [board]);
+  const byId = useMemo(() => {
+    const map = new Map((board?.games ?? []).map((g) => [g.appid, g]));
+    // 界隈のゲーム（置き場に無いもの）も詳しく見られるように
+    for (const e of board?.scene?.fresh ?? []) if (!map.has(e.appid)) map.set(e.appid, e.card);
+    for (const e of board?.scene?.streamers ?? []) if (e.card && !map.has(e.card.appid)) map.set(e.card.appid, e.card);
+    return map;
+  }, [board]);
   const open = openId ? byId.get(openId) ?? null : null;
+  const openExtra = useMemo((): SceneExtra | undefined => {
+    if (!openId || !board?.scene) return undefined;
+    const f = board.scene.fresh.find((e) => e.appid === openId);
+    const st = board.scene.streamers.find((e) => e.appid === openId);
+    if (!f && !st) return undefined;
+    return { articles: f?.articles ?? [], streamers: f?.streamers.length ? f.streamers : st?.channels.map((c) => c.name) ?? [], jikkyou: f?.jikkyou ?? null };
+  }, [openId, board]);
 
   const onMark = async (kind: 'want' | 'own', on: boolean) => {
     if (!guildId || !open) return;
@@ -491,7 +591,19 @@ export const GameShelfScreen: React.FC<Props> = ({ guildId }) => {
     try {
       const r = await appApi.markGame(guildId, open.appid, kind, on);
       setBoard((b) =>
-        b ? { ...b, games: b.games.map((g) => (g.appid === r.appid ? { ...g, want: r.want, own: r.own } : g)) } : b
+        b
+          ? {
+              ...b,
+              games: b.games.map((g) => (g.appid === r.appid ? { ...g, want: r.want, own: r.own } : g)),
+              scene: b.scene
+                ? {
+                    ...b.scene,
+                    fresh: b.scene.fresh.map((e) => (e.appid === r.appid ? { ...e, card: { ...e.card, want: r.want, own: r.own } } : e)),
+                    streamers: b.scene.streamers.map((e) => (e.card?.appid === r.appid ? { ...e, card: { ...e.card, want: r.want, own: r.own } } : e)),
+                  }
+                : b.scene,
+            }
+          : b
       );
       cache.clear();
     } catch (e) {
@@ -572,6 +684,41 @@ export const GameShelfScreen: React.FC<Props> = ({ guildId }) => {
             )}
           </div>
         </section>
+
+        {/* 界隈で話題 */}
+        {board.scene && (board.scene.streamers.length > 0 || board.scene.fresh.length > 0) && (
+          <section data-tour="games-scene">
+            <SectionTitle icon={<Flame className="h-4 w-4" />} title="界隈で話題" />
+            <p className="mb-3 flex items-start gap-1.5 px-4 text-[12.5px] leading-relaxed text-muted-foreground sm:px-6">
+              <Info className="mt-[3px] h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+              よく見る配信者・VTuber の動画と、#ゲーム置き場 の記事の出どころ（電ファミ・AUTOMATON・Game*Spark など）、Steam の日本の売れ筋から自動で集めています
+            </p>
+            {board.scene.streamers.length > 0 && (
+              <div className="mb-5">
+                <h3 className="mb-2 px-4 text-[13px] font-semibold text-foreground/80 sm:px-6">配信者がいまやってる</h3>
+                <ScrollRow className="gap-4" ariaLabel="配信者がいまやってるゲーム">
+                  <div className="w-0.5 flex-shrink-0 sm:w-2" aria-hidden="true" />
+                  {board.scene.streamers.map((e, i) => (
+                    <StreamerGameCard key={e.key} e={e} onOpen={(g) => setOpenId(g.appid)} anchor={i === 0 ? 'games-scene-first' : undefined} />
+                  ))}
+                  <div className="w-0.5 flex-shrink-0 sm:w-2" aria-hidden="true" />
+                </ScrollRow>
+              </div>
+            )}
+            {board.scene.fresh.length > 0 && (
+              <div>
+                <h3 className="mb-2 px-4 text-[13px] font-semibold text-foreground/80 sm:px-6">話題の新作・インディー</h3>
+                <ScrollRow className="gap-4" ariaLabel="話題の新作・インディー">
+                  <div className="w-0.5 flex-shrink-0 sm:w-2" aria-hidden="true" />
+                  {board.scene.fresh.map((e) => (
+                    <FreshCard key={e.key} e={e} onOpen={(g) => setOpenId(g.appid)} />
+                  ))}
+                  <div className="w-0.5 flex-shrink-0 sm:w-2" aria-hidden="true" />
+                </ScrollRow>
+              </div>
+            )}
+          </section>
+        )}
 
         {/* 今夜どれ？ */}
         <section data-tour="games-tonight">
@@ -677,7 +824,7 @@ export const GameShelfScreen: React.FC<Props> = ({ guildId }) => {
         <section data-tour="games-all">
           <SectionTitle
             icon={<Tag className="h-4 w-4" />}
-            title="置き場"
+            title="みんなが貼った"
             aside={
               <span className="flex items-center gap-3">
                 <SteamLinkCard onChanged={() => { cache.clear(); void load(true); }} />
@@ -714,7 +861,7 @@ export const GameShelfScreen: React.FC<Props> = ({ guildId }) => {
       </div>
 
       <ResponsiveSheet open={!!open} onOpenChange={(o) => !o && setOpenId(null)} title={open?.name ?? ''} dataTour="game-detail">
-        {open && <GameDetail g={open} board={board} myId={myId} onMark={onMark} busy={busy} />}
+        {open && <GameDetail g={open} board={board} myId={myId} onMark={onMark} busy={busy} extra={openExtra} />}
       </ResponsiveSheet>
     </div>
   );

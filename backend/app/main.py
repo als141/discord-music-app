@@ -150,6 +150,17 @@ async def lifespan(app: FastAPI):
         print(f"Discordボットの起動中にエラーが発生しました: {e}")
         print("Discordボット無しでWebAPIサーバーのみ起動します。")
     
+    # 界隈フィード（メディア・Steam・配信者の動画）。Discord に依存しないので web 側で回す
+    if IRINA_ROLE in ("web", "all"):
+        try:
+            from .scene import service as scene_service, store as scene_store
+            scene_store.init()
+            scene_task = asyncio.create_task(scene_service.scheduler())
+            background_tasks.add(scene_task)
+            scene_task.add_done_callback(background_tasks.discard)
+        except Exception as e:
+            print(f"[scene] 起動に失敗: {type(e).__name__}: {e}")
+
     # アプリケーションで背景タスクを管理できるように設定
     app.state.background_tasks = background_tasks
     

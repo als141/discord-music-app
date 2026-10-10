@@ -93,9 +93,19 @@ export const MainApp: React.FC = () => {
   const searchSeqRef = useRef(0);
   const [homeActiveTab, setHomeActiveTab] = useState<string>(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('homeActiveTab') || 'home';
+      // Ver. 1.4.0 で「ゲーム置き場・曲置き場」を先頭にした。前のタブを覚えている人も、1 回だけゲーム置き場から始める
+      try {
+        if (!localStorage.getItem('irina.tabs.v14')) {
+          localStorage.setItem('irina.tabs.v14', '1');
+          localStorage.setItem('homeActiveTab', 'games');
+          return 'games';
+        }
+      } catch {
+        /* 保存できない環境 */
+      }
+      return localStorage.getItem('homeActiveTab') || 'games';
     }
-    return 'home';
+    return 'games';
   });
   
   // WebSocket 参照

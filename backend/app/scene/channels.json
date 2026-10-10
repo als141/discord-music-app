@@ -1,0 +1,179 @@
+{
+ "_note": "界隈（ドデカのメンバーが会話で名前を出す配信者・VTuber）の公開 YouTube チャンネル。2026-10-11 に YouTube Data API で解決。足すときは channel_id と uploads（UU…）を書く",
+ "channels": [
+  {
+   "name": "葛葉",
+   "group": "にじさんじ",
+   "channel_id": "UCSFCh5NL4qXrAy9u-u2lX3g",
+   "uploads": "UUSFCh5NL4qXrAy9u-u2lX3g"
+  },
+  {
+   "name": "ローレン・イロアス",
+   "group": "にじさんじ",
+   "channel_id": "UCgmFrRcyH7d1zR9sIVQhFow",
+   "uploads": "UUgmFrRcyH7d1zR9sIVQhFow"
+  },
+  {
+   "name": "叶",
+   "group": "にじさんじ",
+   "channel_id": "UCspv01oxUFf_MTSipURRhkA",
+   "uploads": "UUspv01oxUFf_MTSipURRhkA"
+  },
+  {
+   "name": "加藤純一",
+   "group": "配信者",
+   "channel_id": "UCx1nAvtVDIsaGmCMSe8ofsQ",
+   "uploads": "UUx1nAvtVDIsaGmCMSe8ofsQ"
+  },
+  {
+   "name": "k4sen",
+   "group": "配信者",
+   "channel_id": "UChUjERVG8eKEAJSCef-tTmg",
+   "uploads": "UUhUjERVG8eKEAJSCef-tTmg"
+  },
+  {
+   "name": "SHAKA",
+   "group": "配信者",
+   "channel_id": "UCjg5-lUiUzdmzzBRY9Xqrhw",
+   "uploads": "UUjg5-lUiUzdmzzBRY9Xqrhw"
+  },
+  {
+   "name": "スタンミ",
+   "group": "配信者",
+   "channel_id": "UCcGSTI830YkwaocFV31Q7MA",
+   "uploads": "UUcGSTI830YkwaocFV31Q7MA"
+  },
+  {
+   "name": "橘ひなの",
+   "group": "ぶいすぽ",
+   "channel_id": "UCvUc0m317LWTTPZoBQV479A",
+   "uploads": "UUvUc0m317LWTTPZoBQV479A"
+  },
+  {
+   "name": "花芽すみれ",
+   "group": "ぶいすぽ",
+   "channel_id": "UCyLGcqYs7RsBb3L0SJfzGYA",
+   "uploads": "UUyLGcqYs7RsBb3L0SJfzGYA"
+  },
+  {
+   "name": "一ノ瀬うるは",
+   "group": "ぶいすぽ",
+   "channel_id": "UC5LyYg6cCA4yHEYvtUsir3g",
+   "uploads": "UU5LyYg6cCA4yHEYvtUsir3g"
+  },
+  {
+   "name": "紫宮るな",
+   "group": "ぶいすぽ",
+   "channel_id": "UCD5W21JqNMv_tV9nfjvF9sw",
+   "uploads": "UUD5W21JqNMv_tV9nfjvF9sw"
+  },
+  {
+   "name": "小森めと",
+   "group": "ぶいすぽ",
+   "channel_id": "UCzUNASdzI4PV5SlqtYwAkKQ",
+   "uploads": "UUzUNASdzI4PV5SlqtYwAkKQ"
+  },
+  {
+   "name": "八雲べに",
+   "group": "ぶいすぽ",
+   "channel_id": "UCjXBuHmWkieBApgBhDuJMMQ",
+   "uploads": "UUjXBuHmWkieBApgBhDuJMMQ"
+  },
+  {
+   "name": "星街すいせい",
+   "group": "ホロライブ",
+   "channel_id": "UC5CwaMl1eIgY8h02uZw7u8A",
+   "uploads": "UU5CwaMl1eIgY8h02uZw7u8A"
+  },
+  {
+   "name": "夕陽リリ",
+   "group": "にじさんじ",
+   "channel_id": "UC48jH1ul-6HOrcSSfoR02fQ",
+   "uploads": "UU48jH1ul-6HOrcSSfoR02fQ"
+  },
+  {
+   "name": "もこう",
+   "group": "配信者",
+   "channel_id": "UCENoC6MLc4pL-vehJyzSWmg",
+   "uploads": "UUENoC6MLc4pL-vehJyzSWmg"
+  },
+  {
+   "name": "関優太",
+   "group": "配信者",
+   "channel_id": "UC2j4lymo8Ce_1RXMeo4afcQ",
+   "uploads": "UU2j4lymo8Ce_1RXMeo4afcQ"
+  },
+  {
+   "name": "ボドカ",
+   "group": "配信者",
+   "channel_id": "UCIYaPLvP0y2LbSYk7QbRSmQ",
+   "uploads": "UUIYaPLvP0y2LbSYk7QbRSmQ"
+  },
+  {
+   "name": "英リサ",
+   "group": "ぶいすぽ",
+   "channel_id": "UCurEA8YoqFwimJcAuSHU0MQ",
+   "uploads": "UUurEA8YoqFwimJcAuSHU0MQ"
+  },
+  {
+   "name": "胡桃のあ",
+   "group": "ぶいすぽ",
+   "channel_id": "UCIcAj6WkJ8vZ7DeJVgmeqKw",
+   "uploads": "UUIcAj6WkJ8vZ7DeJVgmeqKw"
+  },
+  {
+   "name": "神成きゅぴ",
+   "group": "ぶいすぽ",
+   "channel_id": "UCMp55EbT_ZlqiMS3lCj01BQ",
+   "uploads": "UUMp55EbT_ZlqiMS3lCj01BQ"
+  },
+  {
+   "name": "藍沢エマ",
+   "group": "ぶいすぽ",
+   "channel_id": "UCPkKpOHxEDcwmUAnRpIu-Ng",
+   "uploads": "UUPkKpOHxEDcwmUAnRpIu-Ng"
+  },
+  {
+   "name": "白波らむね",
+   "group": "ぶいすぽ",
+   "channel_id": "UC61OwuYOVuKkpKnid-43Twg",
+   "uploads": "UU61OwuYOVuKkpKnid-43Twg"
+  },
+  {
+   "name": "兎咲ミミ",
+   "group": "ぶいすぽ",
+   "channel_id": "UCnvVG9RbOW3J6Ifqo-zKLiw",
+   "uploads": "UUnvVG9RbOW3J6Ifqo-zKLiw"
+  },
+  {
+   "name": "空澄セナ",
+   "group": "ぶいすぽ",
+   "channel_id": "UCF_U2GCKHvDz52jWdizppIA",
+   "uploads": "UUF_U2GCKHvDz52jWdizppIA"
+  },
+  {
+   "name": "猫汰つな",
+   "group": "ぶいすぽ",
+   "channel_id": "UCIjdfjcSaEgdjwbgjxC3ZWg",
+   "uploads": "UUIjdfjcSaEgdjwbgjxC3ZWg"
+  },
+  {
+   "name": "樋口楓",
+   "group": "にじさんじ",
+   "channel_id": "UCsg-YqdqQ-KFF0LNk23BY4A",
+   "uploads": "UUsg-YqdqQ-KFF0LNk23BY4A"
+  },
+  {
+   "name": "イブラヒム",
+   "group": "にじさんじ",
+   "channel_id": "UCmZ1Rbthn-6Jm_qOGjYsh5A",
+   "uploads": "UUmZ1Rbthn-6Jm_qOGjYsh5A"
+  },
+  {
+   "name": "宝鐘マリン",
+   "group": "ホロライブ",
+   "channel_id": "UCCzUftO8KOVkV4wQG1vkUvg",
+   "uploads": "UUCzUftO8KOVkV4wQG1vkUvg"
+  }
+ ]
+}

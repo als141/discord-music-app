@@ -47,7 +47,7 @@ export const TOURS: Record<TourId, Tour> = {
         id: 'tab',
         target: 'tab-games',
         title: 'ここがゲーム置き場',
-        body: '#ゲーム置き場 に貼られたゲームが、何人で遊べるか・いくらか付きでここに並びます。タブを押しても次へ進めます。',
+        body: '#ゲーム置き場 に貼られたゲームと、界隈でいま話題のゲームがここに並びます。タブを押しても次へ進めます。',
         interactive: true,
       },
       {
@@ -57,6 +57,14 @@ export const TOURS: Record<TourId, Tour> = {
         navigate: { homeTab: 'games' },
         title: 'いま',
         body: 'VC にいる人と、Discord で何をプレイ中かが出ます。見られるのはドデカのメンバーだけ。出したくない人は「通知とアプリ」でオフにすると、これまでの記録も消えます。',
+      },
+      {
+        id: 'scene',
+        target: 'games-scene',
+        skipIf: 'games-empty',
+        navigate: { homeTab: 'games' },
+        title: '界隈で話題',
+        body: 'よく見る配信者・VTuber がいまやってるゲームと、電ファミ・AUTOMATON などで話題の新作・インディーです。日本語の実況の再生数や Steam の売れ筋も見て並べています。',
       },
       {
         id: 'tonight',
@@ -81,6 +89,13 @@ export const TOURS: Record<TourId, Tour> = {
         navigate: { homeTab: 'games' },
         title: 'カードを押すと詳しく',
         body: '人数・協力か対戦か・価格・評価・誰が遊んだかが見られて、「やりたい」「持ってる」を付けられます。Steam を連携すると自動で付きます。',
+      },
+      {
+        id: 'songs',
+        target: 'shelf-scene',
+        navigate: { homeTab: 'shelf' },
+        title: '曲置き場にも「界隈」',
+        body: '曲置き場には、これまで貼られた歌い手・アーティストと配信者・VTuber の新曲・歌ってみたが並びます。押すとそのままキューに入ります。',
       },
       {
         id: 'done',

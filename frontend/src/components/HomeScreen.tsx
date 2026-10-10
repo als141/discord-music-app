@@ -550,23 +550,24 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
 
   // Tab definitions - Apple Music style
   const tabs = useMemo(() => [
+    // ドデカは「ゲーム置き場」と「曲置き場」が対になる 2 本柱。音楽の再生まわりは 3 番目
     {
-      id: 'home',
-      label: 'ホーム',
-      icon: <Home className="w-4 h-4" />,
-      ariaLabel: 'ホーム画面を表示'
+      id: 'games',
+      label: 'ゲーム置き場',
+      icon: <Gamepad2 className="w-4 h-4" />,
+      ariaLabel: 'ゲーム置き場（界隈で話題・今夜の候補・#ゲーム置き場のゲーム）を表示'
     },
     {
       id: 'shelf',
       label: '曲置き場',
       icon: <Bookmark className="w-4 h-4" />,
-      ariaLabel: '曲置き場（チャンネルに貼られた曲）を表示'
+      ariaLabel: '曲置き場（界隈の新曲・チャンネルに貼られた曲）を表示'
     },
     {
-      id: 'games',
-      label: 'ゲーム置き場',
-      icon: <Gamepad2 className="w-4 h-4" />,
-      ariaLabel: 'ゲーム置き場（#ゲーム置き場のゲームと今夜の候補）を表示'
+      id: 'home',
+      label: '音楽',
+      icon: <Home className="w-4 h-4" />,
+      ariaLabel: '音楽（URL から追加・おすすめ・履歴）を表示'
     },
     {
       id: 'uploaded-music',

@@ -17,6 +17,7 @@ from .. import db
 from ..services import push, push_events
 from ..services.app_auth import AppUser, current_user, require_admin, user_or_internal
 from ..services import game_shelf, game_db
+from ..scene import service as scene
 
 router = APIRouter()
 
@@ -242,7 +243,25 @@ async def game_board(guild_id: str, request: Request, players: Optional[int] = N
         await _require_member(guild_id, user)
     if players is not None and not 1 <= players <= 16:
         raise HTTPException(status_code=400, detail="players は 1〜16")
-    return await asyncio.to_thread(game_shelf.build_board, guild_id, players)
+    board = await asyncio.to_thread(game_shelf.build_board, guild_id, players)
+    try:
+        board["scene"] = await asyncio.to_thread(scene.build_games, guild_id, board)
+    except Exception as e:  # 界隈フィードが壊れても置き場は出す
+        print(f"[scene] build_games failed: {type(e).__name__}: {str(e)[:160]}")
+        board["scene"] = None
+    return board
+
+
+@router.get("/scene/{guild_id}/songs")
+async def scene_songs(guild_id: str, request: Request, user: Optional[AppUser] = Depends(user_or_internal)):
+    """曲置き場の「界隈の歌」（配信者・VTuber の歌ってみた・オリ曲・踊ってみた）"""
+    _check_game_guild(guild_id)
+    if user is None:
+        if (request.headers.get("x-irina-guild") or "") != guild_id:
+            raise HTTPException(status_code=403, detail="このサーバーでの会話からだけ見られます")
+    else:
+        await _require_member(guild_id, user)
+    return await asyncio.to_thread(scene.build_songs)
 
 
 class SteamLinkIn(BaseModel):

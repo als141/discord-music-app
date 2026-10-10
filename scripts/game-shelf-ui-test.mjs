@@ -3,7 +3,8 @@
  * ゲーム置き場タブの画面テスト（/dev-preview + モック）。
  *   cd frontend && NEXT_PUBLIC_BUILD_ID=test-a NEXT_PUBLIC_API_URL=https://api.atoriba.jp bunx next dev -p 3100
  *   BOARD_FIXTURE=path/to/board.json PREVIEW_BASE=http://localhost:3100 node scripts/game-shelf-ui-test.mjs
- * BOARD_FIXTURE は GET /games/{guild}/board の応答（backend の game_shelf.build_board の出力）。
+ * BOARD_FIXTURE は GET /games/{guild}/board の応答（backend の game_shelf.build_board＋scene.build_games の出力）。
+ * SONGS_FIXTURE（任意）は GET /scene/{guild}/songs の応答（scene.build_songs）。あれば曲置き場の「界隈の新曲」も確かめる
  */
 import { createRequire } from 'node:module';
 import { readFileSync, mkdirSync } from 'node:fs';
@@ -16,6 +17,7 @@ const BASE = process.env.PREVIEW_BASE || 'http://localhost:3100';
 const OUT = join(dirname(fileURLToPath(import.meta.url)), 'screenshots');
 mkdirSync(OUT, { recursive: true });
 const board = JSON.parse(readFileSync(process.env.BOARD_FIXTURE, 'utf8'));
+const songs = process.env.SONGS_FIXTURE ? JSON.parse(readFileSync(process.env.SONGS_FIXTURE, 'utf8')) : null;
 const GUILD = board.guild_id;
 
 let failures = 0;
@@ -53,6 +55,12 @@ async function setup(vp) {
     marks.push(body);
     json(r, { appid: r.request().url().split('/').slice(-2)[0], want: body.kind === 'want' && body.on ? ['000000000000000001'] : [], own: body.kind === 'own' && body.on ? ['000000000000000001'] : [] });
   });
+  const added = [];
+  await context.route(/\/scene\/\d+\/songs/, (r) => json(r, songs || { songs: [], updated_at: null }));
+  await context.route(/api\.atoriba\.jp\/add-url/, (r) => {
+    added.push(JSON.parse(r.request().postData() || '{}'));
+    json(r, { message: 'ok' });
+  });
   await context.route(/\/me\/steam/, (r) => json(r, { linked: false, name: null, avatar: null, games: null, private: false }));
   await context.route(/\/me\/device/, (r) => json(r, { device: {}, prefs: {}, push_enabled: false, is_admin: false }));
   for (const p of ['bot-guilds', 'voice-channels', 'bot-voice-status', 'auto-connect-info', 'current-track', 'queue', 'history', 'history-stats', 'is-playing', 'uploaded-audio-list', 'recommendations', 'shared-tracks', 'user-voice-status', 'player-state']) {
@@ -63,17 +71,19 @@ async function setup(vp) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|ERR_|steamstatic|cdn\.discordapp|ytimg|epicgames|gamerpower/.test(m.text())) errors.push(m.text()); });
-  return { context, page, errors, marks };
+  return { context, page, errors, marks, added };
 }
 
 for (const vp of [{ name: 'mobile-390x844', width: 390, height: 844, mobile: true }, { name: 'desktop-1376x870', width: 1376, height: 870 }]) {
-  const { context, page, errors, marks } = await setup(vp);
+  const { context, page, errors, marks, added } = await setup(vp);
   const tag = vp.name;
   try {
     await page.goto(`${BASE}/dev-preview`, { waitUntil: 'domcontentloaded' });
     const tab = page.locator('[data-tour="tab-games"]');
     await tab.waitFor({ timeout: 20000 });
     check(`${tag}: ゲーム置き場タブに NEW`, (await tab.getAttribute('aria-label')).includes('新機能'));
+    const firstTab = await page.locator('[role="tab"]').first().getAttribute('data-tour');
+    check(`${tag}: 先頭のタブがゲーム置き場`, firstTab === 'tab-games', firstTab);
     // ハイドレーション前のクリックは効かないので、選ばれるまで押し直す
     for (let i = 0; i < 10; i++) {
       await tab.click();
@@ -84,6 +94,24 @@ for (const vp of [{ name: 'mobile-390x844', width: 390, height: 844, mobile: tru
     await page.waitForTimeout(1200);
     check(`${tag}: いま（VC 3 人）`, await page.getByText(/ゲーム に 3 人/).isVisible());
     check(`${tag}: プレイ中のチップ`, await page.getByRole('button', { name: /R\.E\.P\.O\..*2人/ }).isVisible());
+    if (board.scene) {
+      const scene = page.locator('[data-tour="games-scene"]');
+      check(`${tag}: 界隈で話題`, await scene.isVisible());
+      const streamerCards = await scene.locator('[aria-label="配信者がいまやってるゲーム"] h3').count();
+      const freshCards = await scene.locator('[aria-label="話題の新作・インディー"] h3').count();
+      check(`${tag}: 配信者がいまやってる・話題の新作`, streamerCards >= 3 && freshCards >= 3, `${streamerCards}/${freshCards}`);
+      // 置き場に無い話題作を開く → 「界隈では」と やりたい
+      const notOnShelf = board.scene.fresh.find((e) => !e.on_shelf);
+      if (notOnShelf) {
+        await scene.locator('[aria-label="話題の新作・インディー"] button', { hasText: notOnShelf.card.name }).first().click();
+        const d = page.locator('[data-tour="game-detail"]');
+        await d.waitFor({ timeout: 8000 });
+        await page.waitForTimeout(500);
+        check(`${tag}: 話題作の詳細に「界隈では」`, (await d.innerText()).includes('界隈では'));
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(400);
+      }
+    }
     const picks = await page.locator('[data-tour="games-tonight"] button h3').count();
     check(`${tag}: 今夜どれ？の候補`, picks >= 3, `${picks}`);
     check(`${tag}: 横スクロールなし`, await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
@@ -121,7 +149,7 @@ for (const vp of [{ name: 'mobile-390x844', width: 390, height: 844, mobile: tru
     await page.getByRole('button', { name: /^お知らせ/ }).click();
     await page.locator('li').getByRole('button', { name: '使い方を見る' }).first().click();
     const titles = [];
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 10; i++) {
       const ok = await page.waitForFunction(() => {
         const d = document.querySelector('[data-guide-tour] [role=dialog]');
         return d && getComputedStyle(d).opacity === '1';
@@ -133,7 +161,19 @@ for (const vp of [{ name: 'mobile-390x844', width: 390, height: 844, mobile: tru
       await page.waitForTimeout(300);
       if (last) break;
     }
-    check(`${tag}: ゲーム置き場の案内が最後まで進む`, titles.length >= 5 && titles.at(-1) === '貼るのはいつも通り', titles.join(' → '));
+    check(`${tag}: ゲーム置き場の案内が最後まで進む`, titles.length >= 6 && titles.includes('界隈で話題') && titles.at(-1) === '貼るのはいつも通り', titles.join(' → '));
+    if (songs && songs.songs.length) {
+      await page.locator('[data-tour="tab-shelf"]').click();
+      const sec = page.locator('[data-tour="shelf-scene"]');
+      await sec.waitFor({ timeout: 10000 });
+      check(`${tag}: 曲置き場に「界隈の新曲」`, (await sec.locator('h3').count()) >= 3);
+      check(`${tag}: 曲置き場に「みんなが貼った」`, await page.getByRole('heading', { name: 'みんなが貼った' }).isVisible());
+      await page.screenshot({ path: join(OUT, `games-${tag}-4-songs.png`) });
+      await sec.locator('button[aria-label$="をキューに追加"]').first().click();
+      await page.waitForTimeout(1200);
+      const want = songs.songs[0].play_video_id;
+      check(`${tag}: 界隈の新曲を押すとキューに追加`, added.some((b) => JSON.stringify(b).includes(want)), JSON.stringify(added).slice(0, 120));
+    }
     check(`${tag}: エラーなし`, errors.filter((e) => !/empty string \("\"\) was passed to the %s attribute/.test(e)).length === 0, errors.slice(0, 2).join(' | '));
   } catch (e) {
     check(`${tag}: flow`, false, e.message.split('\n')[0] + ' / ' + (e.message.match(/waiting for (.*)/) || [])[1]);

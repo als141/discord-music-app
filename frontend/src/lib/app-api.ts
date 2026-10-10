@@ -171,6 +171,58 @@ export interface GameBoard {
   news: { url: string; text: string; posted_by: string | null; posted_at: string }[];
   members: Record<string, { name: string | null; image: string | null }>;
   updated_at: string;
+  scene?: GameScene | null;
+}
+
+// ---- 界隈（配信者・VTuber・ゲームメディア・Steam） ----
+
+export interface SceneStreamerGame {
+  key: string;
+  name: string;
+  appid: string | null;
+  card: GameCard | null;
+  image: string | null;
+  channels: { name: string; group: string }[];
+  videos: number;
+  views: number;
+  top: { video_id: string; title: string; thumb: string | null; channel: string; views: number } | null;
+  on_shelf: boolean;
+}
+
+export interface SceneFresh {
+  key: string;
+  appid: string;
+  card: GameCard;
+  badges: string[];
+  score: number;
+  articles: { src: string; title: string; url: string; at: string | null }[];
+  streamers: string[];
+  jikkyou: { views: number; videos: number; top_video: string | null; top_title: string | null; at: string } | null;
+  on_shelf: boolean;
+  found_first: boolean;
+}
+
+export interface GameScene {
+  streamers: SceneStreamerGame[];
+  fresh: SceneFresh[];
+  updated_at: string | null;
+}
+
+export interface SceneSong {
+  key: string;
+  song: string | null;
+  artist: string | null;
+  hook: string | null;
+  orig_video_id: string | null;
+  play_video_id: string;
+  videos: { video_id: string; title: string; thumb: string | null; channel: string; group: string; views: number; at: string; type: string | null; hook: string | null }[];
+  channels: string[];
+  /** 歌った・踊った人の数（本人の公式と Topic チャンネルは 1 人） */
+  people: number;
+  views: number;
+  latest: string;
+  posted_affinity: number;
+  score: number;
 }
 
 export interface DeviceReportResult {
@@ -248,6 +300,7 @@ export const appApi = {
     call<PushSendResult>('/admin/push', { method: 'POST', body: JSON.stringify(body) }),
   gameBoard: (guildId: string, players?: number) =>
     call<GameBoard>(`/games/${guildId}/board${players ? `?players=${players}` : ''}`),
+  sceneSongs: (guildId: string) => call<{ songs: SceneSong[]; updated_at: string | null }>(`/scene/${guildId}/songs`),
   steamStatus: () => call<SteamLink>('/me/steam'),
   linkSteam: (profile: string) =>
     call<SteamLink & { ok: boolean; wishlist: number | null }>('/me/steam', { method: 'POST', body: JSON.stringify({ profile }) }),
