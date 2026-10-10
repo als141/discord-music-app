@@ -562,6 +562,9 @@ def _card(g: Dict[str, Any], posts: List[Dict[str, Any]], mk: Dict[str, List[str
     }
 
 
+_BEST_RANGE = re.compile(r"(\d+)\s*(?:人)?\s*(?:[〜~\-–ー]\s*(\d+))?")
+
+
 def _score(c: Dict[str, Any], n: int, present: Set[str]) -> Tuple[float, List[str]]:
     reasons: List[str] = []
     p = c["players"]
@@ -594,9 +597,11 @@ def _score(c: Dict[str, Any], n: int, present: Set[str]) -> Tuple[float, List[st
     if c["last_played_at"]:
         s += 0.5
     # いちばん楽しい人数（Claude の best_with「2〜4人」など）に今夜の人数が入っているか
-    nums = [int(x) for x in re.findall(r"\d+", p.get("best") or "")]
-    if nums:
-        lo, hi = min(nums), max(nums)
+    # 先頭の「5〜8人」だけを読む（「5〜8人(5v5や3v3で…)」の括弧の中の数字は拾わない）
+    m = _BEST_RANGE.search(p.get("best") or "")
+    if m:
+        lo = int(m.group(1))
+        hi = int(m.group(2) or m.group(1))
         if lo <= n <= hi:
             s += 1.0
         elif n < lo:
