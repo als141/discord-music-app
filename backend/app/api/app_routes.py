@@ -287,6 +287,58 @@ async def game_board(guild_id: str, request: Request, players: Optional[int] = N
     return board
 
 
+# ---------------------------------------------------------------------------
+# イリーナの調査（Claude が定期的に・頼まれて調べる。オーナー指定 2026-10-11 で主役）
+# ---------------------------------------------------------------------------
+
+class ResearchAskIn(BaseModel):
+    question: str = Field(min_length=2, max_length=500)
+
+
+def _public_report(rep: dict) -> dict:
+    """メンバーに見せる形（費用・エラーの中身は出さない）"""
+    return {k: v for k, v in rep.items() if k not in ("cost", "error")}
+
+
+@router.get("/research/{guild_id}/feed")
+async def research_feed(guild_id: str, request: Request, limit: int = 30, user: Optional[AppUser] = Depends(user_or_internal)):
+    from ..research import service as research, store as rstore
+    _check_game_guild(guild_id)
+    if user is None:
+        if (request.headers.get("x-irina-guild") or "") != guild_id:
+            raise HTTPException(status_code=403, detail="このサーバーでの会話からだけ見られます")
+    else:
+        await _require_member(guild_id, user)
+    reports = [_public_report(r) for r in await asyncio.to_thread(rstore.feed, guild_id, max(1, min(limit, 60)))]
+    left = research.DAILY_QUESTIONS - (await asyncio.to_thread(rstore.asked_today, user.id) if user else 0)
+    return {"reports": reports, "questions_left": max(0, left), "daily_limit": research.DAILY_QUESTIONS}
+
+
+@router.get("/research/{guild_id}/item/{rid}")
+async def research_item(guild_id: str, rid: int, user: AppUser = Depends(current_user)):
+    from ..research import store as rstore
+    _check_game_guild(guild_id)
+    await _require_member(guild_id, user)
+    rep = await asyncio.to_thread(rstore.get, rid)
+    if not rep or rep["guild_id"] != guild_id:
+        raise HTTPException(status_code=404, detail="見つかりません")
+    return _public_report(rep)
+
+
+@router.post("/research/{guild_id}/ask")
+async def research_ask(guild_id: str, body: ResearchAskIn, user: AppUser = Depends(current_user)):
+    """質問を受け付けて裏で調べる（1〜2 分）。できたらフィードに出る"""
+    from ..research import service as research
+    _check_game_guild(guild_id)
+    await _require_member(guild_id, user)
+    try:
+        rep = await research.ask(guild_id, user.id, user.name or "メンバー", body.question)
+    except ValueError as e:
+        raise HTTPException(status_code=429, detail=str(e))
+    print(f"[research] question #{rep['id']} by {user.id}")
+    return _public_report(rep)
+
+
 @router.get("/scene/{guild_id}/songs")
 async def scene_songs(guild_id: str, request: Request, user: Optional[AppUser] = Depends(user_or_internal)):
     """曲置き場の「界隈の歌」（配信者・VTuber の歌ってみた・オリ曲・踊ってみた）"""

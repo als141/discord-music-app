@@ -28,6 +28,10 @@ import { AppSettingsSheet } from './pwa/AppSettingsSheet';
 import { ShareReceiver } from './pwa/ShareReceiver';
 import { useDeviceSync } from '@/hooks/use-device-sync';
 import { useDeviceStore } from '@/store/useDeviceStore';
+import { requestResearchOpen } from '@/lib/research-open';
+
+// URL の ?tab= で開けるホームのタブ
+const HOME_TABS: string[] = ['research', 'games', 'shelf', 'home', 'uploaded-music'];
 
 // API URL の取得
 
@@ -93,19 +97,19 @@ export const MainApp: React.FC = () => {
   const searchSeqRef = useRef(0);
   const [homeActiveTab, setHomeActiveTab] = useState<string>(() => {
     if (typeof window !== 'undefined') {
-      // Ver. 1.4.0 で「ゲーム置き場・曲置き場」を先頭にした。前のタブを覚えている人も、1 回だけゲーム置き場から始める
+      // Ver. 1.6.0 で「調査」を先頭にした。前のタブを覚えている人も、1 回だけ調査から始める
       try {
-        if (!localStorage.getItem('irina.tabs.v14')) {
-          localStorage.setItem('irina.tabs.v14', '1');
-          localStorage.setItem('homeActiveTab', 'games');
-          return 'games';
+        if (!localStorage.getItem('irina.tabs.v16')) {
+          localStorage.setItem('irina.tabs.v16', '1');
+          localStorage.setItem('homeActiveTab', 'research');
+          return 'research';
         }
+        return localStorage.getItem('homeActiveTab') || 'research';
       } catch {
         /* 保存できない環境 */
       }
-      return localStorage.getItem('homeActiveTab') || 'games';
     }
-    return 'games';
+    return 'research';
   });
   
   // WebSocket 参照
@@ -292,7 +296,8 @@ export const MainApp: React.FC = () => {
     deepLinkHandledRef.current = true;
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab');
-    if (tab === 'home' || tab === 'shelf' || tab === 'games' || tab === 'uploaded-music') setHomeActiveTab(tab);
+    if (tab && HOME_TABS.includes(tab)) setHomeActiveTab(tab);
+    if (tab === 'research') requestResearchOpen(params.get('r'));
     if (params.get('open') === 'settings') useDeviceStore.getState().openSettings();
     reportNotificationOpen(params.get('n'));
     if (params.get('shared') === 'unsupported') {
@@ -313,10 +318,11 @@ export const MainApp: React.FC = () => {
       const tab = params.get('tab');
       setIsSearchActive(false);
       setIsMenuOpen(false);
-      if (tab === 'home' || tab === 'shelf' || tab === 'games' || tab === 'uploaded-music') {
+      if (tab && HOME_TABS.includes(tab)) {
         setIsMainPlayerVisible(false);
         setHomeActiveTab(tab);
       }
+      if (tab === 'research') requestResearchOpen(params.get('r'));
       if (params.get('open') === 'settings') useDeviceStore.getState().openSettings();
       reportNotificationOpen(params.get('n'));
     };
@@ -490,9 +496,9 @@ export const MainApp: React.FC = () => {
             )}
           </main>
 
-          {/* Now Playing パネル（デスクトップ）。置き場のタブで何も流れていない（キューも空）ときは出さず、幅を置き場に回す */}
+          {/* Now Playing パネル（デスクトップ）。調査・置き場のタブで何も流れていない（キューも空）ときは出さず、幅を回す */}
           {isDesktop && !(
-            (homeActiveTab === 'games' || homeActiveTab === 'shelf') && !currentTrack && queue.length === 0 && !isLoading
+            (homeActiveTab === 'research' || homeActiveTab === 'games' || homeActiveTab === 'shelf') && !currentTrack && queue.length === 0 && !isLoading
           ) && (
             <aside className="now-playing-aside hidden lg:flex flex-col min-h-0" aria-label="再生中パネル">
               <MainPlayer {...playerProps} variant="docked" />

@@ -10,7 +10,9 @@ from pydantic import BaseModel, Field
 
 from ..services import game_sources as gsrc, llm_budget
 
-MODEL = os.getenv("IRINA_SCENE_MODEL") or "claude-sonnet-5-5"
+# 振り分けは最新の Haiku 5.5（$0.10/$0.50。Sonnet 5.5 の 1/20）。2026-10-11 の検証で再現率 86%・採用率 14%（Sonnet は 83%・10%）。
+# 選ぶのは後段の Opus 5.5 なので、少し広めに拾う Haiku で十分
+MODEL = os.getenv("IRINA_SCENE_MODEL") or "claude-haiku-5-5"
 
 TASTE = """あなたは Discord サーバー「ドデカ」（固定 8 人の友人。夜に VC でゲームをする）のゲーム係。
 彼らが #ゲーム置き場 に貼るのは、主に次のようなもの:
@@ -65,8 +67,8 @@ async def judge_articles(rows: List[Dict]) -> Tuple[Dict[str, Dict], float]:
             model=MODEL, max_tokens=8000, system=TASTE, output_config={"effort": "low"},
             messages=[{"role": "user", "content": "次の記事それぞれについて判定して、全件を返して。\n\n" + lines}],
             output_format=ArticleBatch)
-        usd += gsrc._cost(r.usage)
-        llm_budget.log("anthropic", MODEL, "scene_articles", gsrc._cost(r.usage))
+        usd += llm_budget.cost(MODEL, r.usage)
+        llm_budget.log("anthropic", MODEL, "scene_articles", llm_budget.cost(MODEL, r.usage))
         for it in (r.parsed_output.items if r.parsed_output else []):
             res[it.id] = it.model_dump()
     return res, usd
@@ -86,8 +88,8 @@ async def judge_videos(rows: List[Dict]) -> Tuple[Dict[str, Dict], float]:
             system="日本の配信者・VTuber・アーティストの YouTube 動画の題名から、何の動画かを判定する。",
             messages=[{"role": "user", "content": "次の動画（チャンネル名 | 題名）それぞれについて判定して、全件を返して。\n\n" + lines}],
             output_format=VideoBatch)
-        usd += gsrc._cost(r.usage)
-        llm_budget.log("anthropic", MODEL, "scene_videos", gsrc._cost(r.usage))
+        usd += llm_budget.cost(MODEL, r.usage)
+        llm_budget.log("anthropic", MODEL, "scene_videos", llm_budget.cost(MODEL, r.usage))
         for it in (r.parsed_output.items if r.parsed_output else []):
             res[it.id] = it.model_dump()
     return res, usd

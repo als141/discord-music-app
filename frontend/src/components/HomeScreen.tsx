@@ -22,6 +22,9 @@ import {
   Sparkles,
   Bookmark,
   Gamepad2,
+  Telescope,
+  ChevronRight,
+  ChevronLeft,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,6 +38,7 @@ import { GuildStatsCard } from './home/GuildStatsCard';
 import { CollectionDialog } from './home/CollectionDialog';
 import { ShelfScreen } from './home/ShelfScreen';
 import { GameShelfScreen } from './games/GameShelfScreen';
+import { ResearchScreen } from './research/ResearchScreen';
 import { useGuideStore } from '@/store/useGuideStore';
 import { APP_RELEASE_DATE, APP_VERSION, newBadgeTabs } from '@/lib/guide/notices';
 
@@ -550,7 +554,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
 
   // Tab definitions - Apple Music style
   const tabs = useMemo(() => [
-    // ドデカは「ゲーム置き場」と「曲置き場」が対になる 2 本柱。音楽の再生まわりは 3 番目
+    // 主役は「調査」（イリーナが毎日調べる）。続いて対になる「ゲーム置き場」「曲置き場」、音楽の再生まわりは最後。
+    // ライブラリ（アップロードした曲）は「音楽」の中から開く（id 'uploaded-music' はそのまま、タブには出さない）
+    {
+      id: 'research',
+      label: '調査',
+      icon: <Telescope className="w-4 h-4" />,
+      ariaLabel: 'イリーナの調査（今日の調査・今週の新作と新曲・質問）を表示'
+    },
     {
       id: 'games',
       label: 'ゲーム置き場',
@@ -569,16 +580,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
       icon: <Home className="w-4 h-4" />,
       ariaLabel: '音楽（URL から追加・おすすめ・履歴）を表示'
     },
-    {
-      id: 'uploaded-music',
-      label: 'ライブラリ',
-      icon: <Music2 className="w-4 h-4" />,
-      ariaLabel: 'ライブラリ画面を表示'
-    },
   ], []);
+  // ライブラリは「音楽」の下の画面（タブバーでは「音楽」を選択中に見せる）
+  const selectedTab = activeTab === 'uploaded-music' ? 'home' : activeTab;
 
   useEffect(() => {
-    if (!tabs.some((tab) => tab.id === activeTab)) {
+    if (activeTab !== 'uploaded-music' && !tabs.some((tab) => tab.id === activeTab)) {
       onTabChange('home');
     }
   }, [activeTab, onTabChange, tabs]);
@@ -595,6 +602,25 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
             {onAddUrl && <URLAddCard onAddUrl={onAddUrl} embedded />}
             <GuildStatsCard guildId={guildId} />
           </div>
+
+          {/* ライブラリ（アップロードした曲）。以前はタブだった */}
+          {guildId && (
+            <div className="px-4 sm:px-6">
+              <button
+                type="button"
+                onClick={() => onTabChange('uploaded-music')}
+                data-tour="music-library"
+                className="flex min-h-[56px] w-full items-center gap-3 rounded-2xl bg-secondary/50 px-4 py-2.5 text-left transition-colors hover:bg-secondary"
+              >
+                <Music2 className="h-5 w-5 flex-shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[15px] font-semibold text-foreground">ライブラリ</span>
+                  <span className="block truncate text-[13px] text-muted-foreground">アップロードした曲</span>
+                </span>
+                <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+              </button>
+            </div>
+          )}
 
           {/* Recently Played - Apple Music Style */}
           {reversedHistory.length > 0 && guildId && (
@@ -712,7 +738,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
         </div>
       </div>
     );
-  }, [history, guildId, sections, loading, handleSelectTrackCallback, handleArtistClick, onAddUrl]);
+  }, [history, guildId, sections, loading, handleSelectTrackCallback, handleArtistClick, onAddUrl, onTabChange]);
 
   const allDialog = (() => {
     if (allView === null) return null;
@@ -755,15 +781,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
                 key={tab.id}
                 data-tour={`tab-${tab.id}`}
                 className={`relative flex items-center gap-1.5 px-3 sm:px-5 py-2 text-[13.5px] sm:text-sm font-medium rounded-full transition-all duration-200 whitespace-nowrap ${
-                  activeTab === tab.id
+                  selectedTab === tab.id
                     ? 'bg-white text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
                 onClick={() => onTabChange(tab.id)}
-                whileHover={{ scale: activeTab === tab.id ? 1 : 1.02 }}
+                whileHover={{ scale: selectedTab === tab.id ? 1 : 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 role="tab"
-                aria-selected={activeTab === tab.id}
+                aria-selected={selectedTab === tab.id}
                 aria-controls={`panel-${tab.id}`}
                 id={`tab-${tab.id}`}
                 aria-label={isNew ? `${tab.ariaLabel}（新機能）` : tab.ariaLabel}
@@ -811,9 +837,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
               variants={animations.tabItem}
               className="h-full overflow-auto"
               role="tabpanel"
-              id={`panel-${activeTab}`}
-              aria-labelledby={`tab-${activeTab}`}
+              id={`panel-${selectedTab}`}
+              aria-labelledby={`tab-${selectedTab}`}
             >
+              {activeTab === 'research' && <ResearchScreen guildId={guildId} />}
+
               {activeTab === 'home' && renderHomeContent()}
 
               {activeTab === 'shelf' && (
@@ -823,8 +851,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
               {activeTab === 'games' && <GameShelfScreen guildId={guildId} />}
 
               {activeTab === 'uploaded-music' && (
-                <div className="h-full bg-background">
-                  <UploadedMusicScreen guildId={guildId} />
+                <div className="flex h-full flex-col bg-background">
+                  <div className="px-2 pt-2 sm:px-4">
+                    <button
+                      type="button"
+                      onClick={() => onTabChange('home')}
+                      className="flex h-10 items-center gap-1 rounded-full pl-1.5 pr-3 text-[14px] font-medium text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      音楽
+                    </button>
+                  </div>
+                  <div className="min-h-0 flex-1">
+                    <UploadedMusicScreen guildId={guildId} />
+                  </div>
                 </div>
               )}
             </motion.div>

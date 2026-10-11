@@ -122,7 +122,7 @@ async def http_request(service: str, method: str, path: str, query: Optional[Dic
         if internal_token():
             headers["X-Irina-Internal"] = internal_token()
             headers["X-Irina-Guild"] = guild_id or ""
-            headers["X-Irina-Actor"] = actor_id or ""   # 話しかけた人（募集を立てるとき、その人が立てた扱いになる）
+            headers["X-Irina-Actor"] = actor_id or ""   # 話しかけた人
 
     if method != "GET" and _write_rate_limited():
         return {"error": "書き込み系リクエストが多すぎる（1 分 20 回まで）。少し待ってから"}

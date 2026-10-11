@@ -229,6 +229,31 @@ export interface SceneSong {
   score: number;
 }
 
+// ---- イリーナの調査（Claude が定期的に・頼まれて調べる） ----
+
+export interface ResearchReport {
+  id: number;
+  guild_id: string;
+  kind: 'daily' | 'weekly_new' | 'weekly_music' | 'question' | string;
+  title: string | null;
+  markdown: string | null;
+  sources: { title: string; url: string }[];
+  status: 'running' | 'done' | 'failed';
+  question: string | null;
+  asked_by: string | null;
+  asked_by_name: string | null;
+  model: string | null;
+  sec: number | null;
+  created_at: string;
+  done_at: string | null;
+}
+
+export interface ResearchFeed {
+  reports: ResearchReport[];
+  questions_left: number;
+  daily_limit: number;
+}
+
 export interface DeviceReportResult {
   device: PublicDevice;
   prefs: NotifPrefs;
@@ -314,6 +339,10 @@ export const appApi = {
     call<PushSendResult>('/admin/push', { method: 'POST', body: JSON.stringify(body) }),
   gameBoard: (guildId: string, players?: number) =>
     call<GameBoard>(`/games/${guildId}/board${players ? `?players=${players}` : ''}`),
+  researchFeed: (guildId: string) => call<ResearchFeed>(`/research/${guildId}/feed`),
+  researchItem: (guildId: string, id: number) => call<ResearchReport>(`/research/${guildId}/item/${id}`),
+  researchAsk: (guildId: string, question: string) =>
+    call<ResearchReport>(`/research/${guildId}/ask`, { method: 'POST', body: JSON.stringify({ question }) }),
   sceneSongs: (guildId: string) => call<{ songs: SceneSong[]; updated_at: string | null }>(`/scene/${guildId}/songs`),
   steamStatus: () => call<SteamLink>('/me/steam'),
   linkSteam: (profile: string) =>

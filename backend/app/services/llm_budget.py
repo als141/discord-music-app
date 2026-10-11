@@ -13,6 +13,30 @@ from .. import db
 JST = timezone(timedelta(hours=9))
 _warned: Dict[str, str] = {}
 
+# $/100 万トークン（入力, 出力）。2026-10-11 時点の公式の値。web 検索は 1 回 $0.01
+PRICES: Dict[str, tuple] = {
+    "claude-fable-5-1": (10.0, 50.0),
+    "claude-opus-5-5": (4.0, 20.0),
+    "claude-sonnet-5-5": (2.0, 10.0),
+    "claude-haiku-5-5": (0.10, 0.50),   # 入力 10 万トークン以下のとき（超えると $0.50/$2.50）
+}
+SEARCH_USD = 0.01
+# キャッシュの読み出しは入力の何倍か（書き込みは 5 分の TTL で 1.25 倍）
+CACHE_READ = {"claude-fable-5-1": 0.025, "claude-opus-5-5": 0.05}
+
+
+def cost(model: str, usage) -> float:
+    """Anthropic の usage から費用（キャッシュの書き込み/読み出しと web 検索の回数も足す）"""
+    pin, pout = PRICES.get(model, (4.0, 20.0))
+    if model == "claude-haiku-5-5" and (getattr(usage, "input_tokens", 0) or 0) > 100_000:
+        pin, pout = 0.50, 2.50
+    stu = getattr(usage, "server_tool_use", None)
+    searches = (getattr(stu, "web_search_requests", 0) or 0) if stu else 0
+    cw = getattr(usage, "cache_creation_input_tokens", 0) or 0
+    cr = getattr(usage, "cache_read_input_tokens", 0) or 0
+    return ((getattr(usage, "input_tokens", 0) or 0) / 1e6 * pin + (getattr(usage, "output_tokens", 0) or 0) / 1e6 * pout
+            + cw / 1e6 * pin * 1.25 + cr / 1e6 * pin * CACHE_READ.get(model, 0.1) + searches * SEARCH_USD)
+
 
 def _cap(vendor: str) -> float:
     if vendor == "anthropic":

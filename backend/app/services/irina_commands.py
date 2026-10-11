@@ -8,6 +8,7 @@
 """
 import asyncio
 import json
+import os
 import random
 import re
 from datetime import datetime, timedelta
@@ -234,6 +235,28 @@ def register(tree: app_commands.CommandTree, client: discord.Client) -> None:
     @tree.command(name="界隈", description="配信者がいまやってるゲームと話題の新作を、自分にだけ出す", guilds=guilds)
     async def _scene(interaction: discord.Interaction):
         await scene(interaction)
+
+    # /調べて はテストサーバーでも試せるように（ほかのコマンドはゲーム置き場のサーバーだけ）
+    test_gid = os.getenv("TEST_GUILD_ID") or ""
+    research_guilds = guilds + ([discord.Object(id=int(test_gid))] if test_gid.isdigit() and int(test_gid) not in {g.id for g in guilds} else [])
+
+    @tree.command(name="調べて", description="イリーナ（Claude）がウェブで調べて答える（1 人 1 日 3 回まで、1〜2 分かかります）", guilds=research_guilds)
+    @app_commands.rename(q="質問")
+    @app_commands.describe(q="調べてほしいこと（例: 4人でできる安い協力ホラー / スト6 の次のキャラいつ？）")
+    async def _research(interaction: discord.Interaction, q: str):
+        from ..research import service as research
+        await interaction.response.defer(thinking=True)
+        try:
+            rep = await research.answer_now(str(interaction.guild_id), str(interaction.user.id), interaction.user.display_name, q)
+        except ValueError as e:
+            await interaction.followup.send(str(e))
+            return
+        if not rep or rep.get("status") != "done":
+            await interaction.followup.send("調べられませんでした。少し時間をおいてもう一度どうぞ")
+            return
+        e = research.to_embed(rep)
+        e["title"] = f"🔎 {q.strip()[:200]}"
+        await interaction.followup.send(embed=discord.Embed.from_dict(e), allowed_mentions=discord.AllowedMentions.none())
 
     @tree.command(name="今週", description="今週のドデカ（VC の時間・遊ばれたゲーム・イントロ王など）を自分にだけ出す", guilds=guilds)
     @app_commands.rename(last="先週")

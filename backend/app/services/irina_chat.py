@@ -275,6 +275,8 @@ def _environment_block(message: discord.Message) -> str:
         " / GET /games/{guild_id}/board?players=N（ゲーム置き場: #ゲーム置き場に貼られたゲームと、何人で遊べるか・協力/対戦・価格・セール・無料配布・"
         "いま VC にいる人・誰が何をプレイ中か・最近遊ばれたゲーム・N 人向けの候補 tonight.picks・界隈で話題 scene。「今夜何する？」「4人でできる安い協力ゲーム」「セール中のやつ」「いま流行ってるの」などはここを見て答える）"
         " / GET /scene/{guild_id}/songs（界隈の新曲）"
+        " / GET /research/{guild_id}/feed（イリーナの調査: 毎日 17:30 の「今日の調査」（今夜の大会・配信、よく遊ぶゲームの更新、界隈の話題）・月曜「今週の新作」・金曜「今週の新曲」と、"
+        "メンバーの質問への答え。reports[].markdown は出典リンク付き。「今夜なにある？」「最近の VALORANT どう？」などはまずここを見る。新しく調べてほしいと言われたら、アプリの調査タブか /調べて を案内する）"
         " / GET /openapi.json（全エンドポイント一覧）。"
         " service=\"discord\" は Discord REST API v10（bot トークンで実行）で、path は /guilds/{guild_id}/channels, /channels/{id}/messages?limit=20,"
         " POST /channels/{id}/messages（body {\"content\": \"...\"}）, /guilds/{guild_id}/members/{user_id}, /guilds/{guild_id}/voice-states/{user_id}, /guilds/{guild_id}/members?limit=100 など",

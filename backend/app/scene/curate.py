@@ -14,7 +14,6 @@ from pydantic import BaseModel, Field
 from ..services import game_db as gdb, game_sources as gsrc, llm_budget
 
 MODEL = os.getenv("IRINA_SCENE_CURATOR_MODEL") or "claude-opus-5-5"
-PRICE = {"claude-opus-5-5": (5.0, 25.0), "claude-sonnet-5-5": (2.0, 10.0)}
 
 SYSTEM = """あなたは Discord サーバー「ドデカ」（固定 8 人の友人。夜 19〜23 時に VC で集まって遊ぶ）のゲーム係。
 このメンバーについて分かっていること（会話履歴の集計）:
@@ -57,8 +56,7 @@ async def curate(cands: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     r = await gsrc._client().messages.parse(
         model=MODEL, max_tokens=4000, system=SYSTEM, output_config={"effort": "medium"},
         messages=[{"role": "user", "content": "候補:\n" + "\n".join(lines)}], output_format=Curation)
-    pin, pout = PRICE.get(MODEL, (5.0, 25.0))
-    usd = r.usage.input_tokens / 1e6 * pin + r.usage.output_tokens / 1e6 * pout
+    usd = llm_budget.cost(MODEL, r.usage)
     llm_budget.log("anthropic", MODEL, "curation", usd)
     valid = {c["appid"] for c in cands}
     picks = [p.model_dump() for p in (r.parsed_output.picks if r.parsed_output else []) if p.appid in valid][:8]
