@@ -56,15 +56,6 @@ async function setup(vp) {
     json(r, { appid: r.request().url().split('/').slice(-2)[0], want: body.kind === 'want' && body.on ? ['000000000000000001'] : [], own: body.kind === 'own' && body.on ? ['000000000000000001'] : [] });
   });
   const added = [];
-  const lobbies = [];
-  await context.route(/\/games\/\d+\/lobbies$/, (r) => {
-    const body = JSON.parse(r.request().postData() || '{}');
-    const lb = { id: lobbies.length + 1, guild_id: GUILD, host_id: '000000000000000001', appid: body.appid ?? null, title: null, need: body.need,
-      start_at: new Date().toISOString(), created_at: new Date().toISOString(), closed_at: null, full_notified_at: null,
-      members: [{ user_id: '000000000000000001', status: 'going', source: 'host', at: new Date().toISOString() }], invited: body.invite || [], going: ['000000000000000001'] };
-    lobbies.push({ body, lb });
-    json(r, lb);
-  });
   await context.route(/\/scene\/\d+\/songs/, (r) => json(r, songs || { songs: [], updated_at: null }));
   await context.route(/api\.atoriba\.jp\/add-url/, (r) => {
     added.push(JSON.parse(r.request().postData() || '{}'));
@@ -80,11 +71,11 @@ async function setup(vp) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|ERR_|steamstatic|cdn\.discordapp|ytimg|epicgames|gamerpower/.test(m.text())) errors.push(m.text()); });
-  return { context, page, errors, marks, added, lobbies };
+  return { context, page, errors, marks, added };
 }
 
 for (const vp of [{ name: 'mobile-390x844', width: 390, height: 844, mobile: true }, { name: 'desktop-1376x870', width: 1376, height: 870 }]) {
-  const { context, page, errors, marks, added, lobbies } = await setup(vp);
+  const { context, page, errors, marks, added } = await setup(vp);
   const tag = vp.name;
   try {
     await page.goto(`${BASE}/dev-preview`, { waitUntil: 'domcontentloaded' });
@@ -163,18 +154,6 @@ for (const vp of [{ name: 'mobile-390x844', width: 390, height: 844, mobile: tru
     check(`${tag}: やりたい を付けられる`, marks.length === 1 && marks[0].kind === 'want' && marks[0].on === true, JSON.stringify(marks));
     check(`${tag}: やりたい が押された表示`, (await sheet.getByRole('button', { name: 'やりたい' }).getAttribute('aria-pressed')) === 'true');
     await page.screenshot({ path: join(OUT, `games-${tag}-3-detail.png`) });
-    // 募集: 詳細の「これで募集」→ シート → 3 人 → 募集する → カードが出る
-    await sheet.getByRole('button', { name: 'これで募集' }).click();
-    const ls = page.locator('[data-tour="lobby-sheet"]');
-    await ls.waitFor({ timeout: 8000 });
-    await page.waitForTimeout(500);
-    await ls.getByRole('button', { name: '3人', exact: true }).click();
-    await ls.getByRole('button', { name: /人で募集する/ }).click();
-    await page.waitForTimeout(1200);
-    check(`${tag}: 募集を立てられる（ゲームつき・3 人）`, lobbies.length === 1 && lobbies[0].body.need === 3 && !!lobbies[0].body.appid, JSON.stringify(lobbies[0]?.body));
-    const card = page.locator('[data-tour="games-lobby"]');
-    check(`${tag}: 募集のカードが出る（あと2人）`, (await card.count()) === 1 && (await card.innerText()).includes('あと2人'), (await card.count()) ? (await card.innerText()).slice(0, 60) : '');
-    await page.screenshot({ path: join(OUT, `games-${tag}-5-lobby.png`) });
     await page.keyboard.press('Escape');
     await page.waitForTimeout(400);
     // 案内（お知らせ一覧から）

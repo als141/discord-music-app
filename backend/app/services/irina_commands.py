@@ -1,6 +1,5 @@
-"""ゲーム置き場まわりのスラッシュコマンド（ドデカとテストサーバーだけ）。
+"""ゲーム置き場まわりのスラッシュコマンド（ドデカとテストサーバーだけ）。募集（/募集）は 2026-10-11 にオーナー指定で外した。
 
-- /募集   … 「21時〜 R.E.P.O. あと1人」。返信がそのまま募集のメッセージ（ボタンつき）。そろったらイリーナがメンション
 - /今夜   … いまの VC の人数で遊べる候補を本人にだけ。［投票にする］で Discord の投票をみんなに出せる
 - /チーム分け … いる VC の人をランダムに分ける（前回と同じ組み合わせを避ける）。［VC に分ける］で実際に移動、［戻す］で集める
 - /界隈   … 配信者がいまやってる・話題の新作を本人にだけ
@@ -33,55 +32,12 @@ def _guilds() -> List[discord.Object]:
     return [discord.Object(id=int(g)) for g in sorted(game_shelf.game_guild_ids())]
 
 
-def _lobby():
-    from ..lobby import service as lobby
-    return lobby
-
-
 def _vc_humans(member: discord.abc.User) -> Tuple[Optional[discord.VoiceChannel], List[discord.Member]]:
     vs = getattr(member, "voice", None)
     ch = getattr(vs, "channel", None) if vs else None
     if ch is None:
         return None, []
     return ch, [m for m in ch.members if not m.bot]
-
-
-# ---------------------------------------------------------------- 候補の名前（オートコンプリート）
-
-def _game_choices(guild_id: str, text: str) -> List[app_commands.Choice[str]]:
-    seen: Dict[str, str] = {}
-    appids: List[str] = []
-    # 今夜の候補・界隈の選定・最近遊ばれた・置き場の順
-    from ..scene import curate as cur
-    c = cur.current()
-    appids += [p["appid"] for p in (c or {}).get("picks", [])]
-    appids += [r["appid"] for r in gdb.recent_play(guild_id, 14) if r.get("appid")]
-    appids += [p["appid"] for p in gdb.posts_for_guild(guild_id) if p.get("appid")]
-    for g in gdb.all_games(appids):
-        if g.get("name") and g.get("type") != "demo":
-            seen[g["appid"]] = g["name"]
-    order = {a: i for i, a in enumerate(dict.fromkeys(appids))}
-    t = (text or "").lower()
-    items = sorted(((a, n) for a, n in seen.items() if not t or t in n.lower()), key=lambda x: order.get(x[0], 9999))
-    out = [app_commands.Choice(name="なにかやる（ゲームは集まってから）", value="-")] if not t else []
-    out += [app_commands.Choice(name=n[:100], value=a) for a, n in items[:25 - len(out)]]
-    return out[:25]
-
-
-def _time_choices(text: str) -> List[app_commands.Choice[str]]:
-    now = datetime.now(JST)
-    out = [app_commands.Choice(name="今から", value="now")]
-    for i in range(1, 8):
-        h = (now.hour + i) % 24
-        if 4 <= h < 12:
-            continue
-        out.append(app_commands.Choice(name=f"{h}:00", value=f"{h}:00"))
-        if len(out) >= 6:
-            break
-    t = (text or "").strip()
-    if re.fullmatch(r"\d{1,2}:\d{2}", t):
-        out.insert(1, app_commands.Choice(name=t, value=t))
-    return out[:25]
 
 
 # ---------------------------------------------------------------- /今夜
@@ -257,67 +213,11 @@ async def scene(interaction: discord.Interaction) -> None:
     await interaction.followup.send(embed=e, view=view, ephemeral=True)
 
 
-# ---------------------------------------------------------------- /募集
-
-async def boshu(interaction: discord.Interaction, game: Optional[str], need: int, start: str,
-                calls: List[Optional[discord.Member]]) -> None:
-    lobby = _lobby()
-    gid, uid = str(interaction.guild_id), str(interaction.user.id)
-    appid = game if game and game.isdigit() else None
-    invite = [str(m.id) for m in calls if m is not None and not m.bot and m.id != interaction.user.id]
-    await asyncio.to_thread(gdb.upsert_member, gid, uid, interaction.user.display_name, str(interaction.user.display_avatar.url))
-    try:
-        lb = await asyncio.to_thread(lobby.create, gid, uid, appid=appid, title=None, need=need, start=start or "now",
-                                     invite=invite, origin="discord", discord_channel_id=str(interaction.channel_id))
-    except ValueError as e:
-        await interaction.response.send_message(str(e), ephemeral=True)
-        return
-    embed, view, h = irina_discord.render(lb)
-    content = " ".join(f"<@{u}>" for u in invite) or None
-    await interaction.response.send_message(content=content, embed=embed, view=view,
-                                            allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False))
-    msg = await interaction.original_response()
-    await asyncio.to_thread(lobby.update_fields, lb["id"], discord_message_id=str(msg.id), render_hash=h)
-    print(f"[irina-discord] /募集 #{lb['id']} by {uid} appid={appid} need={need} start={start}")
-
-
-async def close_lobby(interaction: discord.Interaction) -> None:
-    lobby = _lobby()
-    mine = [lb for lb in await asyncio.to_thread(lobby.list_open, str(interaction.guild_id)) if lb["host_id"] == str(interaction.user.id)]
-    if not mine:
-        await interaction.response.send_message("立てている募集はありません", ephemeral=True)
-        return
-    for lb in mine:
-        await asyncio.to_thread(lobby.close, lb["id"], "host")
-    await interaction.response.send_message("締めました", ephemeral=True)
-
-
 # ---------------------------------------------------------------- 登録
 
 def register(tree: app_commands.CommandTree, client: discord.Client) -> None:
     client.add_dynamic_items(PollButton, TeamButton)
     guilds = _guilds()
-
-    @tree.command(name="募集", description="「21時〜 R.E.P.O. あと1人」のように募集を立てる。そろったらイリーナが知らせます", guilds=guilds)
-    @app_commands.rename(game="ゲーム", need="人数", start="時間", call1="呼ぶ1", call2="呼ぶ2", call3="呼ぶ3")
-    @app_commands.describe(game="置き場・界隈のゲーム（選ばなければ「なにかやる」）", need="自分も入れて何人で", start="いつから",
-                           call1="呼びたい人（メンションが飛びます）", call2="呼びたい人", call3="呼びたい人")
-    async def _boshu(interaction: discord.Interaction, need: app_commands.Range[int, 2, 16] = 4, game: Optional[str] = None,
-                     start: Optional[str] = "now", call1: Optional[discord.Member] = None, call2: Optional[discord.Member] = None,
-                     call3: Optional[discord.Member] = None):
-        await boshu(interaction, game, need, start or "now", [call1, call2, call3])
-
-    @_boshu.autocomplete("game")
-    async def _game_ac(interaction: discord.Interaction, current: str):
-        return await asyncio.to_thread(_game_choices, str(interaction.guild_id), current)
-
-    @_boshu.autocomplete("start")
-    async def _time_ac(interaction: discord.Interaction, current: str):
-        return _time_choices(current)
-
-    @tree.command(name="募集を締める", description="自分が立てた募集を締める", guilds=guilds)
-    async def _close(interaction: discord.Interaction):
-        await close_lobby(interaction)
 
     @tree.command(name="今夜", description="いまの VC の人数で遊べるゲームを、自分にだけ出す（投票にもできる）", guilds=guilds)
     @app_commands.rename(players="人数")

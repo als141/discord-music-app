@@ -1,6 +1,6 @@
 """今週のドデカ（週 1 回、日曜 21:00 JST に #一般 へ。/今週 で本人にだけ、いつでも）。
 
-数字は DB から決まった計算で出し（VC の時間・夜更かし・いちばん集まった夜・遊ばれたゲーム・新しく遊んだゲーム・募集・曲・
+数字は DB から決まった計算で出し（VC の時間・夜更かし・いちばん集まった夜・遊ばれたゲーム・新しく遊んだゲーム・曲・
 イントロ王・置き場）、ひとことだけイリーナ（会話と同じキャラ設定、Grok）が書く。キャラ設定の中身は加工しない。
 「自分のプレイ中を出す」をオフにした人のゲームは数えない。VC の時間が合計 1 時間に満たない週は投稿しない（うるさくしない）。
 """
@@ -52,8 +52,6 @@ def stats(guild_id: str, start: datetime, end: datetime) -> Dict[str, Any]:
                           (guild_id, s_iso, e_iso)).fetchall()
         quiz = c.execute("SELECT user_id, SUM(points) FROM quiz_scores WHERE guild_id = ? AND played_at >= ? AND played_at < ? GROUP BY user_id",
                          (guild_id, s_iso, e_iso)).fetchall()
-        lobbies = c.execute("SELECT id, full_notified_at FROM lobbies WHERE guild_id = ? AND created_at >= ? AND created_at < ?",
-                            (guild_id, s_iso, e_iso)).fetchall()
         posts = c.execute("SELECT posted_by_id, COUNT(DISTINCT appid) FROM game_posts WHERE guild_id = ? AND posted_at >= ? AND posted_at < ? "
                           "AND appid IS NOT NULL GROUP BY posted_by_id", (guild_id, s_iso, e_iso)).fetchall()
 
@@ -93,7 +91,7 @@ def stats(guild_id: str, start: datetime, end: datetime) -> Dict[str, Any]:
     enough_history = earliest is not None and earliest <= start - timedelta(days=7)
     new_games = [g for g in gmin if enough_history and firsts.get(g) and _t(firsts[g]) >= start and gmin[g] >= 20
                  and len(gusers[g]) >= 2 and not _STAPLE.search(g)]
-    # 曲・クイズ・募集・置き場
+    # 曲・クイズ・置き場
     req: Dict[str, int] = {}
     for _, _, uid, name in plays:
         if uid:
@@ -116,7 +114,6 @@ def stats(guild_id: str, start: datetime, end: datetime) -> Dict[str, Any]:
         "songs": len(plays),
         "top_requester": (names.get(top_req[0], "だれか"), top_req[1]) if top_req else None,
         "quiz_king": (names.get(quiz_king[0], "だれか"), int(quiz_king[1])) if quiz_king else None,
-        "lobbies": (len(lobbies), sum(1 for x in lobbies if x[1])),
         "shelf": (sum(x[1] for x in posts), names.get(poster[0], "だれか") if poster else None),
     }
 
@@ -134,8 +131,6 @@ def facts_text(s: Dict[str, Any]) -> str:
         lines.append("遊ばれた: " + " / ".join(f"{g} {h} 時間（{n}人）" for g, h, n in s["games"]))
     if s["new_games"]:
         lines.append("新しく遊んだ: " + "、".join(s["new_games"]))
-    if s["lobbies"][0]:
-        lines.append(f"募集 {s['lobbies'][0]} 回・そろった {s['lobbies'][1]} 回")
     if s["songs"]:
         lines.append(f"流れた曲 {s['songs']} 曲" + (f"・いちばん流した: {s['top_requester'][0]}（{s['top_requester'][1]} 曲）" if s["top_requester"] else ""))
     if s["quiz_king"]:
@@ -198,8 +193,6 @@ def embed(s: Dict[str, Any], note: Optional[str]) -> discord.Embed:
             g.append("新しく遊んだ: " + "、".join(s["new_games"]))
         e.add_field(name="ゲーム", value="\n".join(g), inline=False)
     extra = []
-    if s["lobbies"][0]:
-        extra.append(f"募集 {s['lobbies'][0]} 回・そろった {s['lobbies'][1]} 回")
     if s["songs"]:
         extra.append(f"流れた曲 {s['songs']} 曲" + (f"（いちばん流した: {s['top_requester'][0]}）" if s["top_requester"] else ""))
     if s["quiz_king"]:
@@ -228,7 +221,7 @@ async def maybe_post(client: discord.Client) -> None:
         if s["vc_hours"] < 1:
             print(f"[recap] {gid}: VC {s['vc_hours']}h なので出さない")
             continue
-        ch = client.get_channel(int(irina_discord.LOBBY_CHANNELS.get(gid) or 0))
+        ch = client.get_channel(int(irina_discord.GENERAL_CHANNELS.get(gid) or 0))
         if ch is None:
             continue
         note = await comment(s)

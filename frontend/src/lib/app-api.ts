@@ -109,8 +109,6 @@ export interface NotifPrefs {
   gather_min: number;
   /** 自分のプレイ中をゲーム置き場に出すか */
   show_playing: boolean;
-  /** 募集が立ったら通知（既定オン） */
-  game_lobby: boolean;
 }
 
 // ---- ゲーム置き場 ----
@@ -174,7 +172,6 @@ export interface GameBoard {
   members: Record<string, { name: string | null; image: string | null }>;
   updated_at: string;
   scene?: GameScene | null;
-  lobbies?: Lobby[];
 }
 
 // ---- 界隈（配信者・VTuber・ゲームメディア・Steam） ----
@@ -207,26 +204,6 @@ export interface SceneFresh {
   x?: { why: string; posts: { url: string; handle: string; summary: string; likes: number | null }[] } | null;
   /** Claude（Opus 5.5）がドデカ向けに付けた一言 */
   why?: string | null;
-}
-
-export interface Lobby {
-  id: number;
-  guild_id: string;
-  host_id: string;
-  appid: string | null;
-  title: string | null;
-  need: number;
-  start_at: string;
-  created_at: string;
-  closed_at: string | null;
-  full_notified_at: string | null;
-  members: { user_id: string; status: 'going' | 'later'; source: 'host' | 'tap' | 'vc'; at: string }[];
-  invited: string[];
-  going: string[];
-  origin?: string | null;
-  discord_channel_id?: string | null;
-  discord_message_id?: string | null;
-  event_id?: string | null;
 }
 
 export interface GameScene {
@@ -327,11 +304,6 @@ export const appApi = {
     call<PushSendResult>('/admin/push', { method: 'POST', body: JSON.stringify(body) }),
   gameBoard: (guildId: string, players?: number) =>
     call<GameBoard>(`/games/${guildId}/board${players ? `?players=${players}` : ''}`),
-  createLobby: (guildId: string, body: { appid?: string | null; title?: string | null; need: number; start: string; invite: string[] }) =>
-    call<Lobby>(`/games/${guildId}/lobbies`, { method: 'POST', body: JSON.stringify(body) }),
-  joinLobby: (guildId: string, id: number, status: 'going' | 'later' | 'none') =>
-    call<Lobby>(`/games/${guildId}/lobbies/${id}/join`, { method: 'POST', body: JSON.stringify({ status }) }),
-  closeLobby: (guildId: string, id: number) => call<{ closed: true }>(`/games/${guildId}/lobbies/${id}/close`, { method: 'POST' }),
   sceneSongs: (guildId: string) => call<{ songs: SceneSong[]; updated_at: string | null }>(`/scene/${guildId}/songs`),
   steamStatus: () => call<SteamLink>('/me/steam'),
   linkSteam: (profile: string) =>
