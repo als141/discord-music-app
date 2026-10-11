@@ -237,7 +237,7 @@ def register(tree: app_commands.CommandTree, client: discord.Client) -> None:
         await scene(interaction)
 
     # /調べて はテストサーバーでも試せるように（ほかのコマンドはゲーム置き場のサーバーだけ）
-    test_gid = os.getenv("TEST_GUILD_ID") or ""
+    test_gid = os.getenv("TEST_GUILD_ID") or "1080511818658762752"   # Pi の .env には無い
     research_guilds = guilds + ([discord.Object(id=int(test_gid))] if test_gid.isdigit() and int(test_gid) not in {g.id for g in guilds} else [])
 
     @tree.command(name="調べて", description="イリーナ（Claude）がウェブで調べて答える（1 人 1 日 3 回まで、1〜2 分かかります）", guilds=research_guilds)
