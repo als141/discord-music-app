@@ -454,6 +454,29 @@ async def admin_push(body: AdminPushIn, admin: AppUser = Depends(require_admin))
                                   devices=devices, created_by=admin.id, ttl=3 * 24 * 3600)
 
 
+class NotifyGateIn(BaseModel):
+    kind: str = Field(max_length=40)
+    on: bool
+
+
+@router.get("/admin/notify-gate")
+async def admin_notify_gate(_: AppUser = Depends(require_admin)):
+    """自動の通知・投稿のうち、オーナーが許可したもの（既定はすべて送らない）"""
+    from ..services import notify_gate
+    return {"kinds": await asyncio.to_thread(notify_gate.listing)}
+
+
+@router.put("/admin/notify-gate")
+async def admin_notify_gate_set(body: NotifyGateIn, user: AppUser = Depends(require_admin)):
+    from ..services import notify_gate
+    try:
+        await asyncio.to_thread(notify_gate.set_approved, body.kind, body.on)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="unknown kind")
+    print(f"[notify-gate] {body.kind} → {'許可' if body.on else '停止'} (by {user.id})")
+    return {"kinds": await asyncio.to_thread(notify_gate.listing)}
+
+
 @router.get("/admin/push-log")
 async def admin_push_log(limit: int = 30, _: AppUser = Depends(require_admin)):
     return await asyncio.to_thread(db.list_push_log, max(1, min(limit, 100)))

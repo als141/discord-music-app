@@ -221,6 +221,9 @@ async def maybe_post(client: discord.Client) -> None:
         if s["vc_hours"] < 1:
             print(f"[recap] {gid}: VC {s['vc_hours']}h なので出さない")
             continue
+        from . import notify_gate
+        if not notify_gate.allowed("discord_weekly_recap"):
+            continue  # オーナーが許可するまで #一般 には出さない（/今週 ではいつでも見られる）
         ch = client.get_channel(int(irina_discord.GENERAL_CHANNELS.get(gid) or 0))
         if ch is None:
             continue

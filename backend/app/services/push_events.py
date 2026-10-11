@@ -118,6 +118,9 @@ async def _flush_shelf_later(key: str) -> None:
         else:
             body = f"{who} が {n} 曲置きました" + (f"：{titles[0]} ほか" if titles else "")
         body += "。タップでキューに追加できます"
+        from . import notify_gate
+        if not notify_gate.allowed("push_shelf"):
+            return  # オーナーが許可するまで送らない（2026-10-11 オーナー指定）
         devices = await asyncio.to_thread(_targets, "shelf", set(entry["posters"].keys()), SHELF_MIN_INTERVAL_SEC)
         if not devices:
             return
@@ -167,6 +170,9 @@ async def on_now_playing(guild, song) -> None:
         title = song.title or "曲"
         artist = f" — {song.artist}" if getattr(song, "artist", "") else ""
         body = f"「{title}{artist}」" + (f"（{adder} が追加）" if adder else "") + "。VC に入って一緒に聴けます"
+        from . import notify_gate
+        if not notify_gate.allowed("push_vc_music"):
+            return  # オーナーが許可するまで送らない
         devices = await asyncio.to_thread(_targets, "vc_music", exclude, VC_MIN_INTERVAL_SEC)
         if not devices:
             return

@@ -232,6 +232,7 @@ export const AppSettingsSheet: React.FC = () => {
         <Section title="ホーム画面に追加">{installBlock}</Section>
         <Section title="通知">{notifyBlock}</Section>
         <Section title="受け取る通知">
+          <p className="mb-2 text-[12px] leading-relaxed text-muted-foreground">自動の通知は、オーナーが許可した種類だけ届きます。</p>
           <ul className="space-y-3">
             {prefRows.map((row) => {
               const fixed = row.key === 'announce';

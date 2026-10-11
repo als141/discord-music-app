@@ -27,7 +27,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
-import { AdminMember, AdminOverview, AppApiError, appApi, PublicDevice, PushLogEntry } from '@/lib/app-api';
+import { AdminMember, AdminOverview, AppApiError, appApi, NotifyGateKind, PublicDevice, PushLogEntry } from '@/lib/app-api';
+import { Switch } from '@/components/ui/switch';
 import { describeDevice } from '@/lib/pwa/platform';
 import { NOTICES } from '@/lib/guide/notices';
 
@@ -367,6 +368,47 @@ function History({ log }: { log: PushLogEntry[] }) {
   );
 }
 
+/** 自動の通知・投稿の許可（オーナー指定 2026-10-11: オーナーが OK した種類しか送らない。既定はすべてオフ） */
+function NotifyGateCard() {
+  const { toast } = useToast();
+  const [kinds, setKinds] = useState<NotifyGateKind[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    appApi.adminNotifyGate().then((r) => setKinds(r.kinds)).catch(() => setKinds([]));
+  }, []);
+
+  const set = async (kind: string, on: boolean) => {
+    setBusy(kind);
+    try {
+      const r = await appApi.setNotifyGate(kind, on);
+      setKinds(r.kinds);
+    } catch (e) {
+      toast({ title: '保存できませんでした', description: e instanceof Error ? e.message : '', variant: 'destructive' });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (!kinds || kinds.length === 0) return null;
+  return (
+    <div className="rounded-2xl border border-border bg-background p-4" data-tour="admin-notify-gate">
+      <h2 className="text-[15px] font-bold text-foreground">通知の許可</h2>
+      <p className="mt-0.5 text-[12.5px] leading-relaxed text-muted-foreground">
+        自動の通知と Discord への自動投稿は、ここで許可した種類だけ送ります。最初はすべて止まっています（各自の「受け取る通知」がオンでも届きません）。お知らせは下からいつでも送れます。
+      </p>
+      <ul className="mt-3 divide-y divide-border/60">
+        {kinds.map((k) => (
+          <li key={k.kind} className="flex items-center justify-between gap-4 py-2.5">
+            <span className="min-w-0 text-[13.5px] text-foreground">{k.label}</span>
+            <Switch checked={k.on} disabled={busy === k.kind} onCheckedChange={(v) => void set(k.kind, v)} aria-label={k.label} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function AdminDashboard() {
   const [data, setData] = useState<AdminOverview | null>(null);
   const [error, setError] = useState<{ status: number; message: string } | null>(null);
@@ -440,6 +482,7 @@ export function AdminDashboard() {
         ) : (
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
             <div className="min-w-0 space-y-4">
+              <NotifyGateCard />
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <Tile label="メンバー" value={data.summary.members} total={data.summary.members} note="bot を除く" />
                 <Tile label="アプリを使った" value={data.summary.used} total={data.summary.members} />

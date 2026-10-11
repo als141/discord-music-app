@@ -275,6 +275,13 @@ export interface PushLogEntry {
   created_at: string;
 }
 
+/** 自動の通知・投稿のうち、オーナーが許可したもの（既定はすべて送らない） */
+export interface NotifyGateKind {
+  kind: string;
+  label: string;
+  on: boolean;
+}
+
 export interface AdminOverview {
   guild: { id: string; name: string };
   summary: { members: number; used: number; installed: number; push: number; denied: number };
@@ -300,6 +307,9 @@ export const appApi = {
     call<NotifPrefs>('/me/notification-prefs', { method: 'PUT', body: JSON.stringify(prefs) }),
   pushTest: () => call<PushSendResult>('/me/push-test', { method: 'POST' }),
   adminOverview: () => call<AdminOverview>('/admin/overview'),
+  adminNotifyGate: () => call<{ kinds: NotifyGateKind[] }>('/admin/notify-gate'),
+  setNotifyGate: (kind: string, on: boolean) =>
+    call<{ kinds: NotifyGateKind[] }>('/admin/notify-gate', { method: 'PUT', body: JSON.stringify({ kind, on }) }),
   adminPush: (body: { title: string; body: string; url: string; user_ids: string[] }) =>
     call<PushSendResult>('/admin/push', { method: 'POST', body: JSON.stringify(body) }),
   gameBoard: (guildId: string, players?: number) =>

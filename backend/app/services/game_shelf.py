@@ -438,9 +438,9 @@ GATHER_MIN_INTERVAL_SEC = 3 * 3600
 
 
 async def _notify_gather(gid: str, prev: int, rows: List[Dict[str, Any]]) -> None:
-    from . import push
-    if not push.configured():
-        return
+    from . import notify_gate, push
+    if not push.configured() or not notify_gate.allowed("push_game_gather"):
+        return  # オーナーが許可するまで送らない
     count = len(rows)
     in_vc = {r["user_id"] for r in rows}
     prefs = await asyncio.to_thread(db.get_all_notif_prefs)
@@ -470,9 +470,9 @@ async def _notify_gather(gid: str, prev: int, rows: List[Dict[str, Any]]) -> Non
 
 
 async def send_deals_digest() -> None:
-    from . import push
-    if not push.configured():
-        return
+    from . import notify_gate, push
+    if not push.configured() or not notify_gate.allowed("push_game_deals"):
+        return  # オーナーが許可するまで送らない
     since = gdb.kv_get("game_deals_digest_at") or (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
     events = await asyncio.to_thread(gdb.deal_events_since, since)
     await asyncio.to_thread(gdb.kv_set, "game_deals_digest_at", gdb.now_iso())
