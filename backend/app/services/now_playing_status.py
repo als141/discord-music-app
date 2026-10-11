@@ -29,7 +29,7 @@ _vc_tasks: Dict[int, asyncio.Task] = {}
 _vc_disabled_guilds: Set[int] = set()
 _guild_channel: Dict[int, int] = {}                             # guild_id -> 最後にステータスを出した VC
 _presence_lock: Optional[asyncio.Lock] = None
-_idle_override: Optional[str] = None                            # 音楽が鳴っていないときの表示（irina_discord が「募集中…」などを入れる）
+_idle_override: Optional[str] = None                            # 音楽が鳴っていないときの表示（irina_discord が「ゲーム に 3人 · Apex」などを入れる）
 
 
 def is_playing(guild_id: int) -> bool:

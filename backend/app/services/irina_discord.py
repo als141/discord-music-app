@@ -245,7 +245,7 @@ async def _channel_topics(force: bool = False) -> None:
         fresh = scene.get("fresh") or []
         if fresh:
             items = [f"{f['card']['name']}（{f.get('why') or (f['badges'] or [''])[0]}）" for f in fresh[:3]]
-            await _set_topic(guild, TOPIC_GAME_CHANNELS.get(gid), f"今日の界隈（イリーナ）: " + " · ".join(items) + " ｜ /募集 /今夜 /界隈")
+            await _set_topic(guild, TOPIC_GAME_CHANNELS.get(gid), f"今日の界隈（イリーナ）: " + " · ".join(items) + " ｜ /今夜 /界隈")
         top = (songs.get("songs") or [])[:3]
         if top:
             items = [f"{s.get('song') or s['videos'][0]['title']}（{(s.get('artist') or s['videos'][0]['channel']).split('/')[0].strip()}）" for s in top]

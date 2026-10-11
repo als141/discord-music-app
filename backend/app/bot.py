@@ -141,7 +141,7 @@ intents.members = True
 
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
-# イリーナを Discord 側にも: 募集のボタン（再起動後も効く）・VC ステータスの受け取り・/募集 /今夜 /チーム分け /界隈
+# イリーナを Discord 側にも: コマンドのボタン（再起動後も効く）・VC ステータスの受け取り・/今夜 /チーム分け /界隈 /今週
 irina_discord.configure(client)
 irina_commands.register(tree, client)
 
@@ -608,7 +608,7 @@ async def on_ready():
     # ゲーム置き場: 今の VC とプレイ中を取り込み（Steam 名の照合で on_ready を待たせないよう別タスク）、
     # 定期更新（価格・無料配布・同時接続数）を 1 回だけ起動
     client.loop.create_task(game_shelf.seed(client))
-    # 募集を Discord に映す・bot のステータス・VC ステータス・#ゲーム置き場 へのリアクション（15 秒ごと）
+    # bot のステータス・VC ステータス・#ゲーム置き場 へのリアクション・チャンネルトピック（15 秒ごと）
     irina_discord.start()
     global _game_task
     if _game_task is None or _game_task.done():
