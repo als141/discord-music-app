@@ -14,7 +14,7 @@
 
 import type { HomeTab } from './notices';
 
-export type TourId = 'research' | 'shelf' | 'games';
+export type TourId = 'shelf' | 'games';
 
 export interface GuideNavigation {
   homeTab?: HomeTab;
@@ -39,41 +39,6 @@ export interface Tour {
 }
 
 export const TOURS: Record<TourId, Tour> = {
-  research: {
-    id: 'research',
-    title: '調査の使い方',
-    steps: [
-      {
-        id: 'tab',
-        target: 'tab-research',
-        title: 'ここが調査',
-        body: 'イリーナ（Claude）が毎日 17:30 に、今夜の大会や配信・よく遊ぶゲームの更新・界隈の話題をウェブで調べてまとめます。タブを押しても次へ進めます。',
-        interactive: true,
-      },
-      {
-        id: 'daily',
-        target: 'research-daily',
-        skipIf: 'research-empty',
-        navigate: { homeTab: 'research' },
-        title: '今日の調査',
-        body: '今夜（19 時〜翌 2 時）に関係あるものには「今夜」が付きます。項目の最後のリンクが出典です（調べて確かめたものだけ）。月曜は今週の新作、金曜は今週の新曲も届きます。',
-      },
-      {
-        id: 'ask',
-        target: 'research-ask',
-        skipIf: 'research-empty',
-        navigate: { homeTab: 'research' },
-        title: '聞けば調べる',
-        body: '気になることを書くと、1〜2 分で調べて答えます。1 人 1 日 3 回まで。みんなの質問と答えもここに並びます。',
-      },
-      {
-        id: 'done',
-        navigate: { homeTab: 'research' },
-        title: 'Discord でも',
-        body: 'Discord では /調べて で同じように聞けます。ライブラリ（アップロードした曲）は「音楽」タブの中に移りました。',
-      },
-    ],
-  },
   games: {
     id: 'games',
     title: 'ゲーム置き場の使い方',

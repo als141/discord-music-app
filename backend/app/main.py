@@ -160,15 +160,6 @@ async def lifespan(app: FastAPI):
             scene_task.add_done_callback(background_tasks.discard)
         except Exception as e:
             print(f"[scene] 起動に失敗: {type(e).__name__}: {e}")
-        # イリーナの調査（毎日 17:30 の今日の調査・週 2 回の新作/新曲）
-        try:
-            from .research import service as research_service, store as research_store
-            research_store.init()
-            research_task = asyncio.create_task(research_service.scheduler())
-            background_tasks.add(research_task)
-            research_task.add_done_callback(background_tasks.discard)
-        except Exception as e:
-            print(f"[research] 起動に失敗: {type(e).__name__}: {e}")
 
     # アプリケーションで背景タスクを管理できるように設定
     app.state.background_tasks = background_tasks

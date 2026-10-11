@@ -15,10 +15,10 @@
 import type { TourId } from './tours';
 
 /** 現在のアプリのバージョン（ホームのバージョン表示・お知らせ一覧の見出しに使う） */
-export const APP_VERSION = '1.6.0';
+export const APP_VERSION = '1.5.0';
 export const APP_RELEASE_DATE = '2026-10-11';
 
-export type HomeTab = 'research' | 'home' | 'shelf' | 'games' | 'uploaded-music';
+export type HomeTab = 'home' | 'shelf' | 'games' | 'uploaded-music';
 
 export type NoticeKind = 'feature' | 'improvement' | 'info';
 
@@ -55,25 +55,6 @@ export interface Notice {
 
 export const NOTICES: Notice[] = [
   {
-    id: '2026-10-research',
-    publishedAt: '2026-10-11',
-    version: '1.6.0',
-    kind: 'feature',
-    title: 'イリーナの調査',
-    body:
-      '「調査」タブができました。イリーナ（Claude）が毎日 17:30 に、今夜の大会や配信・よく遊ぶゲームの更新・界隈の話題をウェブで調べてまとめます（月曜は今週の新作、金曜は今週の新曲）。聞きたいことを書けば 1〜2 分で調べて答えます（1 人 1 日 3 回。Discord では /調べて）。出典のリンクは、調べて確かめたものだけです。ライブラリ（アップロードした曲）は「音楽」タブの中に移りました。',
-    promo: {
-      until: '2026-11-10',
-      summary: 'イリーナが毎日、今夜の大会やゲームの更新を調べてまとめるようになりました',
-    },
-    actions: [
-      { type: 'tour', tourId: 'research', label: '使い方を見る' },
-      { type: 'open-tab', tab: 'research', label: '開く' },
-    ],
-    newBadge: { tab: 'research' },
-  },
-  {
-    // 紹介カードと NEW は 1.6.0 で「調査」に一本化（一覧には残る）
     id: '2026-10-games',
     publishedAt: '2026-10-11',
     version: '1.5.0',
@@ -81,10 +62,15 @@ export const NOTICES: Notice[] = [
     title: 'ゲーム置き場と曲置き場',
     body:
       'ゲーム置き場と曲置き場が、いちばん前の 2 つのタブになりました。アプリには「界隈で話題」（配信者がいまやってるゲーム・話題の新作）、VC の人数に合わせた「今夜どれ？」、期限つきの無料配布、曲置き場の「界隈の新曲」が並びます。Discord では /今夜（いまの人数で遊べる候補・投票にもできる）、/チーム分け（VC を分けて移動まで）、/イントロ（曲置き場の曲でイントロクイズ）、/界隈、/今週 が使えます。',
+    promo: {
+      until: '2026-11-10',
+      summary: '界隈でいま話題のゲームと新曲が、ゲーム置き場と曲置き場に並ぶようになりました',
+    },
     actions: [
       { type: 'tour', tourId: 'games', label: '使い方を見る' },
       { type: 'open-tab', tab: 'games', label: '開く' },
     ],
+    newBadge: { tab: 'games' },
   },
   {
     id: '2026-09-push',

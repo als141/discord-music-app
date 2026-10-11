@@ -2,7 +2,7 @@
 
 自動で届く通知（アプリのプッシュ）と、自動の Discord 投稿は、種類ごとにオーナーが管理画面で許可するまで送らない。
 許可は app_kv の `notify_approved`（{種類: true}）。既定はすべて送らない。
-ここを通らないもの: オーナー自身が送るお知らせ（管理画面）、本人が押すテスト通知、コマンドへの返事（/今夜 /調べて など）。
+ここを通らないもの: オーナー自身が送るお知らせ（管理画面）、本人が押すテスト通知、コマンドへの返事（/今夜 など）。
 """
 import json
 from typing import Dict, List
@@ -14,9 +14,7 @@ KINDS: Dict[str, str] = {
     "push_vc_music": "VC で音楽が流れ始めたとき（アプリの通知）",
     "push_game_deals": "セール・無料配布のまとめ（アプリの通知、1 日 1 回）",
     "push_game_gather": "VC に人がそろったら（アプリの通知）",
-    "push_research": "頼んだ調べものができたとき（アプリの通知、頼んだ本人だけ）",
     "discord_weekly_recap": "今週のドデカを #一般 に投稿（日曜 21 時）",
-    "discord_research_digest": "イリーナの調査メモを bot チャンネルに投稿（1 日 1 回）",
 }
 _warned: set = set()
 
