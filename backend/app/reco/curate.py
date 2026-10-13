@@ -99,7 +99,9 @@ def _pool_lines(items: List[Dict[str, Any]]) -> str:
         bits.append(it["kind"])
         if it.get("label"):
             bits.append(it["label"])
-        out.append(f"{it['key']} | " + " | ".join(bits) + f" | {it['reason'].replace('{who}', '誰か')}")
+        why = (it["reason"].replace("{who}", "誰か").replace("{A}", it.get("artist") or "")
+               .replace("{S}", it.get("seed_artist") or "最近の曲"))
+        out.append(f"{it['key']} | " + " | ".join(bits) + f" | {why}")
     return "\n".join(out)
 
 

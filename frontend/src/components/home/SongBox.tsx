@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { Meta, SectionHeader } from '@/components/games/ui';
-import { appApi, BoxItem } from '@/lib/app-api';
+import { AppApiError, appApi, BoxItem } from '@/lib/app-api';
 import type { PlayableItem } from '@/utils/api';
 import { RECO_CHANGED } from './RecoPanel';
 
@@ -31,11 +31,15 @@ export function SongBox({ guildId, onEnqueue }: { guildId: string; onEnqueue?: (
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [unavailable, setUnavailable] = useState(false);
 
   const load = useCallback(async () => {
     try {
       setItems((await appApi.recoBox(guildId)).items);
-    } catch {
+      setUnavailable(false);
+    } catch (e) {
+      // おすすめを出していないサーバー（404）では箱ごと出さない
+      if (e instanceof AppApiError && e.status === 404) setUnavailable(true);
       setItems((v) => v ?? []);
     }
   }, [guildId]);
@@ -79,6 +83,7 @@ export function SongBox({ guildId, onEnqueue }: { guildId: string; onEnqueue?: (
     }
   };
 
+  if (unavailable) return null;
   const list = items ?? [];
   const shown = expanded ? list : list.slice(0, FIRST);
   return (

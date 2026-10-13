@@ -111,7 +111,10 @@ async def feed(guild_id: str) -> Dict[str, Any]:
         "curated_at": cur.get("at"),
         "built_at": datetime.now(timezone.utc).isoformat(),
     }
-    _cache[ck] = (time.time(), data)
+    now = time.time()
+    for k in [k for k, (at, _) in _cache.items() if now - at > 600]:
+        _cache.pop(k, None)
+    _cache[ck] = (now, data)
     return data
 
 
