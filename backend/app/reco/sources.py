@@ -4,6 +4,7 @@
 - post: Discord のテキストチャンネルに貼られた曲（shared_links。過去分は scripts/backfill_reco_history.py が全チャンネルから）
 - queue: 2024 年の bot チャンネル（URL を貼るとキューに入った時代）に貼られた曲。全員で聴いた曲なので「懐かしい」の芯
 - box: アプリの曲置き箱
+- skip: イリーナで流れて 30 秒以内に飛ばされた（その曲を 30 日出さず、アーティストを少し下げる）
 ref は出どころごとに一意（"play:<id>" / "msg:<message_id>:<key>" / "box:<id>"）。同じものは二重に入らない
 """
 import os
@@ -51,6 +52,17 @@ def sync(guild_id: str) -> int:
     for lid, ch, mid, vid, uid, uname, at in posts:
         rows.append({"guild_id": guild_id, "key": "yt:" + vid, "kind": post_kind(ch), "user_id": uid, "user_name": uname, "at": at,
                      "channel_id": ch, "ref": f"msg:{mid}:yt:{vid}"})
+    # 30 秒以内に飛ばされた曲（play_history の skipped / listened_sec。曲が終わってから書かれるので、直近 3 日を毎回見る）
+    try:
+        with db._connect() as c:
+            skips = c.execute("SELECT id, video_id, url, added_by_id, played_at FROM play_history WHERE guild_id = ? AND skipped = 1 "
+                              "AND listened_sec < 30 AND played_at >= ?", (guild_id, store.ago(3))).fetchall()
+    except Exception:
+        skips = []   # 列がまだ無い（voice が古い）
+    for pid, vid, url, uid, at in skips:
+        k = key_from_play(vid, url)
+        if k:
+            rows.append({"guild_id": guild_id, "key": k, "kind": "skip", "user_id": uid, "at": at, "ref": f"skip:{pid}"})
     if rows:
         store.ensure_tracks(r["key"] for r in rows)
     n = store.add_events(rows)

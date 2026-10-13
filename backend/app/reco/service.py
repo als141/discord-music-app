@@ -50,7 +50,7 @@ async def _members(guild_id: str) -> Dict[str, Dict[str, Any]]:
 
 def _buckets(p: engine.Profile, vc: Set[str], extra: List[Dict[str, Any]]) -> Dict[str, Dict[str, List[Dict[str, Any]]]]:
     radios = store.radio_all("ytm", p.stats.keys())
-    blocked = _blocked(p.guild_id)
+    blocked = _blocked(p.guild_id) | p.recently_skipped(30)
     trend = store.radio_get("trend", "nico", 30) or []
     classic = store.radio_get("classics", "nico", 60) or []
     related = {k: v for k, v in store.radio_all("nico_rel", [k for k in p.stats if k.startswith("nico:")]).items()}

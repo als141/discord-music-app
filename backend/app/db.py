@@ -64,6 +64,12 @@ def init_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_hist_guild_time ON play_history(guild_id, played_at DESC)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_hist_guild_user ON play_history(guild_id, added_by_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_hist_guild_video ON play_history(guild_id, video_id)")
+        # 曲が終わったとき: 何秒聴いたか・飛ばされたか（ドデカのおすすめが「すぐ飛ばされた曲」を外すのに使う）
+        for col, ddl in (("listened_sec", "REAL"), ("skipped", "INTEGER")):
+            try:
+                conn.execute(f"ALTER TABLE play_history ADD COLUMN {col} {ddl}")
+            except sqlite3.OperationalError:
+                pass  # 既にある
         # デプロイ（bot再起動）をまたいでキュー・再生位置を引き継ぐためのスナップショット
         conn.execute("""
         CREATE TABLE IF NOT EXISTS player_state (
@@ -460,6 +466,13 @@ def add_play_history(
              added_by_id, added_by_name, added_by_image, ts),
         )
         return int(cur.lastrowid)
+
+
+def finish_play_history(history_id: int, listened_sec: float, skipped: bool) -> None:
+    """曲の終わりに、何秒聴いたかと飛ばされたかを残す（同期）"""
+    with _connect() as conn:
+        conn.execute("UPDATE play_history SET listened_sec = ?, skipped = ? WHERE id = ?",
+                     (round(max(0.0, listened_sec), 1), 1 if skipped else 0, history_id))
 
 
 def get_play_history(guild_id: str, limit: int = 50, user_id: Optional[str] = None) -> List[PlayHistoryEntry]:

@@ -416,6 +416,7 @@ class MusicPlayer:
             return
         if self.queue:
             self.queue.popleft()
+        self._finish_history()
         # 再生終了時に現在の曲をリセットする
         self.current = None
         self._song_finished = True
@@ -705,6 +706,7 @@ class MusicPlayer:
     async def skip(self) -> None:
         """現在の曲をスキップする（一時停止中でも効く）"""
         if self.voice_client and (self.voice_client.is_playing() or self.voice_client.is_paused()):
+            self._skipping = True   # 曲の終わり（after）で「飛ばされた」として記録する
             self.voice_client.stop()
         await self.notify_clients(self.guild_id)
 
@@ -768,7 +770,7 @@ class MusicPlayer:
                 if isinstance(added_by, dict):
                     return added_by.get(attr)
                 return getattr(added_by, attr, None)
-            await asyncio.to_thread(
+            self._history_id = await asyncio.to_thread(
                 history_db.add_play_history,
                 self.guild_id,
                 url=song.url,
@@ -780,7 +782,19 @@ class MusicPlayer:
                 added_by_image=_get("image"),
             )
         except Exception as e:
+            self._history_id = None
             logger.warning(f"再生履歴の保存に失敗: {type(e).__name__}: {e}")
+
+    def _finish_history(self) -> None:
+        """曲が終わった（after コールバック）: 何秒聴いたか・飛ばされたかを再生履歴に（非イベントループ文脈から呼ばれる）"""
+        hid = getattr(self, "_history_id", None)
+        skipped = bool(getattr(self, "_skipping", False))
+        self._history_id = None
+        self._skipping = False
+        if not hid:
+            return
+        listened = self.current_position()
+        self.bot.loop.create_task(asyncio.to_thread(history_db.finish_play_history, hid, listened, skipped))
 
     # ------------------------------------------------------------------
     # 状態スナップショット（デプロイ跨ぎのレジューム。db.player_state に保存）

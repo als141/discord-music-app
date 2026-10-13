@@ -104,10 +104,24 @@ class Profile:
         self.user_tokens: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
         self.people: Set[str] = set()
         self.first_at: Optional[datetime] = None
+        self.skipped: Dict[str, datetime] = {}
         for e in evs:
             t = self.tracks.get(e["key"])
             at = _dt(e["at"])
             if not t or not at:
+                continue
+            if e["kind"] == "skip":
+                # すぐ飛ばされた: その再生を数えず、アーティストを少し下げる
+                dec = 0.5 ** (max(0.0, (self.now - at).total_seconds() / 86400) / RECENT_HALF_LIFE)
+                st = self.stats.get(e["key"])
+                if st:
+                    st["n"] = max(0, st["n"] - 1)
+                    st["w"] -= 1.0
+                    st["wr"] -= dec
+                for tok in track_tokens(t):
+                    self.aff_all[tok] -= 1.3
+                    self.aff_recent[tok] -= 1.3 * dec
+                self.skipped[e["key"]] = max(self.skipped.get(e["key"], at), at)
                 continue
             w = KIND_W.get(e["kind"], 0.5)
             if e["kind"] == "post" and e.get("channel_id") in sources.SHELF_CHANNELS:
@@ -133,13 +147,17 @@ class Profile:
                 if e.get("user_id"):
                     self.user_tokens[e["user_id"]][tok] += w
         self.max_all = max(self.aff_all.values(), default=1.0) or 1.0
+        self.stats = {k: st for k, st in self.stats.items() if st["n"] > 0}
         self.max_recent = max(self.aff_recent.values(), default=1.0) or 1.0
 
     def affinity(self, toks: Set[str]) -> Tuple[float, float]:
-        """(全期間, 最近)。0〜1。いちばん強いアーティストを 1 として sqrt で均す"""
-        a = max((self.aff_all.get(t, 0.0) for t in toks), default=0.0)
-        r = max((self.aff_recent.get(t, 0.0) for t in toks), default=0.0)
+        """(全期間, 最近)。0〜1。いちばん強いアーティストを 1 として sqrt で均す（飛ばされてマイナスなら 0）"""
+        a = max(0.0, max((self.aff_all.get(t, 0.0) for t in toks), default=0.0))
+        r = max(0.0, max((self.aff_recent.get(t, 0.0) for t in toks), default=0.0))
         return math.sqrt(a / self.max_all), math.sqrt(r / self.max_recent)
+
+    def recently_skipped(self, days: float = 30) -> Set[str]:
+        return {k for k, at in self.skipped.items() if (self.now - at).total_seconds() < days * 86400}
 
     def days_since(self, key: str) -> Optional[float]:
         st = self.stats.get(key)
