@@ -229,6 +229,54 @@ export interface SceneSong {
   score: number;
 }
 
+// ---- ドデカのおすすめ・曲置き箱（/reco/...） ----
+
+export type RecoMood = 'now' | 'memories' | 'new' | 'nico';
+
+export interface RecoItem {
+  key: string;
+  url: string;
+  title: string;
+  artist: string;
+  thumb: string | null;
+  year: number | null;
+  /** discovery / favorite / memory / throwback / new / trend / related / classic */
+  kind: string;
+  reason: string;
+  sub: string | null;
+  label: string | null;
+  who: { name: string; image: string | null } | null;
+  platform: 'youtube' | 'niconico';
+}
+
+export interface RecoFeed {
+  moods: Record<RecoMood, RecoItem[]>;
+  stats: { songs: number; people: number; since: number | null; box: number; vc: number };
+  taste: string | null;
+  curated_at: string | null;
+  built_at: string;
+}
+
+export interface BoxItem {
+  id: number;
+  key: string;
+  url: string;
+  title: string;
+  artist: string;
+  thumb: string | null;
+  platform: 'youtube' | 'niconico';
+  who: { id: string; name: string | null; image: string | null };
+  added_at: string;
+  mine: boolean;
+}
+
+export interface BoxAddResult {
+  url: string;
+  ok: boolean;
+  error?: string;
+  item?: BoxItem;
+}
+
 export interface DeviceReportResult {
   device: PublicDevice;
   prefs: NotifPrefs;
@@ -314,6 +362,13 @@ export const appApi = {
     call<PushSendResult>('/admin/push', { method: 'POST', body: JSON.stringify(body) }),
   gameBoard: (guildId: string, players?: number) =>
     call<GameBoard>(`/games/${guildId}/board${players ? `?players=${players}` : ''}`),
+  recoFeed: (guildId: string) => call<RecoFeed>(`/reco/${guildId}/feed`),
+  recoBox: (guildId: string) => call<{ items: BoxItem[] }>(`/reco/${guildId}/box`),
+  recoBoxAdd: (guildId: string, text: string) =>
+    call<{ results: BoxAddResult[] }>(`/reco/${guildId}/box`, { method: 'POST', body: JSON.stringify({ text }) }),
+  recoBoxRemove: (guildId: string, id: number) => call<{ ok: boolean }>(`/reco/${guildId}/box/${id}`, { method: 'DELETE' }),
+  recoFeedback: (guildId: string, key: string, action: 'play' | 'dismiss', mood?: RecoMood) =>
+    call<{ ok: boolean }>(`/reco/${guildId}/feedback`, { method: 'POST', body: JSON.stringify({ key, action, mood }) }),
   sceneSongs: (guildId: string) => call<{ songs: SceneSong[]; updated_at: string | null }>(`/scene/${guildId}/songs`),
   steamStatus: () => call<SteamLink>('/me/steam'),
   linkSteam: (profile: string) =>

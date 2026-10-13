@@ -8,6 +8,8 @@ import { useInView } from 'react-intersection-observer';
 import { api, PlayableItem, SharedTrack, SharedTrackChannel, SharedTracksResponse } from '@/utils/api';
 import { Loading } from '@/components/ui/loading';
 import { SceneSongs } from '@/components/home/SceneSongs';
+import { RecoPanel } from '@/components/home/RecoPanel';
+import { SongBox } from '@/components/home/SongBox';
 import { Button } from '@/components/ui/button';
 
 /**
@@ -155,6 +157,8 @@ interface ShelfScreenProps {
   variant?: 'page' | 'embedded';
   /** 「使い方」から画面案内を始める（ログイン後のアプリのみ） */
   onShowGuide?: () => void;
+  /** 画面を切り替えずにキューへ（おすすめ・曲置き箱から。無ければ onSelectTrack） */
+  onEnqueue?: (item: PlayableItem) => void | Promise<void>;
 }
 
 export const ShelfScreen: React.FC<ShelfScreenProps> = ({
@@ -164,6 +168,7 @@ export const ShelfScreen: React.FC<ShelfScreenProps> = ({
   onRequireSignIn,
   variant = 'page',
   onShowGuide,
+  onEnqueue,
 }) => {
   const [data, setData] = useState<SharedTracksResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -334,6 +339,9 @@ export const ShelfScreen: React.FC<ShelfScreenProps> = ({
   const withScene = variant === 'page' && !readOnly && !!guildId;
   const content = (
     <>
+      {/* ドデカのおすすめ → 曲置き箱 → 界隈の新曲 → みんなが貼った（Discord） */}
+      {withScene && <RecoPanel guildId={guildId} onEnqueue={onEnqueue ?? onSelectTrack} />}
+      {withScene && <SongBox guildId={guildId} onEnqueue={onEnqueue ?? onSelectTrack} />}
       {withScene && <SceneSongs guildId={guildId} onSelectTrack={onSelectTrack} />}
       {withScene ? (
         // ゲーム置き場と同じ見出し。説明文は出さず、使い方は見出しの横から

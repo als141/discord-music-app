@@ -817,7 +817,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = React.memo(({
               {activeTab === 'home' && renderHomeContent()}
 
               {activeTab === 'shelf' && (
-                <ShelfScreen guildId={guildId} onSelectTrack={onSelectTrack} onShowGuide={showShelfGuide} />
+                <ShelfScreen guildId={guildId} onSelectTrack={onSelectTrack} onEnqueue={onEnqueue} onShowGuide={showShelfGuide} />
               )}
 
               {activeTab === 'games' && <GameShelfScreen guildId={guildId} />}

@@ -15,8 +15,8 @@
 import type { TourId } from './tours';
 
 /** 現在のアプリのバージョン（ホームのバージョン表示・お知らせ一覧の見出しに使う） */
-export const APP_VERSION = '1.5.0';
-export const APP_RELEASE_DATE = '2026-10-11';
+export const APP_VERSION = '1.6.0';
+export const APP_RELEASE_DATE = '2026-10-14';
 
 export type HomeTab = 'home' | 'shelf' | 'games' | 'uploaded-music';
 
@@ -54,6 +54,24 @@ export interface Notice {
 }
 
 export const NOTICES: Notice[] = [
+  {
+    id: '2026-10-reco',
+    publishedAt: '2026-10-14',
+    version: '1.6.0',
+    kind: 'feature',
+    title: 'ドデカのおすすめと曲置き箱',
+    body:
+      '曲置き場のいちばん上に「ドデカのおすすめ」ができました。ドデカで流れた曲・貼られた曲（2024 年の bot チャンネルの頃から）をもとに、いま聴きたい・懐かしい・新しい・ニコニコの 4 つで選びます。押すとそのまま流れて、合わない曲は×で外せます。下の「曲置き箱」に YouTube・ニコニコなどのリンクを置くと、すぐおすすめの材料になります。',
+    promo: {
+      until: '2026-11-13',
+      summary: 'ドデカで流れた曲から、いま聴きたい曲と懐かしい曲を選ぶようになりました',
+    },
+    actions: [
+      { type: 'tour', tourId: 'reco', label: '使い方を見る' },
+      { type: 'open-tab', tab: 'shelf', label: '開く' },
+    ],
+    newBadge: { tab: 'shelf' },
+  },
   {
     id: '2026-10-games',
     publishedAt: '2026-10-11',

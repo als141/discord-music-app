@@ -14,7 +14,7 @@
 
 import type { HomeTab } from './notices';
 
-export type TourId = 'shelf' | 'games';
+export type TourId = 'reco' | 'shelf' | 'games';
 
 export interface GuideNavigation {
   homeTab?: HomeTab;
@@ -39,6 +39,40 @@ export interface Tour {
 }
 
 export const TOURS: Record<TourId, Tour> = {
+  reco: {
+    id: 'reco',
+    title: 'ドデカのおすすめの使い方',
+    steps: [
+      {
+        id: 'tab',
+        target: 'tab-shelf',
+        title: '曲置き場のいちばん上',
+        body: 'ドデカのおすすめが出るようになりました。タブを押しても次へ進めます。',
+        interactive: true,
+      },
+      {
+        id: 'moods',
+        target: 'reco-moods',
+        navigate: { homeTab: 'shelf' },
+        title: '気分で選ぶ',
+        body: 'いま聴きたい・懐かしい・新しい・ニコニコ。ドデカで流れた曲・貼られた曲（2024 年の bot チャンネルの頃から）をもとに、毎日選び直します。',
+      },
+      {
+        id: 'row',
+        target: 'reco-first',
+        navigate: { homeTab: 'shelf' },
+        title: '押すとそのまま流れる',
+        body: '2 行目がおすすめの理由です。合わない曲は × で外すと、次から出にくくなります。',
+      },
+      {
+        id: 'box',
+        target: 'song-box',
+        navigate: { homeTab: 'shelf' },
+        title: '曲置き箱',
+        body: 'YouTube・ニコニコ・Spotify などのリンクを置くと、すぐおすすめの材料になります。置くほど育ちます。',
+      },
+    ],
+  },
   games: {
     id: 'games',
     title: 'ゲーム置き場の使い方',

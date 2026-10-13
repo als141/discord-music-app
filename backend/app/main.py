@@ -7,6 +7,7 @@ import asyncio
 import json
 from .bot import client, music_players
 from .api import voice_proxy, app_routes
+from .reco import routes as reco_routes
 from .api.voice import router as voice_router, active_connections
 from .services.history import load_history_queue_items
 from .schemas import (
@@ -160,6 +161,16 @@ async def lifespan(app: FastAPI):
             scene_task.add_done_callback(background_tasks.discard)
         except Exception as e:
             print(f"[scene] 起動に失敗: {type(e).__name__}: {e}")
+        # ドデカのおすすめ（曲置き場タブ）。記録の取り込み・曲の素性・ラジオ・1 日 1 回の選曲
+        if os.getenv("IRINA_RECO", "1") != "0":
+            try:
+                from .reco import service as reco_service, store as reco_store
+                reco_store.init()
+                reco_task = asyncio.create_task(reco_service.scheduler())
+                background_tasks.add(reco_task)
+                reco_task.add_done_callback(background_tasks.discard)
+            except Exception as e:
+                print(f"[reco] 起動に失敗: {type(e).__name__}: {e}")
 
     # アプリケーションで背景タスクを管理できるように設定
     app.state.background_tasks = background_tasks
@@ -288,6 +299,7 @@ async def health_check():
 app.include_router(chat.router)
 # Web アプリの端末登録・プッシュ通知・管理画面（bot 不要。web / all で動く）
 app.include_router(app_routes.router)
+app.include_router(reco_routes.router)
 app.include_router(valorant_router)
 app.include_router(realtime_router)
 
