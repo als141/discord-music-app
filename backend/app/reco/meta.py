@@ -66,6 +66,42 @@ def clean_title(t: Optional[str]) -> str:
     return m.group(1).strip() if m else t
 
 
+_DECOR = re.compile(r"(official|music\s*video|lyric|lyrics|audio|\bmv\b|\bpv\b|video|full|ver\.?|version|remaster|\b4k\b|\bhd\b|歌ってみた|うたってみた|cover|カバー|歌詞|公式|リリック|ミュージックビデオ|映像)", re.I)
+
+
+def display_title(title: Optional[str], artist: Optional[str] = None) -> str:
+    """「ヨルシカ - だから僕は音楽を辞めた (Music Video)」「Aqua Timez『虹』Music Video（…）」→ 曲名だけ"""
+    t = clean_title(title)
+    if not t:
+        return t
+    # 【MV】【Official】のような飾りの括弧
+    t = re.sub(r"[【\[]([^】\]]*)[】\]]", lambda m: "" if _DECOR.search(m.group(1)) or not m.group(1).strip() else m.group(0), t)
+    # 末尾の (Music Video) （…ver.）など
+    t = re.sub(r"\s*[（(]([^）)]*)[）)]", lambda m: "" if _DECOR.search(m.group(1)) else m.group(0), t).strip()
+    # 『曲名』「曲名」があればそれ
+    m = re.search(r"[『「]([^』」]{1,40})[』」]", t)
+    if m and (not artist or links.normalize_name(artist)[:4] in links.normalize_name(t)):
+        return m.group(1).strip()
+    # 先頭の「アーティスト - 」「アーティスト / 」
+    for a in links.name_aliases(artist):
+        mm = re.match(r"^(.+?)\s*[-–—/／]\s*(.+)$", t)
+        if mm and links.normalize_name(mm.group(1)) == a:
+            t = mm.group(2)
+            break
+    t = re.sub(r"\s+(MV|PV|Music Video|Official.*)$", "", t, flags=re.I).strip()
+    # 末尾の【チャンネル名】と「歌ってみた・うたった・covered by …」（歌った人は別の行に出る）
+    t2 = re.sub(r"\s*【[^】]*】\s*$", "", t).strip()
+    t = t2 if len(t2) >= 2 else t
+    t2 = re.sub(r"[\s　]*(を)?(歌ってみた|うたってみた|うたった|歌わせていただきました|cover(ed)?(\s+by.*)?|カバー)\s*$", "", t, flags=re.I).strip()
+    t = t2 if len(t2) >= 2 else t
+    # 末尾の「 / アーティスト」
+    mm = re.match(r"^(.+?)\s*[/／]\s*([^/／]+)$", t)
+    if mm and links.normalize_name(mm.group(2)) in set(links.name_aliases(artist)):
+        t = mm.group(1)
+    t = re.sub(r"\s+(MV|PV|Music Video|Official.*)$", "", t, flags=re.I).strip()
+    return t or clean_title(title)
+
+
 # ---------------------------------------------------------------- 1. YouTube Data API
 
 async def fill_youtube(limit: int = 200) -> int:

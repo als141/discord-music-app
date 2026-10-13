@@ -48,6 +48,81 @@ async def _members(guild_id: str) -> Dict[str, Dict[str, Any]]:
         return {}
 
 
+async def _player_state(guild_id: str) -> Dict[str, Any]:
+    """いま流れてる曲とキュー（web は voice プロセスに聞く。ローカルの 1 プロセスなら直接）"""
+    import os
+    try:
+        if (os.getenv("IRINA_ROLE") or "all") == "web":
+            import aiohttp
+            from ..api.voice_proxy import VOICE_UPSTREAM
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2.5)) as s:
+                async with s.get(f"{VOICE_UPSTREAM}/player-state/{guild_id}") as r:
+                    return await r.json() if r.status == 200 else {}
+        from ..api.voice import build_player_state
+        return await build_player_state(guild_id, bump_version=False)
+    except Exception:
+        return {}
+
+
+def _recent_anchors(guild_id: str, p: engine.Profile) -> List[Dict[str, Any]]:
+    """さっき置いた曲（6 時間）・さっき流した曲（3 時間）"""
+    out: List[Dict[str, Any]] = []
+    now = datetime.now(timezone.utc)
+    for b in store.box_list(guild_id, 6):
+        at = engine._dt(b["added_at"])
+        if at and now - at < timedelta(hours=6):
+            # 置いて 10 分以内はいちばんの起点（流れてる曲より上）。置いたことにすぐ反応して見えるように
+            fresh = now - at < timedelta(minutes=10)
+            out.append({"key": b["key"], "src": "box", "w": (1.05 if fresh else 0.95) - 0.1 * len([x for x in out if x["src"] == "box"])})
+    plays = sorted(((st["last"], k) for k, st in p.stats.items() if st["kinds"]["play"] and now - st["last"] < timedelta(hours=3)), reverse=True)
+    for _, k in plays[:2]:
+        out.append({"key": k, "src": "played", "w": 0.6})
+    tr = store.tracks([a["key"] for a in out])
+    for a in out:
+        t = tr.get(a["key"]) or {}
+        a["title"], a["artist"], _ = engine.display_of(t) if t.get("title") else ("", "", None)
+        a["title"] = meta.display_title(a["title"], a["artist"]) or a["title"]
+    return out
+
+
+async def _anchors(guild_id: str, p: engine.Profile) -> List[Dict[str, Any]]:
+    st = await _player_state(guild_id)
+    out: List[Dict[str, Any]] = []
+    cur = st.get("current_track") or {}
+    keys = links.find_keys(cur.get("url") or "")
+    if keys:
+        out.append({"key": keys[0], "src": "playing", "w": 1.0, "title": meta.display_title(cur.get("title"), cur.get("artist")) or "",
+                    "artist": cur.get("artist") or ""})
+    for q in (st.get("queue") or [])[:3]:
+        ks = links.find_keys(q.get("url") or "")
+        if ks:
+            # 読み込み中（pending）の曲も起点にする（押してすぐ変わるように）。題名はまだ無いので見出しには使わない
+            pending = bool(q.get("pending"))
+            out.append({"key": ks[0], "src": "queue", "w": 0.8, "title": "" if pending else (q.get("title") or ""),
+                        "artist": "" if pending else (q.get("artist") or "")})
+    out += await asyncio.to_thread(_recent_anchors, guild_id, p)
+    seen: Set[str] = set()
+    uniq = []
+    for a in sorted(out, key=lambda x: -x["w"]):
+        if a["key"] not in seen:
+            seen.add(a["key"])
+            uniq.append(a)
+    return uniq[:5]
+
+
+async def _anchor_radios(anchors: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+    """起点の「次に流れる曲」。キャッシュが無ければその場で取る（入れた瞬間に変わるように。並列・最大 9 秒）"""
+    async def one(key: str):
+        if key.startswith("nico:"):
+            return key, await asyncio.to_thread(nico.related_cached, key)
+        return key, await meta.radio_for(key)
+    try:
+        res = await asyncio.wait_for(asyncio.gather(*(one(a["key"]) for a in anchors), return_exceptions=True), timeout=9)
+    except asyncio.TimeoutError:
+        res = []
+    return {k: v for r in res if isinstance(r, tuple) for k, v in [r] if v}
+
+
 def _buckets(p: engine.Profile, vc: Set[str], extra: List[Dict[str, Any]]) -> Dict[str, Dict[str, List[Dict[str, Any]]]]:
     radios = store.radio_all("ytm", p.stats.keys())
     blocked = _blocked(p.guild_id) | p.recently_skipped(30)
@@ -60,6 +135,36 @@ def _buckets(p: engine.Profile, vc: Set[str], extra: List[Dict[str, Any]]) -> Di
         "new": engine.build_new(p, radios, blocked),
         "nico": engine.build_nico(p, trend, classic, related, blocked),
     }
+
+
+_TYPE_JA = {"original": "新曲", "mv": "MV", "cover": "歌ってみた", "dance": "踊ってみた", "live": "ライブ"}
+
+
+def _scene_items(p: engine.Profile, blocked: Set[str]) -> List[Dict[str, Any]]:
+    """界隈の新曲（よく貼られる歌い手・配信者の 30 日の新曲・歌ってみた）。前は別の段だったのを一面に混ぜる"""
+    try:
+        from ..scene import service as sc
+        songs = (sc.build_songs() or {}).get("songs") or []
+    except Exception:
+        return []
+    out = []
+    for i, sg in enumerate(songs[:20]):
+        vid = sg.get("play_video_id")
+        top = (sg.get("videos") or [{}])[0]
+        if not vid:
+            continue
+        key = "yt:" + vid
+        if key in blocked or key in p.stats:
+            continue
+        who = engine._clean_channel(top.get("channel"))
+        kind_ja = _TYPE_JA.get(top.get("type") or "", "")
+        reason = f"{sg['people']}人がやってる" if (sg.get("people") or 0) > 1 else (f"{who}の{kind_ja}" if kind_ja else who)
+        it = engine._item(key, sg.get("song") or top.get("title") or "", sg.get("artist") or who,
+                          thumb=top.get("thumb") or links.thumb_of(key), kind="scene", reason=reason, sub=None,
+                          score=3.0 - i * 0.12 + 0.4 * min(sg.get("people") or 1, 4))
+        it["toks"] = engine.tokens_of([], sg.get("artist"), top.get("channel"))
+        out.append(it)
+    return out
 
 
 async def _finish(items: List[Dict[str, Any]], members: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -78,33 +183,48 @@ async def _finish(items: List[Dict[str, Any]], members: Dict[str, Dict[str, Any]
                         .replace("{S}", seed_artist or "最近の曲"))
         it["url"] = links.play_url(it["key"])
         it["platform"] = "niconico" if it["key"].startswith("nico:") else "youtube"
-        for k in ("score", "seed", "artist_id", "seed_artist", "seed_artist_id"):
+        it["tag"] = engine.TAGS.get(it["kind"], "")
+        for k in ("score", "seed", "artist_id", "seed_artist", "seed_artist_id", "toks"):
             it.pop(k, None)
         out.append(it)
     return out
 
 
 async def feed(guild_id: str) -> Dict[str, Any]:
+    """一面に混ぜたおすすめ。いま流れてる曲・キュー・さっき置いた曲が変わると中身も変わる"""
     vc = await asyncio.to_thread(_vc_users, guild_id)
     seed = engine.rotate_seed(guild_id)
-    ck = (guild_id, frozenset(vc), seed)
+    p = await asyncio.to_thread(engine.Profile, guild_id)
+    anchors = await _anchors(guild_id, p)
+    ck = (guild_id, frozenset(vc), seed, tuple(a["key"] for a in anchors), len(p.stats))
     hit = _cache.get(ck)
     if hit and time.time() - hit[0] < CACHE_SEC:
         return hit[1]
-    p = await asyncio.to_thread(engine.Profile, guild_id)
     cur = await asyncio.to_thread(store.kv_json, f"curation:{guild_id}", {}) or {}
-    buckets = await asyncio.to_thread(_buckets, p, vc, cur.get("throwbacks") or [])
+    moods = await asyncio.to_thread(_buckets, p, vc, cur.get("throwbacks") or [])
+    ctx_radios = await _anchor_radios(anchors)
+    blocked = await asyncio.to_thread(_blocked, guild_id) | p.recently_skipped(30)
+    buckets: Dict[str, List[Dict[str, Any]]] = {}
+    for b in moods.values():
+        buckets.update(b)
+    buckets.update(engine.build_context(p, anchors, ctx_radios, blocked))
+    buckets["scene"] = await asyncio.to_thread(_scene_items, p, blocked)
+    engine.lean_to(buckets, engine.neighborhood(anchors, ctx_radios))
+    curated = [c for picks in (cur.get("moods") or {}).values() for c in picks]
+    items = engine.compose("mixed", buckets, curated, seed, limit=18)
     members = await _members(guild_id)
-    moods: Dict[str, List[Dict[str, Any]]] = {}
-    shown: Set[str] = set()
-    for mood in ("now", "new", "memories", "nico"):   # 同じ曲を 2 つの気分に出さない（先に組んだほうに）
-        items = engine.compose(mood, buckets[mood], (cur.get("moods") or {}).get(mood), seed, exclude=shown)
-        shown |= {it["key"] for it in items}
-        moods[mood] = await _finish(items, members)
-    moods = {m: moods[m] for m in engine.MOODS}
+    # 見出しの「〜に合わせて」は、実際に関連が出た起点だけ（出なかった起点の名前を出すと「変わってない」に見える）
+    shown = {it.get("seed") for it in items if it["kind"] == "context"}
+    lead = next((a for a in anchors if a["key"] in shown and (a.get("title") or "").strip()), None)
+    label = None
+    if lead:
+        t = engine._short(lead["title"], 16)
+        label = {"playing": f"流れてる「{t}」に合わせて", "queue": f"キューの「{t}」に合わせて",
+                 "box": f"置いた「{t}」に合わせて", "played": f"さっきの「{t}」に合わせて"}.get(lead["src"])
     box_n = len(await asyncio.to_thread(store.box_list, guild_id, 1000))
     data = {
-        "moods": moods,
+        "items": await _finish(items, members),
+        "context": {"label": label, "anchors": [{"title": a.get("title"), "src": a["src"]} for a in anchors]},
         "stats": {"songs": len(p.stats), "people": len(p.people), "since": p.first_at.astimezone(JST).year if p.first_at else None,
                   "box": box_n, "vc": len(vc)},
         "taste": cur.get("taste"),
@@ -116,6 +236,65 @@ async def feed(guild_id: str) -> Dict[str, Any]:
         _cache.pop(k, None)
     _cache[ck] = (now, data)
     return data
+
+
+# ---------------------------------------------------------------- みんなの置き場（Discord とアプリを 1 本に）
+
+def _shelf_rows(guild_id: str) -> List[Dict[str, Any]]:
+    with db._connect() as c:
+        rows = c.execute("SELECT channel_id, channel_name, video_id, posted_by_id, posted_by_name, posted_by_image, posted_at, title, artist, "
+                         "thumbnail FROM shared_links WHERE guild_id = ? ORDER BY posted_at DESC LIMIT 800", (guild_id,)).fetchall()
+    boxes = store.box_list(guild_id, 300)
+    keys = ["yt:" + r[2] for r in rows] + [b["key"] for b in boxes]
+    tr = store.tracks(keys)
+    out: List[Dict[str, Any]] = []
+    for ch, chn, vid, uid, uname, uimg, at, title, artist, thumb in rows:
+        key = "yt:" + vid
+        t = tr.get(key) or {}
+        if t.get("gone"):
+            continue
+        # #曲置き場 は全部。#一般 などは音楽と判定された曲だけ（切り抜き・ネタ動画を出さない）
+        if ch not in sources.SHELF_CHANNELS and t.get("kind") != "music":
+            continue
+        if t.get("title") and t.get("kind"):
+            ttl, art, _ = engine.display_of(t)
+        else:
+            ttl, art = title or "YouTube 動画", artist or ""
+        out.append({"key": key, "title": meta.display_title(ttl, art) or ttl, "artist": art, "thumb": t.get("thumb") or thumb or links.thumb_of(key),
+                    "source": f"#{chn}" if chn else "Discord", "who_id": uid, "who": {"name": uname, "image": uimg}, "at": at,
+                    "box_id": None, "mine_id": None})
+    for b in boxes:
+        t = tr.get(b["key"]) or {}
+        if t.get("title"):
+            ttl, art, _ = engine.display_of(t)
+        else:
+            ttl, art = b["url"], ""
+        out.append({"key": b["key"], "title": meta.display_title(ttl, art) or ttl, "artist": art,
+                    "thumb": t.get("thumb") or links.thumb_of(b["key"]), "source": "アプリ", "who_id": b["added_by_id"],
+                    "who": {"name": b["added_by_name"], "image": b["added_by_image"]}, "at": b["added_at"], "box_id": b["id"],
+                    "mine_id": b["added_by_id"]})
+    out.sort(key=lambda x: x["at"] or "", reverse=True)
+    seen: Set[str] = set()
+    uniq = []
+    for it in out:
+        if it["key"] in seen:
+            continue
+        seen.add(it["key"])
+        uniq.append(it)
+    return uniq
+
+
+async def shelf(guild_id: str, me: Optional[str], limit: int = 200) -> Dict[str, Any]:
+    rows = await asyncio.to_thread(_shelf_rows, guild_id)
+    members = await _members(guild_id)
+    items = []
+    for it in rows[:limit]:
+        m = members.get(it["who_id"] or "")
+        items.append({"key": it["key"], "url": links.play_url(it["key"]), "title": it["title"], "artist": it["artist"],
+                      "thumb": it["thumb"], "source": it["source"], "platform": "niconico" if it["key"].startswith("nico:") else "youtube",
+                      "who": {"name": (m or {}).get("name") or it["who"]["name"] or "だれか", "image": (m or {}).get("avatar") or it["who"]["image"]},
+                      "at": it["at"], "box_id": it["box_id"], "mine": bool(me and it["mine_id"] == me)})
+    return {"items": items, "total": len(rows)}
 
 
 # ---------------------------------------------------------------- 曲置き箱
@@ -160,6 +339,7 @@ async def _fill_one(key: str, from_box: bool) -> Dict[str, Any]:
 
 def _box_view(row: Dict[str, Any], t: Dict[str, Any], me: Optional[str] = None) -> Dict[str, Any]:
     title, artist, _ = engine.display_of(t) if t.get("title") else (row["url"], "", None)
+    title = meta.display_title(title, artist) or title
     return {"id": row["id"], "key": row["key"], "url": links.play_url(row["key"]), "title": title, "artist": artist,
             "thumb": t.get("thumb") or links.thumb_of(row["key"]),
             "platform": "niconico" if row["key"].startswith("nico:") else "youtube",

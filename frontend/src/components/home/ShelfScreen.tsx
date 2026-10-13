@@ -7,9 +7,9 @@ import { Info, Play } from 'lucide-react';
 import { useInView } from 'react-intersection-observer';
 import { api, PlayableItem, SharedTrack, SharedTrackChannel, SharedTracksResponse } from '@/utils/api';
 import { Loading } from '@/components/ui/loading';
-import { SceneSongs } from '@/components/home/SceneSongs';
-import { RecoPanel } from '@/components/home/RecoPanel';
-import { SongBox } from '@/components/home/SongBox';
+import { PlaceBar } from '@/components/shelf/PlaceBar';
+import { RecoFeed } from '@/components/shelf/RecoFeed';
+import { ShelfList } from '@/components/shelf/ShelfList';
 import { Button } from '@/components/ui/button';
 
 /**
@@ -170,6 +170,8 @@ export const ShelfScreen: React.FC<ShelfScreenProps> = ({
   onShowGuide,
   onEnqueue,
 }) => {
+  // ログイン後のタブ: 曲を置く → いまのおすすめ（一面） → みんなの置き場（Discord とアプリを 1 本に）
+  const fullPage = variant === 'page' && !readOnly && !!guildId;
   const [data, setData] = useState<SharedTracksResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -177,7 +179,7 @@ export const ShelfScreen: React.FC<ShelfScreenProps> = ({
   const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
-    if (!guildId) {
+    if (!guildId || fullPage) {
       setData(null);
       setLoading(false);
       return;
@@ -213,7 +215,7 @@ export const ShelfScreen: React.FC<ShelfScreenProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [guildId, reloadToken]);
+  }, [guildId, reloadToken, fullPage]);
 
   // 初期表示は「曲置き場」チャンネルに絞る（あれば）。このタブの主役は曲置き場で、「一般」は補助
   const initialChannelPickedRef = useRef(false);
@@ -242,6 +244,20 @@ export const ShelfScreen: React.FC<ShelfScreenProps> = ({
   }, [data, channelId]);
 
   const totalCount = data?.tracks.length ?? 0;
+
+  const enqueue = onEnqueue ?? onSelectTrack;
+  if (fullPage && guildId) {
+    return (
+      <div className="h-full overflow-y-auto overflow-x-hidden bg-background">
+        <div className="mx-auto max-w-[1080px] px-4 py-4 sm:px-6 sm:py-6">
+          <PlaceBar guildId={guildId} onEnqueue={enqueue} />
+          <RecoFeed guildId={guildId} onEnqueue={enqueue} />
+          <ShelfList guildId={guildId} onEnqueue={enqueue} onShowGuide={onShowGuide} />
+        </div>
+      </div>
+    );
+  }
+
 
   const body = (() => {
     if (!guildId) {
@@ -339,10 +355,6 @@ export const ShelfScreen: React.FC<ShelfScreenProps> = ({
   const withScene = variant === 'page' && !readOnly && !!guildId;
   const content = (
     <>
-      {/* ドデカのおすすめ → 曲置き箱 → 界隈の新曲 → みんなが貼った（Discord） */}
-      {withScene && <RecoPanel guildId={guildId} onEnqueue={onEnqueue ?? onSelectTrack} />}
-      {withScene && <SongBox guildId={guildId} onEnqueue={onEnqueue ?? onSelectTrack} />}
-      {withScene && <SceneSongs guildId={guildId} onSelectTrack={onSelectTrack} />}
       {withScene ? (
         // ゲーム置き場と同じ見出し。説明文は出さず、使い方は見出しの横から
         <div className="mb-3 flex items-end justify-between gap-3">

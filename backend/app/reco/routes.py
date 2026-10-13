@@ -1,6 +1,7 @@
 """ドデカのおすすめ・曲置き箱の API（web プロセス）。すべて本人のトークン＋そのサーバーのメンバーだけ。
 
-GET    /reco/{guild}/feed              4 つの気分（now / memories / new / nico）
+GET    /reco/{guild}/feed              一面のおすすめ（いま流れてる曲・キュー・さっき置いた曲に合わせて変わる）
+GET    /reco/{guild}/shelf             みんなの置き場（Discord とアプリを新しい順に 1 本で）
 GET    /reco/{guild}/box               曲置き箱（新しい順）
 POST   /reco/{guild}/box               {"text": "リンク（10 個まで）"}
 DELETE /reco/{guild}/box/{id}          置いた人か管理者だけ
@@ -28,6 +29,13 @@ async def _check(guild_id: str, user: AppUser) -> None:
 async def reco_feed(guild_id: str, user: AppUser = Depends(current_user)):
     await _check(guild_id, user)
     return await service.feed(guild_id)
+
+
+@router.get("/reco/{guild_id}/shelf")
+async def reco_shelf(guild_id: str, limit: int = 200, user: AppUser = Depends(current_user)):
+    """みんなの置き場: Discord の #曲置き場（と #一般 の音楽）とアプリで置いた曲を、新しい順に 1 本で"""
+    await _check(guild_id, user)
+    return await service.shelf(guild_id, user.id, max(1, min(limit, 400)))
 
 
 @router.get("/reco/{guild_id}/box")

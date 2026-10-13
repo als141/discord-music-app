@@ -171,13 +171,26 @@ class Profile:
 
 # ---------------------------------------------------------------- 候補
 
+def _thumb(thumb: Optional[str], key: str) -> str:
+    """YouTube Music の小さいジャケット（w60-h60）は大きくする。無ければ動画のサムネ"""
+    if thumb and "googleusercontent" in thumb:
+        return re.sub(r"=w\d+-h\d+", "=w240-h240", thumb)
+    return thumb or links.thumb_of(key)
+
+
+def _clean(title: str, artist: str) -> str:
+    from .meta import display_title
+    return display_title(title, artist) or title
+
+
 def _item(key: str, title: str, artist: str, *, artist_id: Optional[str] = None, thumb: Optional[str] = None,
           year: Optional[int] = None, kind: str, reason: str, sub: Optional[str] = None, score: float, who: Optional[str] = None,
           seed: Optional[str] = None, label: Optional[str] = None, seed_artist: Optional[Tuple[Optional[str], str]] = None) -> Dict[str, Any]:
     """reason の {A} はこの曲のアーティスト、{S} は種の曲のアーティスト、{who} は who の名前（service._finish が日本語名で埋める）"""
-    return {"key": key, "title": title, "artist": artist, "artist_id": artist_id, "thumb": thumb or links.thumb_of(key),
+    return {"key": key, "title": _clean(title, artist), "artist": artist, "artist_id": artist_id, "thumb": _thumb(thumb, key),
             "year": year, "kind": kind, "reason": reason, "sub": sub, "score": score, "who": who, "seed": seed, "label": label,
-            "seed_artist_id": (seed_artist or (None, ""))[0], "seed_artist": (seed_artist or (None, ""))[1]}
+            "seed_artist_id": (seed_artist or (None, ""))[0], "seed_artist": (seed_artist or (None, ""))[1],
+            "toks": tokens_of([{"name": artist, "id": artist_id}]) if artist else set()}
 
 
 _LABEL = {"cover": "歌ってみた", "live": "ライブ", "dance": "踊ってみた"}
@@ -186,8 +199,10 @@ _LABEL = {"cover": "歌ってみた", "live": "ライブ", "dance": "踊って�
 def _track_item(p: Profile, key: str, *, kind: str, reason: str, sub: Optional[str], score: float, who: Optional[str] = None) -> Dict[str, Any]:
     t = p.tracks[key]
     title, artist, aid = display_of(t)
-    return _item(key, title, artist, artist_id=aid, thumb=t.get("thumb"), year=t.get("year"), kind=kind, reason=reason, sub=sub,
-                 score=score, who=who, label=_LABEL.get(t.get("song_type") or ""))
+    it = _item(key, title, artist, artist_id=aid, thumb=t.get("thumb"), year=t.get("year"), kind=kind, reason=reason, sub=sub,
+               score=score, who=who, label=_LABEL.get(t.get("song_type") or ""))
+    it["toks"] = track_tokens(t)
+    return it
 
 
 def _top_user(st: Dict[str, Any], prefer: Set[str]) -> Optional[str]:
@@ -430,7 +445,77 @@ def build_nico(p: Profile, trend: List[Dict[str, Any]], classic: List[Dict[str, 
     return {"trend": out, "related": rel, "classic": old}
 
 
-# 気分ごとの混ぜ方（枠の名前の並び。足りない枠は飛ばして次へ）
+# ---------------------------------------------------------------- いまの起点（流れてる曲・キュー・さっき置いた曲）
+
+_ANCHOR_REASON = {"playing": "流れてる「{t}」から", "queue": "次の「{t}」とつながる", "box": "置いた「{t}」から",
+                  "played": "さっきの「{t}」から"}
+
+
+def _short(t: str, n: int = 12) -> str:
+    t = re.sub(r"[【\[(（].*?[】\])）]", "", t or "").strip() or (t or "")
+    t = t.split(" / ")[0].split("／")[0].strip()
+    return t if len(t) <= n else t[: n - 1] + "…"
+
+
+def build_context(p: Profile, anchors: List[Dict[str, Any]], radios: Dict[str, List[Dict[str, Any]]], blocked: Set[str]) -> Dict[str, List[Dict[str, Any]]]:
+    """いま流れてる曲・キュー・さっき置いた/流した曲の「次に流れる曲」。ここがいちばん上に来る（入れた瞬間に変わる）"""
+    out: List[Dict[str, Any]] = []
+    skip = {a["key"] for a in anchors}
+    for a in anchors:
+        for pos, it in enumerate((radios.get(a["key"]) or [])[:25]):
+            k = it["key"]
+            if k in blocked or k in skip:
+                continue
+            ds = p.days_since(k)
+            if ds is not None and ds < 2:
+                continue  # きのう今日流れた
+            if it.get("duration") and it["duration"] > 15 * 60:
+                continue
+            arts = it.get("artists") or []
+            if k.startswith("nico:"):
+                title, artist = _nico_title(it["title"])
+                aid = None
+            else:
+                title, artist, aid = it["title"], ", ".join(x["name"] for x in arts[:1]) or "？", (arts[0].get("id") if arts else None)
+            a_all, _ = p.affinity(tokens_of(arts))
+            s = a["w"] * 4.0 / (1.0 + pos / 6.0) + 0.5 * a_all
+            x = _item(k, title, artist, artist_id=aid, thumb=it.get("thumb"), year=it.get("year"), kind="context",
+                      reason=_ANCHOR_REASON.get(a["src"], "「{t}」から").replace("{t}", _short(a.get("title") or "")), sub=None,
+                      score=s, seed=a["key"])
+            x["toks"] = tokens_of(arts) | x["toks"]
+            out.append(x)
+    return {"context": out}
+
+
+def neighborhood(anchors: List[Dict[str, Any]], radios: Dict[str, List[Dict[str, Any]]]) -> Set[str]:
+    """起点の曲とその「次に流れる曲」のアーティスト。ほかの枠の曲も、ここに近いものを上げる（全体がいまに寄る）"""
+    toks: Set[str] = set()
+    for a in anchors:
+        toks |= tokens_of([], a.get("artist"))
+        for it in (radios.get(a["key"]) or [])[:15]:
+            toks |= tokens_of(it.get("artists") or [])
+    return toks
+
+
+def lean_to(buckets: Dict[str, List[Dict[str, Any]]], neigh: Set[str], weight: float = 1.5) -> None:
+    if not neigh:
+        return
+    for name, items in buckets.items():
+        if name == "context":
+            continue
+        for it in items:
+            if it.get("toks") and it["toks"] & neigh:
+                it["score"] += weight
+
+
+# 一面に混ぜるときの並び（足りない枠は飛ばして次へ）。いまの起点が無いときは「好みから」が上に来る
+MIXED = ["context", "context", "memory", "context", "new", "scene", "discovery", "context", "favorite", "trend", "memory",
+         "context", "scene", "discovery", "throwback", "new", "related", "memory", "classic", "discovery", "favorite", "context"]
+
+TAGS = {"context": "続けて", "discovery": "好みから", "favorite": "定番", "memory": "懐かしい", "throwback": "懐かしい",
+        "new": "新曲", "scene": "界隈", "trend": "ニコニコ", "related": "ニコニコ", "classic": "ニコニコ"}
+
+# 気分ごとの混ぜ方（Claude の選曲の候補づくりに使う）
 PATTERNS = {
     "now": ["discovery", "discovery", "favorite"],
     "memories": ["memory", "memory", "throwback"],
@@ -460,7 +545,7 @@ def compose(mood: str, buckets: Dict[str, List[Dict[str, Any]]], curated: Option
     cur = {c["key"]: (i, c.get("reason")) for i, c in enumerate(curated or [])}
     rnd = random.Random(seed)
     queues = {name: _rank(b, cur, rnd) for name, b in buckets.items()}
-    order = PATTERNS.get(mood) or list(buckets)
+    order = MIXED if mood == "mixed" else (PATTERNS.get(mood) or list(buckets))
     out: List[Dict[str, Any]] = []
     seen: Set[str] = set(exclude or ())
     arts: Counter = Counter()
@@ -474,7 +559,8 @@ def compose(mood: str, buckets: Dict[str, List[Dict[str, Any]]], curated: Option
         while q:
             it = q.pop(0)
             a = links.normalize_name(it.get("artist")) or it["key"]
-            if it["key"] in seen or arts[a] >= per_artist or (it.get("seed") and seeds_used[it["seed"]] >= per_seed):
+            cap = per_seed + 3 if it["kind"] == "context" else per_seed   # いまの起点からは多めに
+            if it["key"] in seen or arts[a] >= per_artist or (it.get("seed") and seeds_used[it["seed"]] >= cap):
                 continue
             seen.add(it["key"])
             arts[a] += 1

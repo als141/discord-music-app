@@ -229,9 +229,7 @@ export interface SceneSong {
   score: number;
 }
 
-// ---- ドデカのおすすめ・曲置き箱（/reco/...） ----
-
-export type RecoMood = 'now' | 'memories' | 'new' | 'nico';
+// ---- ドデカのおすすめ・置き場（/reco/...） ----
 
 export interface RecoItem {
   key: string;
@@ -240,8 +238,10 @@ export interface RecoItem {
   artist: string;
   thumb: string | null;
   year: number | null;
-  /** discovery / favorite / memory / throwback / new / trend / related / classic */
+  /** context / discovery / favorite / memory / throwback / new / scene / trend / related / classic */
   kind: string;
+  /** 行の札（続けて・懐かしい・新曲・界隈・ニコニコ・定番・好みから） */
+  tag: string;
   reason: string;
   sub: string | null;
   label: string | null;
@@ -250,11 +250,28 @@ export interface RecoItem {
 }
 
 export interface RecoFeed {
-  moods: Record<RecoMood, RecoItem[]>;
+  items: RecoItem[];
+  /** 「流れてる『○○』に合わせて」。いまの起点が無ければ null */
+  context: { label: string | null; anchors: { title: string | null; src: string }[] };
   stats: { songs: number; people: number; since: number | null; box: number; vc: number };
   taste: string | null;
   curated_at: string | null;
   built_at: string;
+}
+
+export interface ShelfItem {
+  key: string;
+  url: string;
+  title: string;
+  artist: string;
+  thumb: string | null;
+  /** 「#曲置き場」「#一般」「アプリ」 */
+  source: string;
+  platform: 'youtube' | 'niconico';
+  who: { name: string; image: string | null };
+  at: string;
+  box_id: number | null;
+  mine: boolean;
 }
 
 export interface BoxItem {
@@ -363,11 +380,12 @@ export const appApi = {
   gameBoard: (guildId: string, players?: number) =>
     call<GameBoard>(`/games/${guildId}/board${players ? `?players=${players}` : ''}`),
   recoFeed: (guildId: string) => call<RecoFeed>(`/reco/${guildId}/feed`),
+  recoShelf: (guildId: string) => call<{ items: ShelfItem[]; total: number }>(`/reco/${guildId}/shelf`),
   recoBox: (guildId: string) => call<{ items: BoxItem[] }>(`/reco/${guildId}/box`),
   recoBoxAdd: (guildId: string, text: string) =>
     call<{ results: BoxAddResult[] }>(`/reco/${guildId}/box`, { method: 'POST', body: JSON.stringify({ text }) }),
   recoBoxRemove: (guildId: string, id: number) => call<{ ok: boolean }>(`/reco/${guildId}/box/${id}`, { method: 'DELETE' }),
-  recoFeedback: (guildId: string, key: string, action: 'play' | 'dismiss', mood?: RecoMood) =>
+  recoFeedback: (guildId: string, key: string, action: 'play' | 'dismiss', mood?: string) =>
     call<{ ok: boolean }>(`/reco/${guildId}/feedback`, { method: 'POST', body: JSON.stringify({ key, action, mood }) }),
   sceneSongs: (guildId: string) => call<{ songs: SceneSong[]; updated_at: string | null }>(`/scene/${guildId}/songs`),
   steamStatus: () => call<SteamLink>('/me/steam'),
