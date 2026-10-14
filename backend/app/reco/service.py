@@ -290,10 +290,15 @@ async def shelf(guild_id: str, me: Optional[str], limit: int = 200) -> Dict[str,
     items = []
     for it in rows[:limit]:
         m = members.get(it["who_id"] or "")
+        mine = bool(me and it["mine_id"] == me)
+        if it["box_id"]:
+            # 曲置き箱（アプリ）は誰が置いたかを出さない。Discord に貼った曲は Discord でも名前付きで見えているので出す
+            who = {"name": "自分", "image": None} if mine else None
+        else:
+            who = {"name": (m or {}).get("name") or it["who"]["name"] or "だれか", "image": (m or {}).get("avatar") or it["who"]["image"]}
         items.append({"key": it["key"], "url": links.play_url(it["key"]), "title": it["title"], "artist": it["artist"],
                       "thumb": it["thumb"], "source": it["source"], "platform": "niconico" if it["key"].startswith("nico:") else "youtube",
-                      "who": {"name": (m or {}).get("name") or it["who"]["name"] or "だれか", "image": (m or {}).get("avatar") or it["who"]["image"]},
-                      "at": it["at"], "box_id": it["box_id"], "mine": bool(me and it["mine_id"] == me)})
+                      "who": who, "at": it["at"], "box_id": it["box_id"], "mine": mine})
     return {"items": items, "total": len(rows)}
 
 
@@ -343,7 +348,8 @@ def _box_view(row: Dict[str, Any], t: Dict[str, Any], me: Optional[str] = None) 
     return {"id": row["id"], "key": row["key"], "url": links.play_url(row["key"]), "title": title, "artist": artist,
             "thumb": t.get("thumb") or links.thumb_of(row["key"]),
             "platform": "niconico" if row["key"].startswith("nico:") else "youtube",
-            "who": {"id": row["added_by_id"], "name": row["added_by_name"], "image": row["added_by_image"]},
+            # 曲置き箱は誰が置いたかを出さない（自分の分だけ「自分」）
+            "who": {"id": row["added_by_id"], "name": "自分", "image": None} if me and me == row["added_by_id"] else None,
             "added_at": row["added_at"], "mine": bool(me and me == row["added_by_id"])}
 
 

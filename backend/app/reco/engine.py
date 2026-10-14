@@ -128,12 +128,14 @@ class Profile:
                 w = SHELF_POST_W
             age = max(0.0, (self.now - at).total_seconds() / 86400)
             dec = 0.5 ** (age / RECENT_HALF_LIFE)
-            st = self.stats.setdefault(e["key"], {"n": 0, "users": Counter(), "first": at, "last": at, "kinds": Counter(),
-                                                  "w": 0.0, "wr": 0.0, "events": []})
+            st = self.stats.setdefault(e["key"], {"n": 0, "users": Counter(), "named": Counter(), "first": at, "last": at,
+                                                  "kinds": Counter(), "w": 0.0, "wr": 0.0, "events": []})
             st["n"] += 1
             if e.get("user_id"):
                 st["users"][e["user_id"]] += 1
                 self.people.add(e["user_id"])
+                if e["kind"] != "box":
+                    st["named"][e["user_id"]] += 1   # 曲置き箱は「誰が置いたか」を出さない（オーナー指定 2026-10-15）
             st["first"] = min(st["first"], at)
             st["last"] = max(st["last"], at)
             st["kinds"][e["kind"]] += 1
@@ -144,7 +146,7 @@ class Profile:
             for tok in track_tokens(t):
                 self.aff_all[tok] += w
                 self.aff_recent[tok] += w * dec
-                if e.get("user_id"):
+                if e.get("user_id") and e["kind"] != "box":
                     self.user_tokens[e["user_id"]][tok] += w
         self.max_all = max(self.aff_all.values(), default=1.0) or 1.0
         self.stats = {k: st for k, st in self.stats.items() if st["n"] > 0}
@@ -206,13 +208,18 @@ def _track_item(p: Profile, key: str, *, kind: str, reason: str, sub: Optional[s
 
 
 def _top_user(st: Dict[str, Any], prefer: Set[str]) -> Optional[str]:
-    us = st["users"]
+    """その曲をいちばん流した・貼った人（曲置き箱に置いただけの人は出さない）"""
+    us = st["named"]
     if not us:
         return None
     for u, _ in us.most_common():
         if u in prefer:
             return u
     return us.most_common(1)[0][0]
+
+
+def _passive(st: Dict[str, Any]) -> str:
+    return {"流した": "流れた", "置いた": "置かれた", "貼った": "貼られた"}[_verb(st)]
 
 
 def _verb(st: Dict[str, Any]) -> str:
@@ -339,8 +346,10 @@ def build_memories(p: Profile, vc: Set[str], radios: Dict[str, List[Dict[str, An
         last = st["last"].astimezone(JST)
         if st["n"] >= 3:
             reason = f"{st['first'].astimezone(JST).year}年{_season(st['first'])}によく流れた · {st['n']}回"
-        else:
+        elif who:
             reason = f"{last.year}年{last.month}月に{{who}}が{_verb(st)}"
+        else:
+            reason = f"{last.year}年{last.month}月に{_passive(st)}"
         mem.append(_track_item(p, k, kind="memory", reason=reason, sub=gap_text(ds), score=s, who=who))
     # 10 年以上前の名曲: 思い出の曲・定番を種にしたラジオから、古い年のもの
     old_year = datetime.now(timezone.utc).year - 10

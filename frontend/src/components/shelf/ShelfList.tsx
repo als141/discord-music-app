@@ -9,7 +9,8 @@ import { ago, dots, SongRow } from './SongRow';
 
 /**
  * 「みんなの置き場」。Discord の #曲置き場（と #一般 に貼られた音楽）とアプリで置いた曲を、新しい順に 1 本で。
- * どこから来たかは 3 行目に小さく（#曲置き場・#一般・アプリ）。自分がアプリで置いた曲は × で取り出せる
+ * どこから来たかは 3 行目に小さく（#曲置き場・#一般・アプリ）。アプリで置いた曲は誰が置いたかを出さない（自分の分だけ「自分」）。
+ * 自分がアプリで置いた曲は × で取り出せる
  */
 
 const STEP = 12;
@@ -78,11 +79,12 @@ export function ShelfList({ guildId, onEnqueue, onShowGuide }: { guildId: string
                 line2={it.artist || ' '}
                 line3={
                   <span className="inline-flex min-w-0 items-center gap-1.5">
-                    {it.who.image && (
+                    {it.who?.image && (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={it.who.image} alt="" className="h-4 w-4 flex-shrink-0 rounded-full object-cover" />
                     )}
-                    <span className="truncate">{dots([it.who.name, it.source, ago(it.at)])}</span>
+                    {/* 曲置き箱（アプリ）の曲は誰が置いたかを出さない。自分の分だけ「自分」 */}
+                    <span className="truncate">{dots([it.who?.name, it.source, ago(it.at)])}</span>
                   </span>
                 }
                 onPlay={() => play(it)}

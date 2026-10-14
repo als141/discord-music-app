@@ -268,7 +268,8 @@ export interface ShelfItem {
   /** 「#曲置き場」「#一般」「アプリ」 */
   source: string;
   platform: 'youtube' | 'niconico';
-  who: { name: string; image: string | null };
+  /** Discord に貼った人。曲置き箱（アプリ）の曲は出さない（自分の分だけ「自分」） */
+  who: { name: string; image: string | null } | null;
   at: string;
   box_id: number | null;
   mine: boolean;
@@ -282,7 +283,8 @@ export interface BoxItem {
   artist: string;
   thumb: string | null;
   platform: 'youtube' | 'niconico';
-  who: { id: string; name: string | null; image: string | null };
+  /** 自分が置いた曲だけ（ほかの人の分は null） */
+  who: { id: string; name: string | null; image: string | null } | null;
   added_at: string;
   mine: boolean;
 }

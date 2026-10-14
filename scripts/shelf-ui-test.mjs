@@ -78,7 +78,7 @@ async function setup(vp) {
     if (!/youtu/.test(body.text)) return json(r, { results: [{ url: body.text, ok: false, error: 'YouTube・YouTube Music・ニコニコ・Spotify・Apple Music のリンクを置けます' }] });
     state.placed = true;
     const item = { ...placed, mine: true };
-    state.shelfItems = [...[{ key: item.key, url: item.url, title: item.title, artist: item.artist, thumb: item.thumb, source: 'アプリ', platform: 'youtube', who: { name: 'tester', image: null }, at: new Date().toISOString(), box_id: item.id, mine: true }], ...state.shelfItems.filter((x) => x.key !== item.key)];
+    state.shelfItems = [...[{ key: item.key, url: item.url, title: item.title, artist: item.artist, thumb: item.thumb, source: 'アプリ', platform: 'youtube', who: { name: '自分', image: null }, at: new Date().toISOString(), box_id: item.id, mine: true }], ...state.shelfItems.filter((x) => x.key !== item.key)];
     return json(r, { results: [{ url: body.text, ok: true, item }] });
   });
   await context.route(/api\.atoriba\.jp\/add-url/, (r) => {
@@ -96,11 +96,11 @@ async function setup(vp) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|ERR_|ytimg|nimg|googleusercontent|cdn\.discordapp/.test(m.text())) errors.push(m.text()); });
-  return { context, page, errors, calls };
+  return { context, page, errors, calls, state };
 }
 
 for (const vp of [{ name: 'mobile-390x844', width: 390, height: 844, mobile: true }, { name: 'desktop-1376x870', width: 1376, height: 870 }]) {
-  const { context, page, errors, calls } = await setup(vp);
+  const { context, page, errors, calls, state: state0 } = await setup(vp);
   const tag = vp.name;
   try {
     await page.goto(`${BASE}/dev-preview`, { waitUntil: 'domcontentloaded' });
@@ -179,7 +179,12 @@ for (const vp of [{ name: 'mobile-390x844', width: 390, height: 844, mobile: tru
     await page.waitForTimeout(500);
     const ltext = await list.innerText();
     check(`${tag}: 置き場に Discord とアプリが 1 本で`, ltext.includes('#曲置き場') && ltext.includes('アプリ'));
-    check(`${tag}: 置いた曲が置き場の先頭`, (await list.locator('[role="listitem"]').first().innerText()).includes(placed.title.slice(0, 5)), placed.title);
+    const firstShelf = await list.locator('[role="listitem"]').first().innerText();
+    check(`${tag}: 置いた曲が置き場の先頭（自分）`, firstShelf.includes(placed.title.slice(0, 5)) && firstShelf.includes('自分'), firstShelf.replace(/\n/g, ' / '));
+    const othersApp = state0.shelfItems.filter((x) => x.source === 'アプリ' && !x.mine);
+    const allText = await list.innerText();
+    check(`${tag}: ほかの人がアプリで置いた曲は名前を出さない`, othersApp.length === 0 || othersApp.every((x) => !x.who), `${othersApp.length}`);
+    check(`${tag}: Discord の曲は貼った人が出る`, /#曲置き場/.test(allText) && state0.shelfItems.some((x) => x.source === '#曲置き場' && x.who && allText.includes(x.who.name)));
     check(`${tag}: 置き場は 12 曲＋もっと見る`, (await list.locator('[role="listitem"]').count()) === 12 && (await list.getByRole('button', { name: /^もっと見る/ }).count()) === 1);
     await page.screenshot({ path: join(OUT, `shelf-${tag}-3-list.png`) });
     await list.locator('[role="listitem"]').first().hover().catch(() => {});
