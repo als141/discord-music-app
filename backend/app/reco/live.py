@@ -23,6 +23,7 @@ MIN_GAP_SEC = 30
 DAILY_CAP = int(os.getenv("IRINA_RECO_LIVE_DAILY") or 150)
 RESERVE_USD = 20.0          # 月の上限からこれだけ残して止める
 TTL_SEC = 1800
+FAIL_PAUSE_SEC = 600        # 失敗した起点は 10 分休ませる（開いているあいだ 30 秒ごとに失敗し続けない）
 JST = timezone(timedelta(hours=9))
 
 SYSTEM = """あなたは Discord サーバー「ドデカ」の選曲係。ドデカは 8 人ほどの固定の友人グループで、夜に VC に集まり、
@@ -56,6 +57,7 @@ _results: Dict[str, Dict[str, Any]] = {}
 _running: Set[str] = set()
 _last_start: Dict[str, float] = {}
 _day: Dict[str, int] = {}
+_failed: Dict[str, float] = {}
 _tasks: Set[asyncio.Task] = set()
 
 
@@ -90,6 +92,8 @@ def start(guild_id: str, sig: str, anchors: List[Dict[str, Any]], pool: List[Dic
     """回し始めたか、少し待てば回せるなら True（＝画面はあとで取り直す）"""
     if sig in _running:
         return True
+    if time.time() - _failed.get(sig, 0) < FAIL_PAUSE_SEC:
+        return False
     a = _allowed(guild_id)
     if a == "no":
         return False
@@ -142,6 +146,8 @@ async def _run(guild_id: str, sig: str, anchors: List[Dict[str, Any]], pool: Lis
         llm_budget.log("anthropic", MODEL, "reco_live", usd)
         c: Optional[LiveCuration] = r.parsed_output
         if not c:
+            _failed[sig] = time.time()
+            print(f"[reco] live {guild_id}: no parsed output (${usd:.4f})")
             return
         valid = {it["key"] for it in pool}
         picks = [{"key": x.key, "reason": x.reason.strip()[:26]} for x in c.picks if x.key in valid][:18]
@@ -151,6 +157,7 @@ async def _run(guild_id: str, sig: str, anchors: List[Dict[str, Any]], pool: Lis
               f"cache_r={getattr(r.usage, 'cache_read_input_tokens', 0)}")
         on_done(guild_id)
     except Exception as e:
+        _failed[sig] = time.time()
         print(f"[reco] live failed: {type(e).__name__}: {str(e)[:160]}")
     finally:
         _running.discard(sig)
