@@ -246,6 +246,38 @@ for (const vp of [{ name: 'mobile-390x844', width: 390, height: 844, mobile: tru
   }
   await context.browser().close();
 }
+// その場の選曲（Claude）: 最初は curating=true で決定的な並び → 数秒後の取り直しで入れ替わる
+{
+  const { context, page, errors, calls } = await setup({ name: 'live', width: 1376, height: 870 });
+  const liveFeed = { ...feedA, curating: false, live: true, items: [{ ...feedA.items[5], reason: 'その場の選曲の一言' }, ...feedA.items.filter((_, i) => i !== 5)] };
+  let n = 0;
+  await context.route(/\/reco\/\d+\/feed/, (r) => {
+    n++;
+    json(r, n <= 2 ? { ...feedA, curating: true } : liveFeed);   // 開発モードは最初の読み込みが 2 回走る
+  });
+  try {
+    await page.goto(`${BASE}/dev-preview`, { waitUntil: 'domcontentloaded' });
+    const shelfTab = page.locator('[data-tour="tab-shelf"]');
+    await shelfTab.waitFor({ timeout: 30000 });
+    for (let i = 0; i < 12; i++) {
+      await shelfTab.click();
+      if (await page.locator('[data-tour="reco-feed"]').isVisible().catch(() => false)) break;
+      await page.waitForTimeout(1000);
+    }
+    const feed = page.locator('[data-tour="reco-feed"]');
+    await feed.locator('[role="listitem"]').first().waitFor({ timeout: 20000 });
+    check('live: 選び直し中の印', (await page.getByLabel('イリーナが選び直しています').count()) === 1);
+    await page.waitForTimeout(6500);
+    const first = await feed.locator('[role="listitem"]').first().innerText();
+    check('live: 数秒後に入れ替わる', first.includes('その場の選曲の一言') && first.includes(feedA.items[5].title.slice(0, 4)), first.replace(/\n/g, ' / '));
+    check('live: 印が消える', (await page.getByLabel('イリーナが選び直しています').count()) === 0);
+    check('live: エラーなし', errors.length === 0, errors.slice(0, 2).join(' | '));
+  } catch (e) {
+    check('live: flow', false, e.message.split('\n')[0]);
+  }
+  void calls;
+  await context.browser().close();
+}
 console.log(results.join('\n'));
 console.log(`\n${results.length - failures}/${results.length} passed`);
 process.exit(failures ? 1 : 0);

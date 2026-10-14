@@ -253,6 +253,10 @@ export interface RecoFeed {
   items: RecoItem[];
   /** limit を増やせばまだある（最大 120 曲） */
   has_more?: boolean;
+  /** その場の選曲（Claude）を裏で作っている。数秒後に取り直すと並びが入れ替わる */
+  curating?: boolean;
+  /** その場の選曲がもう反映されている */
+  live?: boolean;
   /** 「流れてる『○○』に合わせて」。いまの起点が無ければ null */
   context: { label: string | null; anchors: { title: string | null; src: string }[] };
   stats: { songs: number; people: number; since: number | null; box: number; vc: number };

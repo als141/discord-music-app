@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .. import db
-from . import curate, engine, links, meta, nico, sources, store
+from . import curate, engine, links, live, meta, nico, sources, store
 
 JST = timezone(timedelta(hours=9))
 CURATE_HOUR = 16            # 毎日この時刻（JST）以降に 1 回
@@ -187,6 +187,8 @@ async def _finish(items: List[Dict[str, Any]], members: Dict[str, Dict[str, Any]
         it = dict(it)
         if it.get("artist_id"):
             it["artist"] = meta.artist_ja_cached(it["artist_id"]) or it.get("artist") or ""
+            # 日本語のアーティスト名がわかってから、題名の「ヨルシカ - …」「須田景凪『飛花』MV」を整え直す
+            it["title"] = meta.display_title(it["title"], it["artist"]) or it["title"]
         seed_artist = it.get("seed_artist") or ""
         if it.get("seed_artist_id") and not any("\u3040" <= ch <= "\u9fff" for ch in seed_artist):
             seed_artist = meta.artist_ja_cached(it["seed_artist_id"]) or seed_artist
@@ -226,7 +228,17 @@ async def feed(guild_id: str, limit: int = 18) -> Dict[str, Any]:
     buckets["scene"] = await asyncio.to_thread(_scene_items, p, blocked)
     engine.lean_to(buckets, engine.neighborhood(anchors, ctx_radios))
     curated = [c for picks in (cur.get("moods") or {}).values() for c in picks]
-    items = engine.compose("mixed", buckets, curated, seed, limit=limit)
+    # 決定的な並び（上 60 曲はその場の選曲にも渡す）。その場の選曲（Claude）が終わっていればそれで並べ替える
+    pool = engine.compose("mixed", buckets, curated, seed, limit=max(limit, 60))
+    sig = live.sig_of(guild_id, anchors)
+    res = live.cached(sig)
+    curating = False
+    if res:
+        items = live.apply(pool, res, limit)
+    else:
+        items = pool[:limit]
+        if sig:
+            curating = live.start(guild_id, sig, anchors, pool, p, blocked, len(vc), invalidate)
     members = await _members(guild_id)
     # 見出しの「〜に合わせて」は、実際に関連が出た起点だけ（出なかった起点の名前を出すと「変わってない」に見える）
     shown = {it.get("seed") for it in items if it["kind"] == "context"}
@@ -240,6 +252,9 @@ async def feed(guild_id: str, limit: int = 18) -> Dict[str, Any]:
     data = {
         "items": await _finish(items, members),
         "has_more": len(items) >= limit and limit < FEED_MAX,
+        # その場の選曲（Claude）: curating=裏で選んでいる（数秒後に取り直すと入れ替わる）、live=もう反映済み
+        "curating": curating,
+        "live": bool(res),
         "context": {"label": label, "anchors": [{"title": a.get("title"), "src": a["src"]} for a in anchors]},
         "stats": {"songs": len(p.stats), "people": len(p.people), "since": p.first_at.astimezone(JST).year if p.first_at else None,
                   "box": box_n, "vc": len(vc)},

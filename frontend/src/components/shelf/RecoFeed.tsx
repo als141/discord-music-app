@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Loader2, Play } from 'lucide-react';
+import { Loader2, Play, Sparkles } from 'lucide-react';
 import { appApi, RecoFeed as Feed, RecoItem } from '@/lib/app-api';
 import { usePlayerStore } from '@/store/usePlayerStore';
 import { useIsDesktop } from '@/hooks/use-media-query';
@@ -14,7 +14,8 @@ import { dots, SongRow } from './SongRow';
  * 「いまのおすすめ」。一面に混ぜる（続けて・懐かしい・新曲・界隈・ニコニコ・定番）。
  * いま流れてる曲・キュー・さっき置いた曲が変わると、その場で取り直して上が入れ替わる
  * （流れてる「○○」に合わせて）。押した行は並びを動かさずに「キューに追加しました」へ。
- * 取り直すのは: 流れてる曲が変わったとき（1 秒後）・曲を置いたとき・キューが変わって 3 秒たったとき
+ * 取り直すのは: 流れてる曲が変わったとき（1 秒後）・曲を置いたとき・キューが変わって 3 秒たったとき。
+ * 起点が変わるとサーバーで Claude（Sonnet 5.5）がその場の並びと一言を作るので（curating）、そのあいだは数秒おきに取り直す
  */
 
 const MOBILE_FIRST = 10;
@@ -40,14 +41,32 @@ export function RecoFeed({ guildId, onEnqueue }: { guildId: string; onEnqueue?: 
   const lastTap = useRef(0);
   const seq = useRef(0);
 
-  const load = useCallback(async () => {
+  // その場の選曲（Claude）が裏で動いているあいだは、数秒おきに取り直す（入れ替わるのが見える）
+  const curatingTries = useRef(0);
+  const curatingTimer = useRef<number | null>(null);
+
+  /** explicit=true は開いたとき・曲を置いたときなど本人の操作（押している最中の待ちをしない） */
+  const load = useCallback(async (explicit = false) => {
     const my = ++seq.current;
     setLoading(true);
     try {
       const f = await appApi.recoFeed(guildId, limitRef.current);
       if (my !== seq.current) return;
+      // 押している最中は並びを入れ替えない（押してから 4 秒待つ）
+      const sinceTap = Date.now() - lastTap.current;
+      if (!explicit && sinceTap < 4000) {
+        window.setTimeout(() => void load(), 4000 - sinceTap);
+        return;
+      }
       setFeed(f);
       setError(false);
+      if (curatingTimer.current) window.clearTimeout(curatingTimer.current);
+      if (f.curating && curatingTries.current < 5) {
+        curatingTries.current += 1;
+        curatingTimer.current = window.setTimeout(() => void load(), [5000, 7000, 9000, 12000, 15000][curatingTries.current - 1]);
+      } else if (!f.curating) {
+        curatingTries.current = 0;
+      }
     } catch {
       if (my === seq.current) setError(true);
     } finally {
@@ -56,8 +75,8 @@ export function RecoFeed({ guildId, onEnqueue }: { guildId: string; onEnqueue?: 
   }, [guildId]);
 
   useEffect(() => {
-    void load();
-    const onChanged = () => void load();
+    void load(true);
+    const onChanged = () => void load(true);
     window.addEventListener(SHELF_CHANGED, onChanged);
     return () => window.removeEventListener(SHELF_CHANGED, onChanged);
   }, [load]);
@@ -99,7 +118,7 @@ export function RecoFeed({ guildId, onEnqueue }: { guildId: string; onEnqueue?: 
     if (next > items.length && feed?.has_more && limitRef.current < next) {
       limitRef.current = Math.min(MAX, next + 10);
       setFetchingMore(true);
-      await load();
+      await load(true);
       setFetchingMore(false);
     }
   };
@@ -155,7 +174,11 @@ export function RecoFeed({ guildId, onEnqueue }: { guildId: string; onEnqueue?: 
               <span className="truncate">{caption}</span>
             </motion.span>
           </AnimatePresence>
-          {loading && feed && <Loader2 className="h-3.5 w-3.5 flex-shrink-0 animate-spin text-muted-foreground" aria-label="更新中" />}
+          {feed?.curating ? (
+            <Sparkles className="h-3.5 w-3.5 flex-shrink-0 animate-pulse text-primary" aria-label="イリーナが選び直しています" />
+          ) : (
+            loading && feed && <Loader2 className="h-3.5 w-3.5 flex-shrink-0 animate-spin text-muted-foreground" aria-label="更新中" />
+          )}
         </div>
       </div>
 
