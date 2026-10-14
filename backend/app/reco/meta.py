@@ -297,6 +297,28 @@ async def artist_ja(artist_id: Optional[str], fallback: str) -> str:
     return v
 
 
+def artist_ja_cached(artist_id: Optional[str]) -> Optional[str]:
+    """もう引いてある日本語表記だけ（無ければ None。ネットには行かない）"""
+    if not artist_id:
+        return None
+    if artist_id in _artist_ja:
+        return _artist_ja[artist_id]
+    v = store.kv_get(f"artist_ja:{artist_id}")
+    if v is not None:
+        _artist_ja[artist_id] = v
+    return v
+
+
+async def warm_artist_ja(ids: List[str], parallel: int = 3) -> None:
+    """まだの日本語表記を裏で引いておく（次に開いたときに日本語で出る）"""
+    sem = asyncio.Semaphore(parallel)
+
+    async def one(i: str) -> None:
+        async with sem:
+            await artist_ja(i, "")
+    await asyncio.gather(*(one(i) for i in dict.fromkeys(ids) if i), return_exceptions=True)
+
+
 # ---------------------------------------------------------------- 曲置き箱のリンク
 
 async def resolve_box_url(url: str) -> Optional[Dict[str, Any]]:

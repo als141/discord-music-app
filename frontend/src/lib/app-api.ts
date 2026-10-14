@@ -251,6 +251,8 @@ export interface RecoItem {
 
 export interface RecoFeed {
   items: RecoItem[];
+  /** limit を増やせばまだある（最大 120 曲） */
+  has_more?: boolean;
   /** 「流れてる『○○』に合わせて」。いまの起点が無ければ null */
   context: { label: string | null; anchors: { title: string | null; src: string }[] };
   stats: { songs: number; people: number; since: number | null; box: number; vc: number };
@@ -381,7 +383,7 @@ export const appApi = {
     call<PushSendResult>('/admin/push', { method: 'POST', body: JSON.stringify(body) }),
   gameBoard: (guildId: string, players?: number) =>
     call<GameBoard>(`/games/${guildId}/board${players ? `?players=${players}` : ''}`),
-  recoFeed: (guildId: string) => call<RecoFeed>(`/reco/${guildId}/feed`),
+  recoFeed: (guildId: string, limit?: number) => call<RecoFeed>(`/reco/${guildId}/feed${limit ? `?limit=${limit}` : ''}`),
   recoShelf: (guildId: string) => call<{ items: ShelfItem[]; total: number }>(`/reco/${guildId}/shelf`),
   recoBox: (guildId: string) => call<{ items: BoxItem[] }>(`/reco/${guildId}/box`),
   recoBoxAdd: (guildId: string, text: string) =>

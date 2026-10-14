@@ -18,6 +18,9 @@ import { dots, SongRow } from './SongRow';
  */
 
 const MOBILE_FIRST = 10;
+const FIRST_LIMIT = 18;
+const STEP = 20;
+const MAX = 120;
 
 function toPlayable(it: RecoItem): PlayableItem {
   return { title: it.title, artist: it.artist, thumbnail: it.thumb || '', url: it.url, type: 'song' };
@@ -29,7 +32,10 @@ export function RecoFeed({ guildId, onEnqueue }: { guildId: string; onEnqueue?: 
   const [loading, setLoading] = useState(false);
   const [added, setAdded] = useState<Set<string>>(new Set());
   const [hidden, setHidden] = useState<Set<string>>(new Set());
-  const [more, setMore] = useState(false);
+  // 何曲見せるか（「もっと見る」で 20 曲ずつ。足りなければサーバーに limit を増やして聞く。上の並びは変わらない）
+  const [visible, setVisible] = useState<number | null>(null);
+  const limitRef = useRef(FIRST_LIMIT);
+  const [fetchingMore, setFetchingMore] = useState(false);
   const isDesktop = useIsDesktop();
   const lastTap = useRef(0);
   const seq = useRef(0);
@@ -38,7 +44,7 @@ export function RecoFeed({ guildId, onEnqueue }: { guildId: string; onEnqueue?: 
     const my = ++seq.current;
     setLoading(true);
     try {
-      const f = await appApi.recoFeed(guildId);
+      const f = await appApi.recoFeed(guildId, limitRef.current);
       if (my !== seq.current) return;
       setFeed(f);
       setError(false);
@@ -84,7 +90,19 @@ export function RecoFeed({ guildId, onEnqueue }: { guildId: string; onEnqueue?: 
   if (error && !feed) return null;
 
   const items = (feed?.items ?? []).filter((it) => !hidden.has(it.key));
-  const shown = isDesktop || more ? items : items.slice(0, MOBILE_FIRST);
+  const show = visible ?? (isDesktop ? FIRST_LIMIT : MOBILE_FIRST);
+  const shown = items.slice(0, show);
+  const canMore = items.length > show || !!feed?.has_more;
+  const showMore = async (all = false) => {
+    const next = all ? MAX : Math.min(MAX, show + STEP);
+    setVisible(next);
+    if (next > items.length && feed?.has_more && limitRef.current < next) {
+      limitRef.current = Math.min(MAX, next + 10);
+      setFetchingMore(true);
+      await load();
+      setFetchingMore(false);
+    }
+  };
 
   const play = (it: RecoItem) => {
     lastTap.current = Date.now();
@@ -178,14 +196,42 @@ export function RecoFeed({ guildId, onEnqueue }: { guildId: string; onEnqueue?: 
           </AnimatePresence>
         </div>
       )}
-      {feed && !isDesktop && items.length > MOBILE_FIRST && (
-        <button
-          type="button"
-          onClick={() => setMore((v) => !v)}
-          className="mt-1 h-10 w-full rounded-xl text-[13px] font-semibold text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-        >
-          {more ? 'たたむ' : `もっと見る（あと ${items.length - MOBILE_FIRST} 曲）`}
-        </button>
+      {feed && items.length > 0 && (canMore || show > (isDesktop ? FIRST_LIMIT : MOBILE_FIRST)) && (
+        <div className="mt-1 flex gap-2">
+          {canMore && (
+            <>
+              <button
+                type="button"
+                onClick={() => void showMore()}
+                disabled={fetchingMore}
+                className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl text-[13px] font-semibold text-muted-foreground hover:bg-secondary/60 hover:text-foreground disabled:opacity-60"
+              >
+                {fetchingMore && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                もっと見る
+              </button>
+              <button
+                type="button"
+                onClick={() => void showMore(true)}
+                disabled={fetchingMore}
+                className="h-10 flex-shrink-0 rounded-xl px-4 text-[13px] font-semibold text-muted-foreground hover:bg-secondary/60 hover:text-foreground disabled:opacity-60"
+              >
+                すべて表示
+              </button>
+            </>
+          )}
+          {show > (isDesktop ? FIRST_LIMIT : MOBILE_FIRST) && (
+            <button
+              type="button"
+              onClick={() => setVisible(null)}
+              className="h-10 flex-shrink-0 rounded-xl px-4 text-[13px] font-semibold text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+            >
+              たたむ
+            </button>
+          )}
+        </div>
+      )}
+      {feed && !canMore && items.length >= MAX && (
+        <p className="mt-1 px-1 text-center text-[12px] text-muted-foreground">ここまでの {items.length} 曲がいまのおすすめです</p>
       )}
     </section>
   );

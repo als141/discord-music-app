@@ -17,7 +17,10 @@ const BASE = process.env.PREVIEW_BASE || 'http://localhost:3100';
 const OUT = join(dirname(fileURLToPath(import.meta.url)), 'screenshots');
 mkdirSync(OUT, { recursive: true });
 const D = process.env.RECO_DIR;
-const feedA = JSON.parse(readFileSync(join(D, 'feed_a.json'), 'utf8'));
+// feed_big.json（120 曲）があれば、?limit= に合わせて先頭から切って返す（上の並びは limit で変わらない）
+const feedBig = (() => { try { return JSON.parse(readFileSync(join(D, 'feed_big.json'), 'utf8')); } catch { return null; } })();
+const feedA = feedBig ? { ...feedBig, items: feedBig.items.slice(0, 18) } : JSON.parse(readFileSync(join(D, 'feed_a.json'), 'utf8'));
+const feedAt = (limit) => (feedBig ? { ...feedBig, items: feedBig.items.slice(0, limit), has_more: limit < feedBig.items.length } : feedA);
 const feedB = JSON.parse(readFileSync(join(D, 'feed_b.json'), 'utf8'));
 const shelf = JSON.parse(readFileSync(join(D, 'shelf.json'), 'utf8'));
 const placed = JSON.parse(readFileSync(join(D, 'placed.json'), 'utf8'));
@@ -54,7 +57,9 @@ async function setup(vp) {
   await context.route('**/api/discord/userGuilds', (r) => json(r, [{ id: GUILD, name: 'ドデカサーバー', permissions: '0' }]));
   await context.route(/\/reco\/\d+\/feed/, (r) => {
     calls.feedGets++;
-    json(r, state.placed ? feedB : feedA);
+    const limit = Number(new URL(r.request().url()).searchParams.get('limit')) || 18;
+    calls.lastLimit = limit;
+    json(r, state.placed ? feedB : feedAt(limit));
   });
   await context.route(/\/reco\/\d+\/shelf/, (r) => {
     calls.shelfGets++;
@@ -127,6 +132,31 @@ for (const vp of [{ name: 'mobile-390x844', width: 390, height: 844, mobile: tru
     const expectRows = vp.mobile ? Math.min(10, feedA.items.length) : feedA.items.length;
     check(`${tag}: 行の数（スマホ 10・PC 全部）`, (await rows.count()) === expectRows, `${await rows.count()}`);
     await page.screenshot({ path: join(OUT, `shelf-${tag}-1-top.png`) });
+    // もっと見る: 20 曲ずつ。足りなければ limit を増やして取り直す（上の並びは変わらない）
+    if (feedBig) {
+      const firstKeys = await rows.evaluateAll((els) => els.slice(0, 5).map((e) => e.innerText.split('\n')[0]));
+      const more = feed.getByRole('button', { name: 'もっと見る' });
+      let clicks = 0;
+      while ((await more.count()) && clicks < 10) {
+        await more.click();
+        clicks++;
+        await page.waitForTimeout(700);
+      }
+      const total = await rows.count();
+      check(`${tag}: もっと見るで全部（120 曲）まで`, total === feedBig.items.length && calls.lastLimit >= feedBig.items.length, `${total} 曲・${clicks} 回・limit ${calls.lastLimit}`);
+      check(`${tag}: 増やしても上の並びは同じ`, JSON.stringify(await rows.evaluateAll((els) => els.slice(0, 5).map((e) => e.innerText.split('\n')[0]))) === JSON.stringify(firstKeys));
+      check(`${tag}: 最後に「ここまでの 120 曲」`, (await feed.innerText()).includes(`ここまでの ${feedBig.items.length} 曲`));
+      await page.screenshot({ path: join(OUT, `shelf-${tag}-1b-all.png`), fullPage: false });
+      await feed.getByRole('button', { name: 'たたむ' }).click();
+      await page.waitForTimeout(500);
+      check(`${tag}: たたむで元の数に`, (await rows.count()) === (vp.mobile ? 10 : 18), `${await rows.count()}`);
+      await feed.getByRole('button', { name: 'すべて表示' }).click();
+      await page.waitForTimeout(900);
+      check(`${tag}: すべて表示で 1 回で全部`, (await rows.count()) === feedBig.items.length, `${await rows.count()}`);
+      await feed.getByRole('button', { name: 'たたむ' }).click();
+      await page.waitForTimeout(500);
+      await page.evaluate(() => document.querySelector('[data-tour="reco-feed"]')?.scrollIntoView());
+    }
     // 押した行はその場で「キューに追加しました」、並びは動かない
     const third = feedA.items[2];
     await rows.nth(2).getByRole('button', { name: /をキューに追加$/ }).click();

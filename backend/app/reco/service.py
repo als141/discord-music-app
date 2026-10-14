@@ -19,6 +19,8 @@ CURATE_HOUR = 16            # 毎日この時刻（JST）以降に 1 回
 CURATE_MIN_GAP_H = 6        # 箱に曲がたくさん増えたときの追加の選曲は 6 時間あける
 BOX_PER_HOUR = 30
 _cache: Dict[Tuple, Tuple[float, Dict[str, Any]]] = {}
+_bg: Set[asyncio.Task] = set()
+FEED_MAX = 120
 CACHE_SEC = 180
 
 
@@ -167,16 +169,27 @@ def _scene_items(p: engine.Profile, blocked: Set[str]) -> List[Dict[str, Any]]:
     return out
 
 
+INLINE_ARTIST_LOOKUPS = 8   # 日本語のアーティスト名をその場で引くのは上の 8 人まで（多いと開くのが遅い）。残りは裏で
+
+
 async def _finish(items: List[Dict[str, Any]], members: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
     """アーティストを日本語表記に、理由の {A}/{S}/{who} を埋め、流す URL を付ける"""
+    ids = [i for it in items for i in (it.get("artist_id"), it.get("seed_artist_id")) if i]
+    missing = [i for i in dict.fromkeys(ids) if await asyncio.to_thread(meta.artist_ja_cached, i) is None]
+    if missing:
+        await meta.warm_artist_ja(missing[:INLINE_ARTIST_LOOKUPS])
+        if len(missing) > INLINE_ARTIST_LOOKUPS:
+            task = asyncio.create_task(meta.warm_artist_ja(missing[INLINE_ARTIST_LOOKUPS:]))
+            _bg.add(task)
+            task.add_done_callback(_bg.discard)
     out = []
     for it in items:
         it = dict(it)
         if it.get("artist_id"):
-            it["artist"] = await meta.artist_ja(it["artist_id"], it.get("artist") or "")
+            it["artist"] = meta.artist_ja_cached(it["artist_id"]) or it.get("artist") or ""
         seed_artist = it.get("seed_artist") or ""
         if it.get("seed_artist_id") and not any("\u3040" <= ch <= "\u9fff" for ch in seed_artist):
-            seed_artist = await meta.artist_ja(it["seed_artist_id"], seed_artist)
+            seed_artist = meta.artist_ja_cached(it["seed_artist_id"]) or seed_artist
         m = members.get(it.get("who") or "")
         it["who"] = {"name": m["name"], "image": m.get("avatar")} if m else None
         it["reason"] = (it["reason"].replace("{who}", m["name"] if m else "だれか").replace("{A}", it.get("artist") or "")
@@ -190,13 +203,15 @@ async def _finish(items: List[Dict[str, Any]], members: Dict[str, Dict[str, Any]
     return out
 
 
-async def feed(guild_id: str) -> Dict[str, Any]:
-    """一面に混ぜたおすすめ。いま流れてる曲・キュー・さっき置いた曲が変わると中身も変わる"""
+async def feed(guild_id: str, limit: int = 18) -> Dict[str, Any]:
+    """一面に混ぜたおすすめ。いま流れてる曲・キュー・さっき置いた曲が変わると中身も変わる。
+    limit を増やしても上の並びは同じ（後ろに足されるだけ）。最大 FEED_MAX 曲"""
+    limit = max(6, min(limit, FEED_MAX))
     vc = await asyncio.to_thread(_vc_users, guild_id)
     seed = engine.rotate_seed(guild_id)
     p = await asyncio.to_thread(engine.Profile, guild_id)
     anchors = await _anchors(guild_id, p)
-    ck = (guild_id, frozenset(vc), seed, tuple(a["key"] for a in anchors), len(p.stats))
+    ck = (guild_id, frozenset(vc), seed, tuple(a["key"] for a in anchors), len(p.stats), limit)
     hit = _cache.get(ck)
     if hit and time.time() - hit[0] < CACHE_SEC:
         return hit[1]
@@ -211,7 +226,7 @@ async def feed(guild_id: str) -> Dict[str, Any]:
     buckets["scene"] = await asyncio.to_thread(_scene_items, p, blocked)
     engine.lean_to(buckets, engine.neighborhood(anchors, ctx_radios))
     curated = [c for picks in (cur.get("moods") or {}).values() for c in picks]
-    items = engine.compose("mixed", buckets, curated, seed, limit=18)
+    items = engine.compose("mixed", buckets, curated, seed, limit=limit)
     members = await _members(guild_id)
     # 見出しの「〜に合わせて」は、実際に関連が出た起点だけ（出なかった起点の名前を出すと「変わってない」に見える）
     shown = {it.get("seed") for it in items if it["kind"] == "context"}
@@ -224,6 +239,7 @@ async def feed(guild_id: str) -> Dict[str, Any]:
     box_n = len(await asyncio.to_thread(store.box_list, guild_id, 1000))
     data = {
         "items": await _finish(items, members),
+        "has_more": len(items) >= limit and limit < FEED_MAX,
         "context": {"label": label, "anchors": [{"title": a.get("title"), "src": a["src"]} for a in anchors]},
         "stats": {"songs": len(p.stats), "people": len(p.people), "since": p.first_at.astimezone(JST).year if p.first_at else None,
                   "box": box_n, "vc": len(vc)},

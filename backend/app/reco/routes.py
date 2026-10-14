@@ -26,9 +26,10 @@ async def _check(guild_id: str, user: AppUser) -> None:
 
 
 @router.get("/reco/{guild_id}/feed")
-async def reco_feed(guild_id: str, user: AppUser = Depends(current_user)):
+async def reco_feed(guild_id: str, limit: int = 18, user: AppUser = Depends(current_user)):
+    """limit: 何曲まで（6〜120。増やしても上の並びは同じ）"""
     await _check(guild_id, user)
-    return await service.feed(guild_id)
+    return await service.feed(guild_id, limit)
 
 
 @router.get("/reco/{guild_id}/shelf")
