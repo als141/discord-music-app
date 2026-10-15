@@ -13,9 +13,13 @@
   「最後の response_id」を SQLite（chat_sessions）に持つので、bot を再起動しても会話は続く
 - **圧縮（compaction）**: 40 ターン or プロンプト 15 万トークンを超えたら、会話全体を要約メモにして
   新しいチェーンを始める（要約は次の system prompt に入る）
+- **xAI のアカウントが Zero Data Retention のとき**（2026-10-16 にクレジットを買い足したあとからこの状態）は
+  `previous_response_id` が「Previous response cannot be used for this organization due to Zero Data Retention」で必ず失敗する。
+  一度これを見たら 6 時間はチェーンを使わず、毎回「キャラ設定 + 直近 60 件の流れ + 今の発言」で答える（`IRINA_CHAT_SERVER_HISTORY=0` で常にこちら）
 - **ツール**: xAI サーバー側 = web_search / x_search / code_execution（Python 実行）/ image_generation（画像生成。1 日の上限あり）
   クライアント側 = `http_request`（curl 相当。イリーナ API と Discord API を 1 つのツールで。`irina_tools.py`）
   + `remember` / `forget`（サーバーごとの長期メモ。system prompt に入る）
+  + `read_code`（自分のソースコード＝GitHub の main を読む。`irina_code.py`）
 - 生成画像は Discord に添付して返す。コスト（USD）と reasoning トークンをログに出す
 - キャラ設定: `~/irina_persona.txt` を無加工で使用（mtime で即反映）。変わったらチェーンを切り替える。
   system prompt はこのファイル + ツールや Discord 表現の【参考情報】+ メモ/要約だけで、応答の長さ等の「ルール」は入れない
@@ -37,7 +41,7 @@ from xai_sdk.chat import file as xai_file, image, system, text, tool, tool_resul
 from xai_sdk.tools import code_execution, get_tool_call_type, image_generation, web_search, x_search
 
 from .. import db
-from . import irina_images, irina_prompt, irina_tools, irina_trends
+from . import irina_code, irina_images, irina_prompt, irina_tools, irina_trends
 
 JST = timezone(timedelta(hours=9))
 
@@ -55,7 +59,8 @@ LLM_TIMEOUT_SEC = 120            # 1 回の sample()/stream の上限（検索�
 TOTAL_TIMEOUT_SEC = 300          # ツールループ全体の上限
 TOOL_ROUNDS_MAX = 8              # 1 メッセージあたりのツール往復回数
 COMPACT_TURNS = 40               # このターン数で要約→新チェーン
-COMPACT_PROMPT_TOKENS = 150_000  # または直近のプロンプトがこのトークン数を超えたら
+COMPACT_PROMPT_TOKENS = 60_000   # または直近のプロンプトがこのトークン数を超えたら（read_code の結果がチェーンに残って重くなるので 15 万から下げた）
+MAX_USD_PER_MESSAGE = float(os.getenv("IRINA_CHAT_MAX_USD_PER_MESSAGE") or "0.3")  # 1 回の返事でこれを超えたらツールを止めて締めさせる
 CONTEXT_MESSAGES = int(os.getenv("IRINA_CHAT_CONTEXT_MESSAGES") or "60")   # 新チェーン開始時に「直近の流れ」として渡す件数
 GAP_MESSAGES_MAX = int(os.getenv("IRINA_CHAT_GAP_MESSAGES") or "80")       # 前回の返事以降にあった発言を毎回渡す上限（メンション運用のチャンネル向け）
 MAX_ATTACHMENTS_PER_MESSAGE = 5  # 1 メッセージで読む添付の上限
@@ -77,6 +82,8 @@ STREAM_FIRST_SEND_CHARS = 24     # これだけ溜まったら最初の返信を
 RATE_LIMIT_PER_MINUTE = 12       # チャンネルごと。超えた分は黙って無視（暴走・荒らし対策）
 ERROR_NOTICE_COOLDOWN_SEC = 300  # 障害時の謝罪メッセージは 5 分に 1 回まで
 MEMORY_MAX_NOTES = 40
+DEBUG = os.getenv("IRINA_CHAT_DEBUG") == "1"  # ツール往復ごとの様子をログに出す
+READ_CODE_PER_MESSAGE = 8        # 1 回の返事で read_code を使える回数（読み回って $0.3 かかった実測から）
 
 _client: Optional[AsyncClient] = None
 _locks: Dict[int, asyncio.Lock] = {}
@@ -84,6 +91,8 @@ _request_times: Dict[int, Deque[float]] = {}
 _last_error_notice: Dict[int, float] = {}
 _daily_cost: Dict[str, float] = {}        # "YYYY-MM-DD" -> USD（全サーバー合計、プロセス内）
 _daily_images: Dict[Tuple[str, str], int] = {}  # (guild_id, day) -> 生成枚数
+_chain_off_until = 0.0                    # xAI 側の会話保存が使えない（Zero Data Retention）と分かった時刻 + 6 時間
+CHAIN_RETRY_SEC = 6 * 3600
 
 
 # ---------------------------------------------------------------------------
@@ -114,6 +123,24 @@ def _get_client() -> AsyncClient:
     if _client is None:
         _client = AsyncClient(api_key=os.getenv("XAI_API_KEY"), timeout=LLM_TIMEOUT_SEC)
     return _client
+
+
+def _chain_available() -> bool:
+    """xAI 側に会話を保存して previous_response_id で続けられるか"""
+    if os.getenv("IRINA_CHAT_SERVER_HISTORY") == "0":
+        return False
+    return time.time() >= _chain_off_until
+
+
+def _note_chain_error(e: Exception) -> bool:
+    """Zero Data Retention でチェーンが使えないエラーなら、しばらくチェーンを止めて True"""
+    global _chain_off_until
+    if "Zero Data Retention" in str(e):
+        if time.time() >= _chain_off_until:
+            print("[irina-chat] xAI のアカウントが Zero Data Retention のため会話の保存・継続が使えない → 6 時間は毎回直近の流れを渡して答える")
+        _chain_off_until = time.time() + CHAIN_RETRY_SEC
+        return True
+    return False
 
 
 def _lock(channel_id: int) -> asyncio.Lock:
@@ -281,6 +308,10 @@ def _environment_block(message: discord.Message) -> str:
         "  - fetch_url: 任意の公開 URL の本文テキストを取得（HTML はタグを落として最大 8000 文字）",
         "  - remember / forget: このサーバーについて長く覚えておくメモの保存と削除（保存したメモは下の【覚えていること】として毎回渡される）",
         "  - refresh_x_trends: knowledge の『X トレンドメモ』を今すぐ更新（通常は 1 日 1 回自動）",
+        "  - read_code: あなた（イリーナ）自身のソースコードを読む。GitHub の als141/discord-music-app の main と同じで、いま動いているもの"
+        "（tree=ファイル一覧 / read=行番号付きで読む / grep=全体から探す / log=変更履歴 / show=1 つの変更の差分）。結果に GitHub のリンクが付く。"
+        "おもな場所: backend/app/bot.py（Discord の入口）、backend/app/services/（音楽再生 music_player.py・この会話 irina_chat.py・ツール irina_tools.py ほか）、"
+        "backend/app/main.py と backend/app/api/（API）、backend/app/reco/（曲置き場のおすすめ）、backend/app/scene/（界隈）、frontend/src/（Web アプリ）",
     ])
 
 
@@ -361,6 +392,29 @@ REFRESH_TRENDS_TOOL = tool(
     description="knowledge の『X トレンドメモ』（今日の X でのミーム・語録の使われ方）を今すぐ作り直す。1 日 1 回は自動更新されるので、頼まれたときや古いと感じたときだけ",
     parameters={"type": "object", "properties": {}},
 )
+READ_CODE_TOOL = tool(
+    name="read_code",
+    description=(
+        "あなた（イリーナ）自身のソースコードを読む（GitHub の als141/discord-music-app の main。いま本番で動いているものと同じ）。"
+        "action: tree=ファイル一覧（path でディレクトリを絞る）、read=ファイルを行番号付きで読む（既定 120 行ずつ、start_line/end_line で範囲。場所は先に grep で当てると早い）、"
+        "grep=全ファイルから pattern（正規表現）を探す、log=変更履歴（path で絞れる）、show=1 つのコミット（sha）の説明と差分。"
+        "結果の url / url_template で GitHub のリンクを作れる。.env や cookie などコミットされていないものは読めない"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "enum": ["tree", "read", "grep", "log", "show"]},
+            "path": {"type": "string", "description": "リポジトリ内の相対パス（例: backend/app/services/music_player.py、frontend/src）"},
+            "pattern": {"type": "string", "description": "grep で探す文字列か正規表現"},
+            "start_line": {"type": "integer"},
+            "end_line": {"type": "integer"},
+            "sha": {"type": "string", "description": "show するコミット（例: 941c175、HEAD、HEAD~1）"},
+            "limit": {"type": "integer", "description": "log の件数（既定 15、最大 40）"},
+            "ignore_case": {"type": "boolean"},
+        },
+        "required": ["action"],
+    },
+)
 FETCH_URL_TOOL = tool(
     name="fetch_url",
     description="メッセージに貼られた URL など、任意の公開 Web ページの本文テキストを取得する（HTML はタグを落として最大 8000 文字）。検索ではなく『このリンクの中身』を読むときに使う",
@@ -377,7 +431,7 @@ def _tools(guild_id: str, *, allow_images: bool = True):
         tools.append(code_execution())
     if IMAGE_GEN_ENABLED and allow_images and _images_left_today(guild_id) > 0:
         tools.append(image_generation())
-    tools += [HTTP_REQUEST_TOOL, FETCH_URL_TOOL, REMEMBER_TOOL, FORGET_TOOL, REFRESH_TRENDS_TOOL]
+    tools += [HTTP_REQUEST_TOOL, FETCH_URL_TOOL, READ_CODE_TOOL, REMEMBER_TOOL, FORGET_TOOL, REFRESH_TRENDS_TOOL]
     if IMAGE_GEN_ENABLED and allow_images and _images_left_today(guild_id) > 0:
         tools.append(GENERATE_IMAGE_TOOL)
     return tools
@@ -400,6 +454,18 @@ async def _execute_tool(tc, message: discord.Message, ctx: Optional[Dict[str, An
             )
         elif name == "fetch_url":
             result = await irina_tools.fetch_url(str(args.get("url", "")))
+        elif name == "read_code" and int(ctx.get("read_code_calls", 0)) >= READ_CODE_PER_MESSAGE:
+            ctx["force_answer"] = True
+            result = {"error": f"この返事で read_code を使えるのは {READ_CODE_PER_MESSAGE} 回まで。ここまでで分かったことで答えて"}
+        elif name == "read_code":
+            ctx["read_code_calls"] = int(ctx.get("read_code_calls", 0)) + 1
+            result = await irina_code.run(
+                str(args.get("action", "")), path=args.get("path"), pattern=args.get("pattern"),
+                start_line=args.get("start_line"), end_line=args.get("end_line"), sha=args.get("sha"),
+                limit=args.get("limit"), ignore_case=bool(args.get("ignore_case")),
+            )
+            print(f"[tool] read_code {args.get('action')} {args.get('path') or ''} {args.get('pattern') or args.get('sha') or ''}"
+                  f" → {'error' if 'error' in result else 'ok'} (by {actor})")
         elif name == "refresh_x_trends":
             textv = await irina_trends.refresh(_get_client(), XAI_MODEL, reason=f"manual by {actor}")
             result = {"ok": True, "chars": len(textv), "note": "次の発言から新しいメモが system prompt に入る（会話は新しいチェーンで続く）", "preview": textv[:600]}
@@ -692,7 +758,28 @@ async def _one_turn(chat, renderer: _Renderer):
     return final
 
 
-CLIENT_TOOL_NAMES = {"http_request", "fetch_url", "remember", "forget", "generate_image", "refresh_x_trends"}
+CLIENT_TOOL_NAMES = {"http_request", "fetch_url", "read_code", "remember", "forget", "generate_image", "refresh_x_trends"}
+
+
+def _tool_call_kinds(response) -> list:
+    """デバッグ用: このレスポンスに入っているツール呼び出しの (名前, 種類)"""
+    out = []
+    for tc in list(getattr(response, "tool_calls", None) or []):
+        try:
+            kind = get_tool_call_type(tc)
+        except Exception as e:
+            kind = f"?{type(e).__name__}"
+        out.append(f"{tc.function.name}:{kind}")
+    return out
+
+
+def _force_answer(chat) -> None:
+    """次の生成ではツールを使わせない（tool_choice=none）"""
+    try:
+        from xai_sdk.proto import chat_pb2
+        chat._proto.tool_choice.CopyFrom(chat_pb2.ToolChoice(mode=chat_pb2.ToolMode.TOOL_MODE_NONE))
+    except Exception as e:
+        print(f"[irina-chat] tool_choice=none を設定できなかった: {type(e).__name__}: {e}")
 
 
 def _client_tool_calls(response) -> list:
@@ -717,11 +804,14 @@ async def _run_tool_loop(chat, message: discord.Message, renderer: _Renderer, ct
     images: List[Any] = []
     cost = 0.0
     response = None
-    for _ in range(TOOL_ROUNDS_MAX):
+    for rnd in range(TOOL_ROUNDS_MAX):
         response = await asyncio.wait_for(_one_turn(chat, renderer), timeout=LLM_TIMEOUT_SEC)
         cost += float(getattr(response, "cost_usd", 0.0) or 0.0)
         images.extend(list(getattr(response, "image_outputs", None) or []))
         calls = _client_tool_calls(response)
+        if DEBUG:
+            print(f"[irina-chat] round {rnd + 1}: content={len(response.content or '')} calls={[tc.function.name for tc in calls]} "
+                  f"all={_tool_call_kinds(response)} finish={getattr(response, 'finish_reason', '?')}")
         if not calls:
             return response, used, images, cost
         chat.append(response)
@@ -729,10 +819,19 @@ async def _run_tool_loop(chat, message: discord.Message, renderer: _Renderer, ct
             used += 1
             result = await _execute_tool(tc, message, ctx)
             chat.append(tool_result(result, tool_call_id=tc.id))
-    # 往復が多すぎた: 最後にツール無しで締めさせる
-    chat.append(user("（ツールの往復が上限に達した。ここまでで分かったことだけで返事をして）"))
+        if cost + float(ctx.get("cost", 0.0)) >= MAX_USD_PER_MESSAGE:
+            print(f"[irina-chat] この返事の費用が ${cost:.3f} に達したのでツールを止めて締めさせる")
+            break
+        if ctx.pop("force_answer", False):
+            _force_answer(chat)  # read_code の回数を使い切った: 次はツール無しで答えさせる
+    # 往復が多すぎた・費用の上限: 最後にツール無しで締めさせる（tool_choice=none にしないと、ここでもツールを呼んで本文が空になる）
+    chat.append(user("（ツールはここまで。ここまでで分かったことだけで返事をして）"))
+    _force_answer(chat)
     response = await asyncio.wait_for(_one_turn(chat, renderer), timeout=LLM_TIMEOUT_SEC)
     cost += float(getattr(response, "cost_usd", 0.0) or 0.0)
+    if DEBUG:
+        print(f"[irina-chat] closing round: content={len(response.content or '')} all={_tool_call_kinds(response)} "
+              f"finish={getattr(response, 'finish_reason', '?')}")
     return response, used, images, cost
 
 
@@ -765,7 +864,8 @@ async def _ask(message: discord.Message, renderer: _Renderer, *, force_new_chain
     persona_key = f"{persona_key}|harness:{_harness_prompt_version()}"  # 参考情報や組み立てが変わってもチェーンを切り替える
 
     session = await asyncio.to_thread(db.get_chat_session, channel_id) or {}
-    chain_id = None if force_new_chain else session.get("last_response_id")
+    use_chain = _chain_available()
+    chain_id = None if (force_new_chain or not use_chain) else session.get("last_response_id")
     summary = session.get("summary")
     turn_count = int(session.get("turn_count") or 0)
     persona_changed = bool(session.get("persona_key")) and session.get("persona_key") != persona_key
@@ -797,7 +897,7 @@ async def _ask(message: discord.Message, renderer: _Renderer, *, force_new_chain
         model=XAI_MODEL,
         messages=messages,
         previous_response_id=chain_id,
-        store_messages=True,
+        store_messages=use_chain,
         tools=_tools(guild_id),
         tool_choice="auto",
         reasoning_effort=XAI_REASONING_EFFORT,
@@ -811,18 +911,24 @@ async def _ask(message: discord.Message, renderer: _Renderer, *, force_new_chain
         raise
     except Exception as e:
         if chain_id and not force_new_chain:
-            # 保存済みの response_id が期限切れ/無効になった等。チェーンを捨てて 1 回だけやり直す
-            print(f"[irina-chat] チェーン継続に失敗（{type(e).__name__}: {str(e)[:120]}）→ 新しいチェーンで再試行")
+            # 保存済みの response_id が期限切れ/無効になった・Zero Data Retention 等。チェーンを捨てて 1 回だけやり直す
+            if not _note_chain_error(e):
+                print(f"[irina-chat] チェーン継続に失敗（{type(e).__name__}: {str(e)[:120]}）→ 新しいチェーンで再試行")
             await asyncio.to_thread(db.save_chat_session, channel_id, guild_id, None, 0, summary, persona_key)
             renderer.reset()
             return await _ask(message, renderer, force_new_chain=True)
         raise
 
-    content = (response.content or renderer.buffer or "").strip()  # 出典 URL は自動では添えない（ユーザー指定）
+    # 出典 URL は自動では添えない（ユーザー指定）。renderer.buffer は使わない（前の往復の書きかけが残っていることがある）
+    content = (response.content or "").strip()
     files = _image_files(image_outputs, guild_id) + list(ctx.get("files") or [])
+    if not content and not files:  # 黙って終わらない
+        print(f"[irina-chat] 本文が空だった（tools={tools_used}）")
+        content = "（調べているうちにまとめきれなかった。もう少し絞って聞いて）"
 
     turn_count += 1
-    await asyncio.to_thread(db.save_chat_session, channel_id, guild_id, response.id, turn_count, summary, persona_key, str(message.id))
+    await asyncio.to_thread(db.save_chat_session, channel_id, guild_id, response.id if _chain_available() else None, turn_count,
+                            summary, persona_key, str(message.id))
 
     usage = getattr(response, "usage", None)
     prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
@@ -836,7 +942,7 @@ async def _ask(message: discord.Message, renderer: _Renderer, *, force_new_chain
 
     await renderer.finalize(content, files)
 
-    if turn_count >= COMPACT_TURNS or prompt_tokens >= COMPACT_PROMPT_TOKENS:
+    if _chain_available() and (turn_count >= COMPACT_TURNS or prompt_tokens >= COMPACT_PROMPT_TOKENS):
         try:
             await _compact(channel_id, guild_id, response.id, summary, persona_key)
         except Exception as e:
@@ -869,6 +975,8 @@ async def handle_message(message: discord.Message) -> None:
         return
     if message.guild is None or message.author.id == message.guild.me.id:
         return
+    if message.type not in (discord.MessageType.default, discord.MessageType.reply):
+        return  # スレッド作成・ピン留め・参加などのシステムメッセージには返さない（本文がスレッド名になっていて反応していた）
     if not is_chat_channel(message.channel) and not await _is_addressed(message):
         return
     content = (message.content or "").strip()
