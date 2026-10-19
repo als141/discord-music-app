@@ -167,6 +167,8 @@ export interface GameBoard {
   tonight: { players: number; from_voice: boolean; picks: { appid: string; score: number; why: string[] }[]; fits: number };
   deadlines: { offers: GameOffer[]; sales: string[]; releases: { appid: string; date: string; released: boolean }[] };
   recent: { appid: string | null; game_name: string; users: string[]; last_at: string; minutes: number }[];
+  /** みんなのウィッシュリスト（Steam を連携した人。入れている人の多い順） */
+  wishlist?: { appid: string; users: string[] }[];
   games: GameCard[];
   news: { url: string; text: string; posted_by: string | null; posted_at: string }[];
   members: Record<string, { name: string | null; image: string | null }>;

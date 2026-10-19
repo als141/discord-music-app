@@ -314,6 +314,15 @@ def steam_links_all() -> List[Dict[str, Any]]:
                 c.execute("SELECT user_id, steamid, synced_at FROM steam_links")]
 
 
+def wishlist_users() -> Dict[str, List[str]]:
+    """appid -> Steam を連携した人のうち、ウィッシュリストに入れている人"""
+    out: Dict[str, List[str]] = {}
+    with db._connect() as c:
+        for uid, appid in c.execute("SELECT user_id, appid FROM steam_wishlist"):
+            out.setdefault(appid, []).append(uid)
+    return out
+
+
 def steam_ownership(appids: Iterable[str]) -> Dict[str, Dict[str, List[str]]]:
     """appid -> {own: [user], recent: [user (2 週間以内に遊んだ)], want: [user]}（Steam 連携した人の分だけ）"""
     ids = list(appids)

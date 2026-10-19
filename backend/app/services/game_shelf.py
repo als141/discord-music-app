@@ -175,10 +175,44 @@ async def resolve_pending(limit: int = 30) -> int:
 # 3. 定期更新（価格・無料配布・同時接続数）と通知のまとめ
 # ---------------------------------------------------------------------------
 
+WISHLIST_SHOW = 40   # ゲーム置き場に出す「みんなのウィッシュリスト」の上限（入れている人の多い順）
+
+
+def wishlist_top(n: int = WISHLIST_SHOW) -> Dict[str, List[str]]:
+    w = gdb.wishlist_users()
+    return dict(sorted(w.items(), key=lambda kv: -len(kv[1]))[:n])
+
+
 def _shelf_appids(guild_id: str) -> List[str]:
     ids = {p["appid"] for p in gdb.posts_for_guild(guild_id) if p.get("appid")}
     ids |= {r["appid"] for r in gdb.recent_play(guild_id, 60) if r.get("appid")}
+    ids |= set(wishlist_top())  # ウィッシュリストのゲームもセールを追う
     return sorted(ids)
+
+
+async def refresh_wishlist_games(limit: int = 50) -> int:
+    """ウィッシュリストのゲームの Steam 情報を揃える（入れている人の多い順）。2 人以上が入れていれば人数のプロフィールも"""
+    w = await asyncio.to_thread(gdb.wishlist_users)
+    if not w:
+        return 0
+    have = {g["appid"]: g for g in await asyncio.to_thread(gdb.all_games, list(w))}
+    todo = []
+    for a in sorted(w, key=lambda a: -len(w[a])):
+        g = have.get(a) or {}
+        if (g.get("fail_count") or 0) >= 3:
+            continue
+        if not g.get("details_at") or (len(w[a]) >= 2 and not g.get("profile") and g.get("type") != "demo"):
+            todo.append(a)
+    done = 0
+    for a in todo[:limit]:
+        try:
+            if await ensure_game(a, [], with_profile=len(w[a]) >= 2):
+                done += 1
+        except Exception as e:
+            print(f"[game] wishlist game failed {a}: {type(e).__name__}: {str(e)[:100]}")
+    if todo:
+        print(f"[game] wishlist games: {done}/{min(limit, len(todo))} resolved, {max(0, len(todo) - limit)} left ({len(w)} games on wishlists)")
+    return done
 
 
 async def refresh_prices() -> int:
@@ -288,6 +322,7 @@ async def scheduler() -> None:
                 await asyncio.sleep(300)
                 continue
             await resolve_pending(40)
+            await refresh_wishlist_games(50)
             if await asyncio.to_thread(_due, "game_prices_at", 6):
                 await refresh_prices()
                 await asyncio.to_thread(gdb.kv_set, "game_prices_at", gdb.now_iso())
@@ -637,7 +672,10 @@ def build_board(guild_id: str, players: Optional[int] = None) -> Dict[str, Any]:
         if s.get("appid"):
             playing_by_app.setdefault(s["appid"], []).append(s["user_id"])
     offers = gdb.current_offers()
-    appids = set(by_app) | set(played_by_app) | set(playing_by_app) | {o["appid"] for o in offers if o.get("appid")}
+    wish = wishlist_top()
+    base = set(by_app) | set(played_by_app) | set(playing_by_app) | {o["appid"] for o in offers if o.get("appid")}
+    wish_only = set(wish) - base   # ウィッシュリストにだけあるゲーム（今夜どれ？には出さない）
+    appids = base | set(wish)
     games = {g["appid"]: g for g in gdb.all_games(appids) if g.get("details_at") and g.get("type") != "demo"}
     mk = gdb.marks(guild_id)
     # Steam を連携した人の所持・ウィッシュリスト・2 週間以内のプレイを、やりたい/持ってる/遊んだ に足す
@@ -662,6 +700,8 @@ def build_board(guild_id: str, players: Optional[int] = None) -> Dict[str, Any]:
         if c["release"]["soon"] or not p.get("max") or p["max"] < n or (p.get("min") or 1) > n:
             continue
         if not set(c["modes"]) & {"online_coop", "online_pvp", "mmo"}:
+            continue
+        if c["appid"] in wish_only and not c["own"]:
             continue
         sc, why = _score(c, n, present)
         picks.append({"appid": c["appid"], "score": round(sc, 2), "why": why})
@@ -693,6 +733,10 @@ def build_board(guild_id: str, players: Optional[int] = None) -> Dict[str, Any]:
     for v in voice:
         mem.setdefault(v["user_id"], {"name": v.get("user_name"), "image": v.get("user_image")})
 
+    # みんなのウィッシュリスト（入れている人の多い順、同じならセールの大きい順）
+    wishlist = [{"appid": a, "users": cards[a]["want"]} for a in wish if a in cards and cards[a]["want"]]
+    wishlist.sort(key=lambda x: (-len(x["users"]), -(cards[x["appid"]]["price"]["discount"] or 0)))
+
     news = [{"url": p["url"], "text": (p.get("x_text") or "")[:200], "posted_by": p.get("posted_by_id"),
              "posted_at": p["posted_at"]} for p in posts if p["kind"] == "x" and not p.get("appid") and p.get("x_text")][-20:]
     return {
@@ -706,6 +750,7 @@ def build_board(guild_id: str, players: Optional[int] = None) -> Dict[str, Any]:
             "sales": [c["appid"] for c in sales],
             "releases": releases,
         },
+        "wishlist": wishlist[:30],
         "recent": [{"appid": r.get("appid"), "game_name": r["game_name"], "users": r["users"], "last_at": r["last_at"],
                     "minutes": r["minutes"]} for r in recent[:16]],
         "games": sorted(cards.values(), key=lambda c: c["posted"]["last_at"] or "", reverse=True),

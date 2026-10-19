@@ -348,6 +348,7 @@ export const GameShelfScreen: React.FC<Props> = ({ guildId }) => {
   const [players, setPlayers] = useState<number | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
   const [openId, setOpenId] = useState<string | null>(null);
+  const [wishAll, setWishAll] = useState(false);
   const [busy, setBusy] = useState(false);
   const reqRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -706,6 +707,48 @@ export const GameShelfScreen: React.FC<Props> = ({ guildId }) => {
     </section>
   );
 
+  // ---- みんなのウィッシュリスト（Steam を連携した人のウィッシュリストを、入れている人の多い順に）
+  const wishlist = (board.wishlist ?? []).map((w) => ({ ...w, g: byId.get(w.appid) })).filter((w) => w.g) as { appid: string; users: string[]; g: GameCard }[];
+  const WISH_FIRST = 6;
+  const wishShown = wishlist.slice(0, wishAll ? 30 : WISH_FIRST);
+  const wishlistSection = wishlist.length > 0 && (
+    <section data-tour="games-wishlist" key="wishlist">
+      <SectionHeader title="みんなのウィッシュリスト" caption="Steam から" />
+      <RankList ariaLabel="みんなのウィッシュリスト">
+        {wishShown.map((w, i) => (
+          <RankRow
+            key={w.appid}
+            rank={i + 1}
+            thumb={w.g.image}
+            title={w.g.name}
+            meta={
+              <Meta
+                parts={[
+                  <span key="n" className="font-medium text-foreground/80">{w.users.length}人がほしい</span>,
+                  w.g.own.length ? `${w.g.own.length}人が持ってる` : null,
+                  w.g.players.max ? playersLabel(w.g) : null,
+                  <Price key="p" g={w.g} />,
+                ]}
+              />
+            }
+            right={<AvatarStack images={memberImages(w.users, m)} size={22} max={3} label={`${w.users.length} 人のウィッシュリスト`} />}
+            onClick={() => openGame(w.g)}
+            anchor={i === 0 ? 'games-wishlist-first' : undefined}
+          />
+        ))}
+      </RankList>
+      {wishlist.length > WISH_FIRST && (
+        <button
+          type="button"
+          onClick={() => setWishAll((v) => !v)}
+          className="mx-4 mt-1 h-10 w-[calc(100%-2rem)] rounded-xl text-[13px] font-semibold text-muted-foreground hover:bg-secondary/60 hover:text-foreground sm:mx-6 sm:w-[calc(100%-3rem)]"
+        >
+          {wishAll ? 'たたむ' : `もっと見る（あと ${wishlist.length - WISH_FIRST} 本）`}
+        </button>
+      )}
+    </section>
+  );
+
   // ---- 最近ドデカで遊ばれた
   const recentSection = board.recent.length > 0 && (
     <section key="recent">
@@ -775,8 +818,8 @@ export const GameShelfScreen: React.FC<Props> = ({ guildId }) => {
   );
 
   const order = gathered
-    ? [nowSection, tonightSection, deadlinesSection, sceneSection, recentSection, allSection]
-    : [nowSection, sceneSection, tonightSection, deadlinesSection, recentSection, allSection];
+    ? [nowSection, tonightSection, deadlinesSection, wishlistSection, sceneSection, recentSection, allSection]
+    : [nowSection, sceneSection, tonightSection, deadlinesSection, wishlistSection, recentSection, allSection];
 
   return (
     <div ref={scrollRef} className="h-full overflow-y-auto overflow-x-hidden bg-background">
