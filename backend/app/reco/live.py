@@ -139,7 +139,8 @@ async def _run(guild_id: str, sig: str, anchors: List[Dict[str, Any]], pool: Lis
                   "候補（key | 題名 | アーティスト | 年 | 枠 | いまの理由）:\n" + curate._pool_lines(pool[:50]))
         taste = "## ドデカの好み\n" + curate._taste_summary(p)
         r = await gsrc._client().messages.parse(
-            model=MODEL, max_tokens=4000, output_config={"effort": "low"},
+            # medium: 思考 0・8 秒・$0.016 で、low より足す曲の取り違えが少なかった。high は 20 秒かかり並びは同じ（2026-10-15 実測）
+            model=MODEL, max_tokens=6000, output_config={"effort": "medium"},
             system=[{"type": "text", "text": SYSTEM}, {"type": "text", "text": taste, "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": prompt}], output_format=LiveCuration)
         usd = llm_budget.cost(MODEL, r.usage)
