@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 UA = "Mozilla/5.0 (compatible; irina-game-shelf/1.0; +https://discord-music-app.vercel.app)"
 STEAM_INTERVAL_SEC = 1.6
 CLAUDE_MODEL = os.getenv("IRINA_GAME_MODEL") or "claude-sonnet-5-5"
+PROFILE_EFFORT = os.getenv("IRINA_GAME_EFFORT") or "high"
 
 _steam_lock: Optional[asyncio.Lock] = None
 _steam_last = 0.0
@@ -355,8 +356,9 @@ async def claude_profile(details: Dict[str, Any], news: List[str]) -> Optional[D
              f"短い説明: {_strip(details.get('short_description'), 400)}",
              f"詳しい説明（抜粋）: {_strip(details.get('detailed_description'), 1500)}"]
     parts += [f"ニュース投稿: {_strip(t, 300)}" for t in news[:3]]
-    r = await _client().messages.parse(model=CLAUDE_MODEL, max_tokens=4000, system=PROFILE_SYSTEM,
-                                       output_config={"effort": "low"},
+    # effort high（オーナー 2026-10-20「Sonnet 5.5 high はガツガツ使っていい」）。思考の分だけ max_tokens を広げる
+    r = await _client().messages.parse(model=CLAUDE_MODEL, max_tokens=16000, system=PROFILE_SYSTEM,
+                                       output_config={"effort": PROFILE_EFFORT},
                                        messages=[{"role": "user", "content": "\n".join(parts)}],
                                        output_format=GameProfile)
     if not r.parsed_output:
@@ -367,7 +369,7 @@ async def claude_profile(details: Dict[str, Any], news: List[str]) -> Optional[D
     if not prof.get("max_players_online") and set(prof.get("modes") or []) & {"online_coop", "online_pvp"}:
         try:
             r2 = await _client().messages.parse(
-                model=CLAUDE_MODEL, max_tokens=4000, output_config={"effort": "low"},
+                model=CLAUDE_MODEL, max_tokens=16000, output_config={"effort": PROFILE_EFFORT},
                 tools=[{"type": "web_search_20260209", "name": "web_search", "max_uses": 2}],
                 messages=[{"role": "user", "content": f"Steam のゲーム『{details.get('name')}』は、オンラインで最大何人まで一緒に遊べますか。公式（Steam ストアページ・公式サイト・開発者の発表）を優先して調べ、数字が確認できなければ null。"}],
                 output_format=PlayerCount)
