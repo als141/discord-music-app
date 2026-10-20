@@ -20,7 +20,8 @@ MODEL = os.getenv("IRINA_SCENE_X_MODEL") or "grok-4.7"
 
 def enabled() -> bool:
     from ..services import llm_budget
-    return bool(os.getenv("XAI_API_KEY")) and os.getenv("IRINA_SCENE_X", "1") != "0" and llm_budget.allowed("xai")
+    # 2026-10-20 オーナー指定で毎日の取得は止めた（xAI の費用の大半だった）。IRINA_SCENE_X=1 で再開
+    return bool(os.getenv("XAI_API_KEY")) and os.getenv("IRINA_SCENE_X", "0") == "1" and llm_budget.allowed("xai")
 
 
 class Evidence(BaseModel):

@@ -2,7 +2,7 @@
 
 材料はすべての信号（メディアの記事・Steam の売れ筋・日本語の実況の再生数・配信者・X の話題）と、
 ドデカのゲーム探しのジャーニーから分かったこと（いちばんの壁は人数、続いたのは 4〜8 人ですぐ始められるパーティ・協力、
-定番への引力が強い）。分類は Sonnet 5.5、選んで言葉にするところだけ Opus 5.5（IRINA_SCENE_CURATOR_MODEL で変更）。
+定番への引力が強い）。分類も選定も Sonnet 5.5（2026-10-20 から。選定は effort high。IRINA_SCENE_CURATOR_MODEL で変更）。
 """
 import json
 import os
@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 from ..services import game_db as gdb, game_sources as gsrc, llm_budget
 
-MODEL = os.getenv("IRINA_SCENE_CURATOR_MODEL") or "claude-opus-5-5"
+MODEL = os.getenv("IRINA_SCENE_CURATOR_MODEL") or "claude-sonnet-5-5"  # 2026-10-20 Opus 5.5 → Sonnet 5.5（オーナー指定）
 
 SYSTEM = """あなたは Discord サーバー「ドデカ」（固定 8 人の友人。夜 19〜23 時に VC で集まって遊ぶ）のゲーム係。
 このメンバーについて分かっていること（会話履歴の集計）:
@@ -54,7 +54,7 @@ async def curate(cands: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     games = {g["appid"]: g for g in gdb.all_games([c["appid"] for c in cands])}
     lines = [_brief(c, games[c["appid"]]) for c in cands if c["appid"] in games]
     r = await gsrc._client().messages.parse(
-        model=MODEL, max_tokens=4000, system=SYSTEM, output_config={"effort": "medium"},
+        model=MODEL, max_tokens=16000, system=SYSTEM, output_config={"effort": "high"},
         messages=[{"role": "user", "content": "候補:\n" + "\n".join(lines)}], output_format=Curation)
     usd = llm_budget.cost(MODEL, r.usage)
     llm_budget.log("anthropic", MODEL, "curation", usd)

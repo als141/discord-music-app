@@ -12,7 +12,9 @@ from ..services import game_sources as gsrc, llm_budget
 
 # 振り分けは最新の Haiku 5.5（$0.10/$0.50。Sonnet 5.5 の 1/20）。2026-10-11 の検証で再現率 86%・採用率 14%（Sonnet は 83%・10%）。
 # 選ぶのは後段の Opus 5.5 なので、少し広めに拾う Haiku で十分
-MODEL = os.getenv("IRINA_SCENE_MODEL") or "claude-haiku-5-5"
+# 2026-10-20 オーナー指定「裏で動くのは Sonnet 5.5」。量が多い振り分けなので effort は medium（思考はほぼ 0 のまま、low より取り違えが少ない）
+MODEL = os.getenv("IRINA_SCENE_MODEL") or "claude-sonnet-5-5"
+EFFORT = os.getenv("IRINA_SCENE_EFFORT") or "medium"
 
 TASTE = """あなたは Discord サーバー「ドデカ」（固定 8 人の友人。夜に VC でゲームをする）のゲーム係。
 彼らが #ゲーム置き場 に貼るのは、主に次のようなもの:
@@ -64,7 +66,7 @@ async def judge_articles(rows: List[Dict]) -> Tuple[Dict[str, Dict], float]:
         chunk = rows[i:i + 30]
         lines = "\n".join(f"[{r['id']}] {r['text']}" for r in chunk)
         r = await gsrc._client().messages.parse(
-            model=MODEL, max_tokens=8000, system=TASTE, output_config={"effort": "low"},
+            model=MODEL, max_tokens=16000, system=TASTE, output_config={"effort": EFFORT},
             messages=[{"role": "user", "content": "次の記事それぞれについて判定して、全件を返して。\n\n" + lines}],
             output_format=ArticleBatch)
         usd += llm_budget.cost(MODEL, r.usage)
@@ -84,7 +86,7 @@ async def judge_videos(rows: List[Dict]) -> Tuple[Dict[str, Dict], float]:
         chunk = rows[i:i + 40]
         lines = "\n".join(f"[{r['id']}] {r['text']}" for r in chunk)
         r = await gsrc._client().messages.parse(
-            model=MODEL, max_tokens=8000, output_config={"effort": "low"},
+            model=MODEL, max_tokens=16000, output_config={"effort": EFFORT},
             system="日本の配信者・VTuber・アーティストの YouTube 動画の題名から、何の動画かを判定する。",
             messages=[{"role": "user", "content": "次の動画（チャンネル名 | 題名）それぞれについて判定して、全件を返して。\n\n" + lines}],
             output_format=VideoBatch)

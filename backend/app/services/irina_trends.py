@@ -14,7 +14,8 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 JST = timezone(timedelta(hours=9))
-TRENDS_HOUR = int(os.getenv("IRINA_TRENDS_HOUR") or "18")
+# 2026-10-20 オーナー指定で毎日の自動更新は止めた（既定 -1）。会話で「トレンド更新して」と頼まれたときの refresh_x_trends だけ動く
+TRENDS_HOUR = int(os.getenv("IRINA_TRENDS_HOUR") or "-1")
 REFRESH_IF_OLDER_THAN_SEC = 20 * 3600
 MAX_PHRASES_IN_QUERY = 60
 

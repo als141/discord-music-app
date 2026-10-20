@@ -15,7 +15,7 @@ from ..services import game_sources as gsrc, llm_budget
 from . import links, meta, store
 from .engine import Profile, display_of
 
-MODEL = os.getenv("IRINA_RECO_MODEL") or "claude-opus-5-5"
+MODEL = os.getenv("IRINA_RECO_MODEL") or "claude-sonnet-5-5"  # 2026-10-20 Opus 5.5 → Sonnet 5.5（オーナー指定）
 
 SYSTEM = """あなたは Discord サーバー「ドデカ」の選曲係。ドデカは 8 人ほどの固定の友人グループで、夜に VC に集まり、
 ゲームをしながら音楽ボット「イリーナ」で曲を流す。アプリの曲置き場タブに「ドデカのおすすめ」を出す。
@@ -110,7 +110,7 @@ async def run(guild_id: str, pools: Dict[str, List[Dict[str, Any]]], p: Profile)
         return None
     prompt = ("## ドデカの好み\n" + _taste_summary(p) + "\n\n## 候補（key | 題名 | アーティスト | 年 | 枠 | … | いまの理由）\n"
               + "\n\n".join(f"### {mood}\n{_pool_lines(items[:40])}" for mood, items in pools.items() if items))
-    r = await gsrc._client().messages.parse(model=MODEL, max_tokens=6000, system=SYSTEM, output_config={"effort": "medium"},
+    r = await gsrc._client().messages.parse(model=MODEL, max_tokens=16000, system=SYSTEM, output_config={"effort": "high"},
                                             messages=[{"role": "user", "content": prompt}], output_format=Curation)
     usd = llm_budget.cost(MODEL, r.usage)
     llm_budget.log("anthropic", MODEL, "reco_curation", usd)
